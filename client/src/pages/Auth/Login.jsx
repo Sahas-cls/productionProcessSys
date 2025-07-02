@@ -4,10 +4,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { loginData } from "../../data/loginData.js";
 import { useFormik } from "formik";
 import * as yup from "yup";
+import axios from "axios";
+import swal from "sweetalert2";
+import { useUser } from "../../contexts/userContext.jsx";
+import { useNavigate } from "react-router-dom";
 
 const Login = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
   const [currentSlide, setCurrentSlide] = useState(0);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [serverValidation, setServerValidation] = useState(false);
+  const [serverMessages, setServerMessages] = useState(null);
+  const { loginUser } = useUser();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -72,35 +81,80 @@ const Login = () => {
 
   // Validation schema
   const validationSchema = yup.object({
-    userEmail: yup
+    userName: yup
       .string()
-      .required("Email is required")
-      .email("Invalid email format"),
+      .required("Name is required")
+      .min(3, "Name should have at least 3 characters"),
     userPassword: yup
       .string()
       .required("Password is required")
-      .min(6, "Password must be at least 6 characters"),
+      .min(3, "Password must be at least 6 characters"),
   });
 
   // Formik configuration
   const formik = useFormik({
     initialValues: {
-      userEmail: "",
+      userName: "",
       userPassword: "",
       rememberMe: false,
     },
     validationSchema,
-    onSubmit: (values) => {
+    onSubmit: async (values) => {
       console.log("Form submitted:", values);
+      try {
+        const result = await axios.post(`${apiUrl}/api/user/login`, values, {
+          withCredentials: true,
+        });
+        console.log(result);
+        console.log(result);
+        if (result.status === 200) {
+          setServerMessages({
+            status: "success",
+            message: "User Login success",
+          });
+
+          swal.fire({
+            title: "User login success",
+            icon: "success",
+            confirmButtonText: "Ok",
+            showCancelButton: false,
+          });
+
+          loginUser(result.data.user);
+
+          if (result.data?.user.userCategoryN === "Admin") {
+            navigate("/");
+          } else {
+            navigate("/user/registration");
+          }
+        }
+      } catch (error) {
+        const res = error?.response;
+        console.log(error);
+        if (res?.status === 422 && res.data?.errors) {
+          const serverErrors = res.data.errors;
+          const formattedErrors = {};
+          serverErrors.forEach((err) => {
+            formattedErrors[err.field] = err.message;
+          });
+          formik.setErrors(formattedErrors);
+        } else {
+          setServerMessages({
+            status: "error",
+            message:
+              res?.data?.message || "Something went wrong. Please try again.",
+          });
+        }
+      }
       // Handle login logic here
     },
   });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setSubmitAttempted(true);
-    formik.handleSubmit(e);
-  };
+  console.log("server message", serverMessages);
+  // const handleSubmit = (e) => {
+  //   e.preventDefault();
+  //   setSubmitAttempted(true);
+  //   formik.handleSubmit(e);
+  // };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -117,53 +171,58 @@ const Login = () => {
           initial="hidden"
           animate="visible"
         >
-          <motion.div className="flex flex-col items-center" variants={itemVariants}>
+          <motion.div
+            className="flex flex-col items-center"
+            variants={itemVariants}
+          >
             <BsShieldLock className="text-6xl text-teal-500 mb-2" />
             <h1 className="text-3xl font-bold mb-6 text-gray-800 uppercase tracking-wide">
               User Login
             </h1>
           </motion.div>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={formik.handleSubmit}>
             {/* Email Field */}
             <motion.div className="flex flex-col mb-6" variants={itemVariants}>
-              <label htmlFor="userEmail" className="text-gray-700 mb-1">
-                Email:
+              <label htmlFor="userName" className="text-gray-700 mb-1">
+                User Name:
               </label>
               <motion.div
                 animate={
-                  submitAttempted && formik.errors.userEmail ? "shake" : ""
+                  submitAttempted && formik.errors.userName ? "shake" : ""
                 }
                 variants={fieldErrorVariants}
               >
                 <input
-                  type="email"
-                  id="userEmail"
-                  name="userEmail"
+                  type="text"
+                  id="userName"
+                  name="userName"
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
-                  value={formik.values.userEmail}
+                  value={formik.values.userName}
                   className={`border-b-2 px-2 py-2 w-full focus:outline-none transition-colors placeholder:text-teal-500/70 ${
-                    formik.errors.userEmail && (formik.touched.userEmail || submitAttempted)
+                    formik.errors.userName &&
+                    (formik.touched.userName || submitAttempted)
                       ? "border-red-500"
                       : "border-gray-300 focus:border-teal-500"
                   }`}
-                  placeholder="Enter your email"
+                  placeholder="Enter your user name"
                 />
               </motion.div>
               <AnimatePresence>
-                {formik.errors.userEmail && (formik.touched.userEmail || submitAttempted) && (
-                  <motion.p
-                    className="text-red-600 text-sm mt-1"
-                    variants={errorVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="exit"
-                    key="email-error"
-                  >
-                    {formik.errors.userEmail}
-                  </motion.p>
-                )}
+                {formik.errors.userName &&
+                  (formik.touched.userName || submitAttempted) && (
+                    <motion.p
+                      className="text-red-600 text-sm mt-1"
+                      variants={errorVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      key="email-error"
+                    >
+                      {formik.errors.userName}
+                    </motion.p>
+                  )}
               </AnimatePresence>
             </motion.div>
 
@@ -186,7 +245,8 @@ const Login = () => {
                   onBlur={formik.handleBlur}
                   value={formik.values.userPassword}
                   className={`border-b-2 px-2 py-2 w-full focus:outline-none transition-colors placeholder:text-teal-500/70 ${
-                    formik.errors.userPassword && (formik.touched.userPassword || submitAttempted)
+                    formik.errors.userPassword &&
+                    (formik.touched.userPassword || submitAttempted)
                       ? "border-red-500"
                       : "border-gray-300 focus:border-teal-500"
                   }`}
@@ -194,18 +254,19 @@ const Login = () => {
                 />
               </motion.div>
               <AnimatePresence>
-                {formik.errors.userPassword && (formik.touched.userPassword || submitAttempted) && (
-                  <motion.p
-                    className="text-red-600 text-sm mt-1"
-                    variants={errorVariants}
-                    initial="hidden"
-                    animate="visible"
-                    exit="exit"
-                    key="password-error"
-                  >
-                    {formik.errors.userPassword}
-                  </motion.p>
-                )}
+                {formik.errors.userPassword &&
+                  (formik.touched.userPassword || submitAttempted) && (
+                    <motion.p
+                      className="text-red-600 text-sm mt-1"
+                      variants={errorVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="exit"
+                      key="password-error"
+                    >
+                      {formik.errors.userPassword}
+                    </motion.p>
+                  )}
               </AnimatePresence>
             </motion.div>
 
@@ -238,6 +299,25 @@ const Login = () => {
             </motion.div>
 
             <motion.div className="text-center" variants={itemVariants}>
+              {serverMessages && serverMessages.message && (
+                <div
+                  className={`text-center mb-4 ${
+                    serverMessages.status === "error"
+                      ? "bg-red-200"
+                      : "bg-green-200"
+                  }`}
+                >
+                  <p
+                    className={`${
+                      serverMessages.status === "error"
+                        ? "text-red-600"
+                        : "text-green-600"
+                    } py-2`}
+                  >
+                    {serverMessages.message}
+                  </p>
+                </div>
+              )}
               <motion.button
                 type="submit"
                 className="w-full py-3 bg-teal-500 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all mb-4"

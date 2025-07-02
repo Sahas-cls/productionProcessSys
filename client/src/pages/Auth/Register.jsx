@@ -1,19 +1,25 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FaUserPlus } from "react-icons/fa";
 import { useFormik } from "formik";
 import * as yup from "yup";
 import { motion, AnimatePresence } from "framer-motion";
+import axios from "axios";
+import useFactory from "../../hooks/useFactories";
+import useDepartments from "../../hooks/useDepartments";
+import useUserCategory from "../../hooks/useUserCategory";
+import swal from "sweetalert2";
 
 const Register = () => {
-  const factories = ["Factory A", "Factory B", "Factory C", "Factory D"];
-  const departments = [
-    "Production",
-    "Quality Control",
-    "Design",
-    "Management",
-    "Shipping",
-  ];
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const factoryList = useFactory(); // This should return an array of factories
+  const userCategoryes = useUserCategory();
+  const { userCategories } = userCategoryes;
+  // const [departmentList, setDepartmentList] = useState(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [serverSideMsg, setServerSideMsg] = useState(null);
+  const [serverSideValidation, setServerSideValidation] = useState(null);
+  const navigate = useNavigate();
 
   // Animation variants
   const containerVariants = {
@@ -79,11 +85,7 @@ const Register = () => {
     userPassword: yup
       .string()
       .required("Password is required")
-      .min(8, "Password must be at least 8 characters")
-      .matches(
-        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/,
-        "Password must contain at least one uppercase, one lowercase, one number and one special character"
-      ),
+      .min(2, "Password must be at least 6 characters"),
     confirmPassword: yup
       .string()
       .required("Please confirm your password")
@@ -103,9 +105,55 @@ const Register = () => {
       userCategory: "",
     },
     validationSchema,
-    onSubmit: (values) => {
+    onSubmit: async (values, { setErrors }) => {
       console.log("Form submitted:", values);
-      // Handle registration logic here
+
+      try {
+        const result = await axios.post(`${apiUrl}/api/user/register`, values);
+        console.log(result);
+
+        // Registration success
+        if (result.status === 201) {
+          setServerSideMsg({
+            status: "success",
+            message: "User Registration success",
+          });
+
+          swal.fire({
+            text: "User creation success",
+            icon: "success",
+            showCancelButton: false,
+            confirmButtonText: "Ok",
+          });
+
+          formik.resetForm();
+
+          setTimeout(() => {
+            navigate(-1);
+          }, 3000);
+        }
+      } catch (error) {
+        const res = error?.response;
+        if (res?.status === 422 && res.data?.errors) {
+          const serverErrors = res.data.errors;
+          // console.log("server errors: ", res.data.errors);
+          // Map to Formik-compatible error object
+          const formattedErrors = {};
+          serverErrors.forEach((err) => {
+            formattedErrors[err.field] = err.message;
+          });
+          // console.log("formatted errors:- ", formattedErrors);
+          formik.setErrors(formattedErrors);
+          setErrors(formattedErrors);
+          setServerSideValidation(serverErrors);
+        }
+
+        console.error("Registration error:", error);
+        setServerSideMsg({
+          status: "error",
+          message: res?.data?.message || "Something went wrong",
+        });
+      }
     },
   });
 
@@ -114,6 +162,14 @@ const Register = () => {
     setSubmitAttempted(true);
     formik.handleSubmit(e);
   };
+
+  // Get departments based on selected factory
+
+  const {
+    data: departmentList,
+    loading: deptLoading,
+    error: deptError,
+  } = useDepartments(formik.values.userFactory || 0);
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -246,8 +302,7 @@ const Register = () => {
                   }
                   variants={fieldErrorVariants}
                 >
-                  <input
-                    type="text"
+                  {/* <select
                     id="userCategory"
                     name="userCategory"
                     value={formik.values.userCategory}
@@ -259,8 +314,31 @@ const Register = () => {
                         ? "border-red-600"
                         : "border-gray-300 focus:border-teal-500"
                     }`}
-                    placeholder="Select your category"
-                  />
+                  /> */}
+                  <select
+                    id="userCategory"
+                    name="userCategory"
+                    value={formik.values.userCategory}
+                    onChange={formik.handleChange}
+                    onBlur={formik.handleBlur}
+                    className={`border-b-2 px-2 py-2 w-full focus:outline-none transition-colors ${
+                      formik.errors.userCategory &&
+                      (formik.touched.userCategory || submitAttempted)
+                        ? "border-red-600"
+                        : "border-gray-300 focus:border-teal-500"
+                    }`}
+                  >
+                    <option value="">Select user category</option>
+                    {Array.isArray(userCategories) &&
+                      userCategories.map((category, index) => (
+                        <option
+                          key={category.category_id}
+                          value={category.category_id}
+                        >
+                          {category.category_name}
+                        </option>
+                      ))}
+                  </select>
                 </motion.div>
                 <AnimatePresence>
                   {formik.errors.userCategory &&
@@ -310,11 +388,15 @@ const Register = () => {
                     }`}
                   >
                     <option value="">Select Factory</option>
-                    {factories.map((factory, index) => (
-                      <option key={index} value={factory}>
-                        {factory}
-                      </option>
-                    ))}
+                    {Array.isArray(factoryList) &&
+                      factoryList.map((factory) => (
+                        <option
+                          key={factory.factory_id}
+                          value={factory.factory_id}
+                        >
+                          {factory.factory_name}
+                        </option>
+                      ))}
                   </select>
                 </motion.div>
                 <AnimatePresence>
@@ -356,19 +438,28 @@ const Register = () => {
                     value={formik.values.userDepartment}
                     onChange={formik.handleChange}
                     onBlur={formik.handleBlur}
+                    disabled={!formik.values.userFactory || deptLoading}
                     className={`w-full border-b-2 px-2 py-2 focus:outline-none transition-colors ${
                       formik.errors.userDepartment &&
                       (formik.touched.userDepartment || submitAttempted)
                         ? "border-red-600"
                         : "border-gray-300 focus:border-teal-500"
+                    } ${
+                      !formik.values.userFactory || deptLoading
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
                     }`}
                   >
                     <option value="">Select Department</option>
-                    {departments.map((dept, index) => (
-                      <option key={index} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
+                    {Array.isArray(departmentList) &&
+                      departmentList.map((department) => (
+                        <option
+                          key={department.department_id}
+                          value={department.department_id}
+                        >
+                          {department.department_name}
+                        </option>
+                      ))}
                   </select>
                 </motion.div>
                 <AnimatePresence>
@@ -492,6 +583,20 @@ const Register = () => {
               className="flex flex-col space-y-4 md:mt-12"
               variants={itemVariants}
             >
+              {serverSideMsg !== "" && serverSideMsg !== null && (
+                <div className="text-center">
+                  <p
+                    className={`${
+                      serverSideMsg.status === "error"
+                        ? "text-red-600 bg-red-100"
+                        : "text-green-600 bg-green-200"
+                    } rounded-md py-2`}
+                  >
+                    {serverSideMsg.message}
+                  </p>
+                </div>
+              )}
+
               <motion.button
                 type="submit"
                 className="w-full py-3 bg-teal-500 text-white rounded-lg font-semibold shadow-md hover:shadow-lg transition-all"
