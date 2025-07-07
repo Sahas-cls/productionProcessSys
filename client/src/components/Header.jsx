@@ -28,6 +28,15 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
           Hi {user?.userName || "cannot read name"}
           <FiUser size={20} />
         </button>
+        {/* <div className="w-28 h-36 z-50 bg-black/70 absolute right-5 top-10 text-white">
+          <ul>
+            <li className="flex justify-center absolute">
+              <div className="flex items-center justify-center h-full">
+                <button className="bg-red-500 px-2 py-1 rounded-md hover:bg-red-600">Log out</button>
+              </div>
+            </li>
+          </ul>
+        </div> */}
       </div>
     </header>
   );

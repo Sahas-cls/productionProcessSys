@@ -9,8 +9,8 @@ const App = () => (
   <UserProvider>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<AdminPanel />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<Login />} />
+        <Route path="/admin-panel" element={<AdminPanel />} />
         <Route path="/user/registration" element={<Register />} />
       </Routes>
     </BrowserRouter>

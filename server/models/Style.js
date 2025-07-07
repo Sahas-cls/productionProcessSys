@@ -1,0 +1,89 @@
+module.exports = (sequelize, DataTypes) => {
+  const Style = sequelize.define(
+    "Style",
+    {
+      style_id: {
+        type: DataTypes.INTEGER,
+        autoIncrement: true,
+        primaryKey: true,
+      },
+      factory_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "factories",
+          key: "factory_id",
+        },
+      },
+      customer_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "customers",
+          key: "customer_id",
+        },
+      },
+      season_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "seasons",
+          key: "season_id",
+        },
+      },
+      style_no: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          len: [3, 255],
+        },
+      },
+      style_name: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        validate: {
+          len: [3, 255],
+        },
+      },
+      style_description: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: [0, 255],
+        },
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+    },
+    {
+      tableName: "styles",
+      timestamps: true,
+    }
+  );
+
+  Style.associate = (models) => {
+    Style.belongsTo(models.Factory, {
+      foreignKey: "factory_id",
+      as: "factory",
+    });
+
+    Style.belongsTo(models.Customer, {
+      foreignKey: "customer_id",
+      as: "customer",
+    });
+
+    Style.belongsTo(models.Season, {
+      foreignKey: "season_id",
+      as: "season",
+    });
+
+    Style.hasMany(models.StyleMedia, {
+      foreignKey: "style_id",
+      as: "style_medias",
+    });
+  };
+
+  return Style;
+};

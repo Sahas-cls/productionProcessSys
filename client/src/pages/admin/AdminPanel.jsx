@@ -8,6 +8,7 @@ import AddSeason from "../../components/admin/AddSeason.jsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "../../contexts/userContext.jsx";
 import { useNavigate } from "react-router-dom";
+import AddStyle from "../../components/admin/AddStyle.jsx";
 
 const AdminPanel = () => {
   const screenWidth = useScreenWidth();
@@ -47,13 +48,14 @@ const AdminPanel = () => {
     Factory: <AddFactory />,
     Customer: <AddCustomer />,
     Season: <AddSeason />,
+    Style: <AddStyle />,
   };
 
-  useEffect(() => {
-    if (!user || user.userCategoryN !== "Admin") {
-      navigate("/login");
-    }
-  }, [user, navigate]);
+  // useEffect(() => {
+  //   if (!user || user.userCategoryN !== "Admin") {
+  //     navigate("/login");
+  //   }
+  // }, [user, navigate]);
 
   return (
     <div className="flex overflow-x-hidden">
@@ -76,7 +78,7 @@ const AdminPanel = () => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="" // Add some padding
+            className="bg-gray-200" // Add some padding
           >
             {views[currentView]}
           </motion.div>

@@ -12,10 +12,9 @@ function useFactories() {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(
-        `${apiUrl}/api/factories/getFactories`,
-        { withCredentials: true }
-      );
+      const response = await axios.get(`${apiUrl}/api/factories/getFactories`, {
+        withCredentials: true,
+      });
       if (response.status === 200) {
         setFactoryList(response.data.data || []);
       }
@@ -35,6 +34,7 @@ function useFactories() {
 
   return {
     factories: factoryList,
+    setFactories: setFactoryList,
     loading,
     error,
     refresh: fetchFactories, // Expose the refresh function

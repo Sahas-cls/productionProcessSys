@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { IoSearchSharp } from "react-icons/io5";
 import { IoMdAdd } from "react-icons/io";
 import { MdModeEditOutline } from "react-icons/md";
@@ -9,6 +9,7 @@ import * as yup from "yup";
 import swal from "sweetalert2";
 import axios from "axios";
 import useFactory from "../../hooks/useFactories";
+import { useUser } from "../../contexts/userContext.jsx";
 
 const AddFactory = () => {
   const [isAddFactory, setIsAddFactory] = useState(false);
@@ -16,14 +17,36 @@ const AddFactory = () => {
   const [serverMessages, setServerMessages] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentFactoryId, setCurrentFactoryId] = useState(null);
+  const { user } = useUser();
+  console.log("current user: ", user);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      console.log("useEffect : ", user.userId);
+      formik.setFieldValue("userId", user.userId);
+    }
+  }, [user]);
 
   // Use your custom hook with refresh capability
   const {
-    factories: factoryList,
+    factories: allFactories,
     loading,
     error,
     refresh: refreshFactories,
   } = useFactory();
+
+  // Memoized filtered factories based on search term
+  const filteredFactories = useMemo(() => {
+    if (!searchTerm) return allFactories;
+
+    return allFactories.filter(
+      (factory) =>
+        factory.factory_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        factory.factory_code.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [allFactories, searchTerm]);
 
   // Animation variants
   const containerVariants = {
@@ -87,16 +110,44 @@ const AddFactory = () => {
     },
   };
 
+  // search function with debounce
+  const handleSearch = (e) => {
+    const value = e.target.value;
+
+    // Clear previous timeout if exists
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    // Set new timeout
+    setSearchTimeout(
+      setTimeout(() => {
+        setSearchTerm(value);
+      }, 300) // 300ms
+    );
+  };
+
+  // Clear timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [searchTimeout]);
+
   // yup validation rules
   const validations = yup.object({
     factoryCode: yup
       .string()
       .required("Factory code required")
-      .min(1, "Factory code should at least include 3 characters"),
+      .min(1, "Factory code should at least include 3 characters")
+      .matches(/^[A-Za-z]+$/, "Factory code should be letters only"),
     factoryName: yup
       .string()
       .required("Factory name required")
-      .min(3, "Factory name should contain at least 3 characters"),
+      .min(3, "Factory name should contain at least 3 characters")
+      .matches(/^[A-Za-z]+$/, "Factory name should contain letters only"),
   });
 
   // delete submit
@@ -110,7 +161,6 @@ const AddFactory = () => {
     });
 
     if (!confirmation.isConfirmed) {
-      // alert("Not confirmed");
       return;
     }
 
@@ -124,7 +174,6 @@ const AddFactory = () => {
       return;
     }
     try {
-      // alert("sending request");
       const response = await axios.delete(
         `${apiUrl}/api/factories/deleteFactory/${index}`
       );
@@ -144,20 +193,17 @@ const AddFactory = () => {
 
   // handle submit function for both create and update
   const handleSubmit = async (values) => {
+    console.log(formik.values.userId);
     try {
       let result;
 
       if (isEditing) {
-        // Update existing factory
-        // alert("updating factory");
         result = await axios.put(
           `${apiUrl}/api/factories/updateFactory/${currentFactoryId}`,
           values,
           { withCredentials: true }
         );
       } else {
-        // Create new factory
-        // alert("Creating new factory");
         result = await axios.post(
           `${apiUrl}/api/factories/createNewFactory`,
           values,
@@ -184,12 +230,8 @@ const AddFactory = () => {
           showCancelButton: false,
         });
 
-        // Refresh factories list using the hook's refresh function
         await refreshFactories();
-
-        // Reset form and state
         formik.resetForm();
-        // setIsAddFactory(false);
         setIsEditing(false);
         setCurrentFactoryId(null);
       }
@@ -198,7 +240,6 @@ const AddFactory = () => {
       console.error("Factory operation error:", error);
 
       if (res?.status === 422 && res.data?.errors) {
-        // Handle validation errors from backend
         const serverErrors = res.data.errors;
         const formattedErrors = {};
         serverErrors.forEach((err) => {
@@ -206,7 +247,6 @@ const AddFactory = () => {
         });
         formik.setErrors(formattedErrors);
       } else if (res?.status === 409) {
-        // Handle duplicate factory code error
         formik.setErrors({
           factoryCode: res.data?.message || "Factory code already exists",
         });
@@ -228,6 +268,7 @@ const AddFactory = () => {
     initialValues: {
       factoryCode: "",
       factoryName: "",
+      userId: "",
     },
     validationSchema: validations,
     onSubmit: handleSubmit,
@@ -271,6 +312,7 @@ const AddFactory = () => {
             type="text"
             placeholder="Search factories..."
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+            onChange={handleSearch}
           />
           <IoSearchSharp className="absolute left-3 top-3 text-gray-400" />
         </motion.div>
@@ -453,7 +495,7 @@ const AddFactory = () => {
             Error loading factories: {error.message}
           </div>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200 overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200 overflow-x-auto rounded-md">
             <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
@@ -468,8 +510,8 @@ const AddFactory = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {Array.isArray(factoryList) &&
-                factoryList.map((factory) => (
+              {filteredFactories.length > 0 ? (
+                filteredFactories.map((factory) => (
                   <motion.tr
                     key={factory.factory_id}
                     className="hover:bg-gray-50 transition-colors duration-150"
@@ -508,7 +550,16 @@ const AddFactory = () => {
                       </div>
                     </td>
                   </motion.tr>
-                ))}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="3" className="px-6 py-4 text-center">
+                    {searchTerm
+                      ? "No matching factories found"
+                      : "No factories available"}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         )}

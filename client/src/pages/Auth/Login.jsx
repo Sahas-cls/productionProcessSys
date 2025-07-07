@@ -122,8 +122,12 @@ const Login = () => {
 
           loginUser(result.data.user);
 
+          const { userName, userId } = result.data?.user;
+          localStorage.setItem("userName", userName);
+          localStorage.setItem("userId", userId);
+          alert(userName);
           if (result.data?.user.userCategoryN === "Admin") {
-            navigate("/");
+            navigate("/admin-panel");
           } else {
             navigate("/user/registration");
           }

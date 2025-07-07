@@ -53,6 +53,22 @@ app.use("/api/factories/", factoryRoutes);
 const departmentRoutes = require("./Routes/DepartmentRoutes.js");
 app.use("/api/departments/", departmentRoutes);
 
+// customer routes
+const customerRoutes = require("./Routes/CustomerRoutes.js");
+app.use("/api/customers/", customerRoutes);
+
+// customer types route
+const customerTypesRoute = require("./Routes/CustomerTypesRoutes.js");
+app.use("/api/customerTypes/", customerTypesRoute);
+
+// season route
+const seasonRoutes = require("./Routes/SeasonRoutes.js");
+app.use("/api/seasons/", seasonRoutes);
+
+// style route
+const styleRoute = require("./Routes/StylesRoutes.js");
+app.use("/api/styles/", styleRoute);
+
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
 

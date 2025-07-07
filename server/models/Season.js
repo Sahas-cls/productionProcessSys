@@ -32,6 +32,11 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "customer_id",
       as: "customer",
     });
+
+    Season.hasMany(models.Style, {
+      foreignKey: "season_id",
+      as: "seasons",
+    });
   };
 
   return Season;

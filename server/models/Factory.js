@@ -46,6 +46,11 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "factory_id",
       as: "departments",
     });
+
+    Factory.hasMany(models.Style, {
+      foreignKey: "factory_id",
+      as: "styles",
+    });
   };
 
   return Factory;

@@ -19,7 +19,8 @@ exports.getFactories = async (req, res, next) => {
 // to create new factory
 exports.createFactory = async (req, res, next) => {
   try {
-    const { factoryCode, factoryName } = req.body;
+    const { factoryCode, factoryName, userId } = req.body;
+    console.log(userId);
     console.log(req.body);
 
     // Check if factory code already exists
@@ -34,11 +35,13 @@ exports.createFactory = async (req, res, next) => {
     }
 
     // Create new factory
+    console.log("user id::: ", userId); //in here it's logind
     const newFactory = await Factory.create({
       factory_code: factoryCode,
       factory_name: factoryName,
+      created_by: parseInt(userId),
     });
-    console.log("factory create success");
+    // console.log("factory create success", userId);
     return res.status(201).json({
       success: true,
       message: "Factory created successfully",
