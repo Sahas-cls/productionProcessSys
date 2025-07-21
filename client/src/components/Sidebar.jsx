@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from "react";
-import { MdManageAccounts, MdFactory, MdGroups } from "react-icons/md";
-import { FiCalendar } from "react-icons/fi";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import concordLogo from "../assets/Sidebar-a/concord_logo.png";
-import { adminSidebarData } from "../data/sidebarData.js";
+import { adminSidebarData } from "../data/sidebarData";
+import { IoIosArrowDropdown } from "react-icons/io";
+import { IoIosArrowDropupCircle } from "react-icons/io";
+import { IoIosArrowDropup } from "react-icons/io";
 
 const Sidebar = ({
   toggleSidebar,
@@ -12,28 +13,19 @@ const Sidebar = ({
   setCurrentView,
 }) => {
   const sidebarRef = useRef();
+  const [expandedMenu, setExpandedMenu] = useState(null);
 
-  // Variants for motion animation
   const navVariant = {
-    hidden: {
-      scale: 0,
-      opacity: 0,
-    },
+    hidden: { scale: 0, opacity: 0 },
     visible: {
       scale: 1,
       opacity: 1,
-      transition: {
-        duration: 0.4,
-        type: "tween",
-      },
+      transition: { duration: 0.4, type: "tween" },
     },
-    hover: {
-      x: 15,
-      scale: 1.1,
-    },
+    hover: { x: 15, scale: 1.05 },
   };
 
-  // Handle click outside the sidebar to close
+  // Click outside to close
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -50,19 +42,22 @@ const Sidebar = ({
   }, [toggleSidebar, setToggleSidebar]);
 
   const handleNavigations = (view) => {
-    // alert(view);
     setToggleSidebar(false);
     setCurrentView(view);
+  };
+
+  const toggleSubmenu = (id) => {
+    setExpandedMenu((prev) => (prev === id ? null : id));
   };
 
   return (
     <aside
       ref={sidebarRef}
-      className={`md:w-[18%] ${
+      className={`md:w-[18%] h-full ${
         toggleSidebar ? "block" : "hidden"
-      } md:block w-[70%] absolute md:relative z-30 h-full bg-white border-r overflow-hidden`}
+      } md:block w-[70%] absolute md:relative z-30 bg-white overflow-y-hidden overflow-x-hidden`}
     >
-      {/* Logo & Heading */}
+      {/* Logo */}
       <div className="flex flex-col items-center justify-center mt-10 ml-1">
         <img src={concordLogo} alt="Logo" className="w-20" />
         <h1 className="text-xl uppercase font-semibold">Concord Group</h1>
@@ -70,21 +65,53 @@ const Sidebar = ({
 
       {/* Navigation */}
       <nav className="mt-10">
-        <ul className="space-y-4 cursor-pointer">
+        <ul className="space-y-2 cursor-pointer px-2">
           {Array.isArray(adminSidebarData) &&
             adminSidebarData.map((item) => (
-              <motion.li
-                key={item.id}
-                variants={navVariant}
-                className="flex items-center px-2 py-2 hover:bg-gray-500/10 hover:shadow"
-                initial="hidden"
-                animate="visible"
-                whileHover="hover"
-                onClick={() => handleNavigations(item.title)}
-              >
-                <item.icon className="md:mr-2 text-4xl" />
-                <h4 className="text-lg">{item.title}</h4>
-              </motion.li>
+              <div key={item.id}>
+                <motion.li
+                  variants={navVariant}
+                  initial="hidden"
+                  animate="visible"
+                  whileHover="hover"
+                  className="flex items-center justify-between px-3 py-2 hover:bg-gray-100 rounded"
+                  onClick={() =>
+                    item.submenu
+                      ? toggleSubmenu(item.id)
+                      : handleNavigations(item.title)
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <item.icon className="text-2xl" />
+                    <span className="text-base">{item.title}</span>
+                  </div>
+                  {item.submenu && (
+                    <span className="text-xl">
+                      {expandedMenu === item.id ? (
+                        <IoIosArrowDropup />
+                      ) : (
+                        <IoIosArrowDropdown />
+                      )}
+                    </span>
+                  )}
+                </motion.li>
+
+                {/* Submenu */}
+                {item.submenu && expandedMenu === item.id && (
+                  <ul className="ml-8 mt-1 space-y-1 text-sm text-gray-700">
+                    {item.submenu.map((subItem) => (
+                      <li
+                        key={subItem.id}
+                        className="transition flex items-center gap-2 hover:scale-110 py-2 pl-2 hover:bg-gray-200 duration-300"
+                        onClick={() => handleNavigations(subItem.navigateTo)}
+                      >
+                        <subItem.icon className="text-xl" />
+                        {subItem.title}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ))}
         </ul>
       </nav>

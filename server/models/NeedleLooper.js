@@ -1,0 +1,38 @@
+
+module.exports = (sequelize, DataTypes) => {
+  const NeedleLooper = sequelize.define(
+    "NeedleLooper",
+    {
+      needle_looper_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+      },
+      looper_type: {
+        type: DataTypes.STRING, // e.g., "Rotary", "Oscillating"
+        allowNull: false,
+      },
+      machine_id: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "machine",
+          key: "machine_id",
+        },
+      },
+    },
+    {
+      tableName: "needle_looper",
+      timestamps: true,
+    }
+  );
+
+  NeedleLooper.associate = (models) => {
+    // Link to Machine (M:1)
+    NeedleLooper.belongsTo(models.Machine, {
+      foreignKey: "machine_id",
+      as: "machine",
+    });
+  };
+
+  return NeedleLooper;
+};

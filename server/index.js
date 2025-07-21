@@ -69,6 +69,10 @@ app.use("/api/seasons/", seasonRoutes);
 const styleRoute = require("./Routes/StylesRoutes.js");
 app.use("/api/styles/", styleRoute);
 
+// operation bulletin route
+const operationBulletinRoute = require("./Routes/OperationBulletinRoutes.js");
+app.use("/api/operationBuleting", operationBulletinRoute);
+
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
 

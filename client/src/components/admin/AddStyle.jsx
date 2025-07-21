@@ -224,8 +224,20 @@ const AddStyle = () => {
     styleFactory: yup.string().required("Factory is required"),
     styleCustomer: yup.string().required("Customer is required"),
     styleSeason: yup.string().required("Season is required"),
-    styleNo: yup.string().required("Style no is required").matches(/^[A-Za-z0-9-]+$/, "Style number can only contain letters and numbers"),
-    styleName: yup.string().required("Style name is required").matches(/^[A-Za-z0-9-]+$/, "Style number can only contain letters and numbers"),
+    styleNo: yup
+      .string()
+      .required("Style no is required")
+      .matches(
+        /^[A-Za-z0-9- /]+$/,
+        "Style number can only contain letters and numbers"
+      ),
+    styleName: yup
+      .string()
+      .required("Style name is required")
+      .matches(
+        /^[A-Za-z0-9- /]+$/,
+        "Style number can only contain letters and numbers"
+      ),
   });
 
   // Formik form handling

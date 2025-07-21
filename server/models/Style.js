@@ -83,6 +83,16 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "style_id",
       as: "style_medias",
     });
+
+    Style.hasMany(models.Helper, {
+      foreignKey: "style_id",
+      as: "helpers",
+    });
+
+    Style.hasMany(models.MainOperation, {
+      foreignKey: "style_no",
+      as: "operations",
+    });
   };
 
   return Style;

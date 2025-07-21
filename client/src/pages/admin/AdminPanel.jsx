@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import Header from "../../components/Header";
 import AddFactory from "../../components/admin/AddFactory";
@@ -9,11 +9,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "../../contexts/userContext.jsx";
 import { useNavigate } from "react-router-dom";
 import AddStyle from "../../components/admin/AddStyle.jsx";
+import AddMachine from "../../components/admin/AddMachine.jsx";
+import ViewMachine from "../../components/ViewMachine.jsx";
+import OperationBulleting from "../../components/OperationBulleting.jsx";
+import ViewOperationBulleting from "../../components/ViewOperationBulleting.jsx";
+import ViewOperation from "../../components/ViewOperation.jsx";
 
 const AdminPanel = () => {
   const screenWidth = useScreenWidth();
   const [toggleSidebar, setToggleSidebar] = useState(false);
-  const [currentView, setCurrentView] = useState("Factory");
+  const [currentView, setCurrentView] = useState({
+    name: "Factory",
+    params: null,
+  });
   const { user } = useUser();
   const navigate = useNavigate();
 
@@ -44,11 +52,69 @@ const AdminPanel = () => {
     },
   };
 
-  const views = {
-    Factory: <AddFactory />,
-    Customer: <AddCustomer />,
-    Season: <AddSeason />,
-    Style: <AddStyle />,
+  const renderView = () => {
+    switch (currentView.name) {
+      case "Factory":
+        return <AddFactory />;
+      case "Customer":
+        return <AddCustomer />;
+      case "Season":
+        return <AddSeason />;
+      case "Style":
+        return <AddStyle />;
+      case "addNewBO":
+        return <OperationBulleting />;
+      case "BOList":
+        return (
+          <ViewOperationBulleting
+            onViewBO={(data) =>
+              setCurrentView({
+                name: "viewOB",
+                params: { operation: data },
+              })
+            }
+          />
+        );
+      case "Machine":
+        return (
+          <AddMachine
+            onViewMachine={(id) =>
+              setCurrentView({
+                name: "MachineDetail",
+                params: { machineId: id },
+              })
+            }
+          />
+        );
+      case "MachineDetail":
+        return (
+          <ViewMachine
+            machineId={currentView.params?.machineId}
+            onBack={() => setCurrentView({ name: "Machine", params: null })}
+          />
+        );
+      case "Operation Bulletin":
+        return <OperationBulleting />;
+      case "viewOB":
+        return (
+          <ViewOperation
+            operation={currentView.params}
+            onBack={() => setCurrentView({ name: "Machine", params: null })}
+          />
+        );
+
+      default:
+        return (
+          <AddMachine
+            onViewMachine={(id) =>
+              setCurrentView({
+                name: "MachineDetail",
+                params: { machineId: id },
+              })
+            }
+          />
+        );
+    }
   };
 
   // useEffect(() => {
@@ -58,14 +124,16 @@ const AdminPanel = () => {
   // }, [user, navigate]);
 
   return (
-    <div className="flex overflow-x-hidden">
+    <div className="flex overflow-x-hidden min-h-screen h-full">
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
-        currentView={currentView}
-        setCurrentView={setCurrentView}
+        currentView={currentView.name}
+        setCurrentView={(viewName) =>
+          setCurrentView({ name: viewName, params: null })
+        }
       />
-      <div className="w-full">
+      <div className="w-full h-full">
         <Header
           toggleSidebar={toggleSidebar}
           setToggleSidebar={setToggleSidebar}
@@ -73,14 +141,14 @@ const AdminPanel = () => {
 
         <AnimatePresence mode="wait">
           <motion.div
-            key={currentView}
+            key={currentView.name}
             variants={pageVariant}
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="bg-gray-200" // Add some padding
+            className="bg-gray-200 w-full min-h-screen"
           >
-            {views[currentView]}
+            {renderView()}
           </motion.div>
         </AnimatePresence>
       </div>
