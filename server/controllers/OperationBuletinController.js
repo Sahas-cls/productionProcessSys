@@ -8,6 +8,7 @@ const {
   NeedleType,
   NeedleTread,
   NeedleLooper,
+  Helper,
 } = require("../models");
 
 exports.getBOList = async (req, res, next) => {
@@ -48,8 +49,12 @@ exports.getBOList = async (req, res, next) => {
       order: [["createdAt", "DESC"]],
     });
 
+    const helperOperations = await Helper.findAll({
+      include: [{ model: Style, as: "style" }],
+    });
+
     console.log("data selected success........!");
-    res.status(200).json({ data: operations });
+    res.status(200).json({ data: [...operations, ...helperOperations] });
   } catch (error) {
     console.error("Error fetching operation list:", error);
     res.status(500).json({ error: "Something went wrong" });
@@ -339,3 +344,50 @@ exports.editOperation = async (req, res, next) => {};
 
 // to delete operation
 exports.deleteOperation = async (req, res, next) => {};
+
+// ====================================
+// create helper operations
+// ====================================
+exports.createHelperOps = async (req, res, next) => {
+  console.log(req.body);
+
+  const {
+    styleNumber,
+    mainOperation,
+    operationNumber,
+    operationName,
+    remarks,
+    smv,
+  } = req.body;
+  try {
+    // find style is exist
+    const isStyle = await Style.findOne({ where: { style_no: styleNumber } });
+    if (!isStyle) {
+      const error = new Error(
+        "The requested style is not existing in style data table"
+      );
+      error.status = 403;
+      console.log("requested style cannot find in style data table");
+      return next(error);
+    }
+
+    // create new helper operation
+    const createHelperOps = await Helper.create({
+      style_id: isStyle.style_id,
+      operation_type_id: mainOperation,
+      operation_code: operationNumber,
+      operation_name: operationName,
+      mc_type: "",
+      mc_smv: smv,
+      comments: remarks,
+    });
+    console.log("Helper operation create success....");
+    res.status(201).json({
+      status: "success",
+      message: "Helper operation creation success",
+    });
+  } catch (error) {
+    console.log(error);
+    return next(error);
+  }
+};

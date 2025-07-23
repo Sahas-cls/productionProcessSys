@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeftIcon,
@@ -8,6 +9,8 @@ import {
 } from "@heroicons/react/24/outline";
 
 const ViewMachine = ({ machineId, onBack }) => {
+  const location = useLocation();
+  console.log("data that comes when navigating", location.state);
   const [isEditing, setIsEditing] = useState(false);
   const [machineData, setMachineData] = useState({
     type: "Type 1",

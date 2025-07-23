@@ -147,7 +147,7 @@ const AddFactory = () => {
       .string()
       .required("Factory name required")
       .min(3, "Factory name should contain at least 3 characters")
-      .matches(/^[A-Za-z]+$/, "Factory name should contain letters only"),
+      .matches(/^[A-Za-z() /]+$/, "Factory name should contain letters only"),
   });
 
   // delete submit

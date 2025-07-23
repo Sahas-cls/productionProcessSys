@@ -36,79 +36,49 @@ const OperationBulleting = () => {
     fetchOperations();
   }, [apiUrl]);
 
-  const validationSchema = Yup.object().shape({
-    styleNumber: Yup.string()
-      .required("Style Number is required")
-      .max(20, "Style Number must be 20 characters or less"),
-    mainOperation: Yup.string().required("Main Operation is required"),
-    operationName: Yup.string().required("Operation Name is required"),
-    operationNumber: Yup.string().required("Operation Number is required"),
-    smv: Yup.string()
-      .required("SMV is required")
-      .matches(
-        /^\d+(\.\d{1,2})?$/,
-        "Must be a number with up to 2 decimal places"
-      ),
-    machineType: Yup.string().when("mainOperation", {
+  const validationSchema = Yup.object()
+    .shape({
+      styleNumber: Yup.string()
+        .required("Style Number is required")
+        .max(20, "Style Number must be 20 characters or less"),
+      mainOperation: Yup.string().required("Main Operation is required"),
+      operationName: Yup.string().required("Operation Name is required"),
+      operationNumber: Yup.string().required("Operation Number is required"),
+      smv: Yup.string()
+        .required("SMV is required")
+        .matches(
+          /^\d+(\.\d{1,2})?$/,
+          "Must be a number with up to 2 decimal places"
+        ),
+      remarks: Yup.string().max(500, "Remarks must be 500 characters or less"),
+    })
+    .when("mainOperation", {
       is: "Machine Operator",
-      then: Yup.string().required("Machine Type is required"),
-      otherwise: Yup.string(),
-    }),
-    machineNo: Yup.string().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.string().required("Machine No is required"),
-      otherwise: Yup.string(),
-    }),
-    machineName: Yup.string().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.string().required("Machine Name is required"),
-      otherwise: Yup.string(),
-    }),
-    machineBrand: Yup.string().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.string().required("Machine Brand is required"),
-      otherwise: Yup.string(),
-    }),
-    machineLocation: Yup.string().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.string().required("Machine Location is required"),
-      otherwise: Yup.string(),
-    }),
-    needleType: Yup.array().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.array()
-        .of(
-          Yup.object().shape({
-            type: Yup.string().required("Needle Type is required"),
-          })
-        )
-        .min(1, "At least one Needle Type is required"),
-      otherwise: Yup.array(),
-    }),
-    needleCount: Yup.number().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.number()
-        .required("Needle count is required")
-        .positive("Must be a positive number")
-        .integer("Must be a whole number"),
-      otherwise: Yup.number(),
-    }),
-    needleTreads: Yup.array().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.array()
-        .of(Yup.string().required("Needle Tread is required"))
-        .min(1, "At least one Needle Tread is required"),
-      otherwise: Yup.array(),
-    }),
-    bobbinTreadLoopers: Yup.array().when("mainOperation", {
-      is: "Machine Operator",
-      then: Yup.array()
-        .of(Yup.string().required("Bobbin Tread/Looper is required"))
-        .min(1, "At least one Bobbin Tread/Looper is required"),
-      otherwise: Yup.array(),
-    }),
-    remarks: Yup.string().max(500, "Remarks must be 500 characters or less"),
-  });
+      then: Yup.object().shape({
+        machineType: Yup.string().required("Machine Type is required"),
+        machineNo: Yup.string().required("Machine No is required"),
+        machineName: Yup.string().required("Machine Name is required"),
+        machineBrand: Yup.string().required("Machine Brand is required"),
+        machineLocation: Yup.string().required("Machine Location is required"),
+        needleType: Yup.array()
+          .of(
+            Yup.object().shape({
+              type: Yup.string().required("Needle Type is required"),
+            })
+          )
+          .min(1, "At least one Needle Type is required"),
+        needleCount: Yup.number()
+          .required("Needle count is required")
+          .positive("Must be a positive number")
+          .integer("Must be a whole number"),
+        needleTreads: Yup.array()
+          .of(Yup.string().required("Needle Tread is required"))
+          .min(1, "At least one Needle Tread is required"),
+        bobbinTreadLoopers: Yup.array()
+          .of(Yup.string().required("Bobbin Tread/Looper is required"))
+          .min(1, "At least one Bobbin Tread/Looper is required"),
+      }),
+    });
 
   const transformOperationToFormValues = (operation) => {
     if (!operation) return null;
@@ -131,8 +101,33 @@ const OperationBulleting = () => {
     };
   };
 
-  const handleSubmit = (values, { setSubmitting, resetForm }) => {
+  const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     // Filter out empty values for arrays
+    alert(values.mainOperation);
+    if (values.mainOperation == 2) {
+      console.log(values);
+      try {
+        const response = await axios.post(
+          `${apiUrl}/api/operationBuleting/createHelperOps`,
+          values,
+          { withCredentials: true }
+        );
+
+        if (response.status === 200 || response.status === 201) {
+          Swal.fire({
+            icon: "success",
+            title: "Operation success",
+            text: "Helper operation create success",
+            confirmButtonText: "Ok",
+          });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+
+      return;
+    }
+
     const operationData = {
       ...values,
       needleTreads: values.needleTreads?.filter((tread) => tread !== "") || [],
@@ -200,6 +195,37 @@ const OperationBulleting = () => {
     setShowForm(true);
   };
 
+  // Helper function to format machine operation data for API request
+  const formatMachineOperation = (op) => ({
+    operationName: op.operationName,
+    operationNumber: op.operationNumber,
+    smv: op.smv,
+    remarks: op.remarks,
+    machineType: op.machineType,
+    machineNo: op.machineNo,
+    machineName: op.machineName,
+    machineBrand: op.machineBrand,
+    machineLocation: op.machineLocation,
+    needleType: Array.isArray(op.needleType)
+      ? op.needleType.filter((nt) => nt && nt.type)
+      : [],
+    needleCount: op.needleCount || 1,
+    needleTreads: Array.isArray(op.needleTreads)
+      ? op.needleTreads.filter((t) => t)
+      : [],
+    bobbinTreadLoopers: Array.isArray(op.bobbinTreadLoopers)
+      ? op.bobbinTreadLoopers.filter((b) => b)
+      : [],
+  });
+
+  // Helper function to format helper operation data for API request
+  const formatHelperOperation = (op) => ({
+    operationName: op.operationName,
+    operationNumber: op.operationNumber,
+    smv: op.smv,
+    remarks: op.remarks,
+  });
+
   const handleBulkSave = async () => {
     if (pendingOperations.length === 0) {
       Swal.fire({
@@ -211,7 +237,7 @@ const OperationBulleting = () => {
     }
 
     try {
-      const { styleNumber, mainOperation, mainOperationName } =  
+      const { styleNumber, mainOperation, mainOperationName } =
         pendingOperations[0];
 
       // Separate operations by type
@@ -239,37 +265,41 @@ const OperationBulleting = () => {
         operations: helperOperations.map(formatHelperOperation),
       };
 
-      // Send requests in parallel
-      const responses = await Promise.all([
-        machineOperations.length > 0
-          ? axios.post(
-              `${apiUrl}/api/operationBuleting/createMachineOps`,
-              machinePayload,
-              { withCredentials: true }
-            )
-          : Promise.resolve(null),
-        helperOperations.length > 0
-          ? axios.post(
-              `${apiUrl}/api/operationBuleting/createHelperOps`,
-              helperPayload,
-              { withCredentials: true }
-            )
-          : Promise.resolve(null),
-      ]);
+      // =============================================
+      // SEND SEPARATE REQUESTS FOR DIFFERENT OPERATION TYPES
+      // =============================================
 
-      // Handle responses
-      const [machineResponse, helperResponse] = responses;
-      let mainOPId = currentOPId;
-
-      if (machineResponse?.data?.mainOPId) {
-        mainOPId = machineResponse.data.mainOPId;
-        localStorage.setItem("currentItem", mainOPId);
-        setCurrentOPId(mainOPId);
-      } else if (helperResponse?.data?.mainOPId) {
-        mainOPId = helperResponse.data.mainOPId;
-        localStorage.setItem("currentItem", mainOPId);
-        setCurrentOPId(mainOPId);
+      // Send machine operations to machine-specific endpoint
+      if (machineOperations.length > 0) {
+        await axios.post(
+          `${apiUrl}/api/operationBuleting/createOB`,
+          machinePayload,
+          { withCredentials: true }
+        );
       }
+
+      // Send helper operations to helper-specific endpoint
+      console.log("sending request");
+      if (helperOperations.length > 0) {
+        await axios.post(
+          `${apiUrl}/api/operationBuleting/createHelperOps`,
+          helperPayload,
+          { withCredentials: true }
+        );
+      }
+
+      // =============================================
+      // END OF API REQUESTS
+      // =============================================
+
+      // Update local storage and state
+      const mainOPId =
+        machineOperations.length > 0
+          ? machineOperations[0].operation_id
+          : helperOperations[0].operation_id;
+
+      localStorage.setItem("currentItem", mainOPId);
+      setCurrentOPId(mainOPId);
 
       Swal.fire({
         title: "Success",
@@ -296,35 +326,6 @@ const OperationBulleting = () => {
       });
     }
   };
-
-  const formatMachineOperation = (op) => ({
-    operationName: op.operationName,
-    operationNumber: op.operationNumber,
-    smv: op.smv,
-    remarks: op.remarks,
-    machineType: op.machineType,
-    machineNo: op.machineNo,
-    machineName: op.machineName,
-    machineBrand: op.machineBrand,
-    machineLocation: op.machineLocation,
-    needleType: Array.isArray(op.needleType)
-      ? op.needleType.filter((nt) => nt && nt.type)
-      : [],
-    needleCount: op.needleCount || 1,
-    needleTreads: Array.isArray(op.needleTreads)
-      ? op.needleTreads.filter((t) => t)
-      : [],
-    bobbinTreadLoopers: Array.isArray(op.bobbinTreadLoopers)
-      ? op.bobbinTreadLoopers.filter((b) => b)
-      : [],
-  });
-
-  const formatHelperOperation = (op) => ({
-  operationName: op.operationName,
-  operationNumber: op.operationNumber,
-  smv: op.smv,
-  remarks: op.remarks
-});
 
   const handleDeletePendingOperation = (index) => {
     Swal.fire({
@@ -445,10 +446,8 @@ const OperationBulleting = () => {
                         onBlur={handleBlur}
                       >
                         <option value="">Select Operation</option>
-                        <option value="Machine Operator">
-                          Machine Operator
-                        </option>
-                        <option value="Helper">Helper</option>
+                        <option value="1">Machine Operator</option>
+                        <option value="2">Helper</option>
                       </Field>
                       <ErrorMessage
                         name="mainOperation"
@@ -457,27 +456,31 @@ const OperationBulleting = () => {
                       />
                     </div>
 
-                    {/* main operation name */}
-                    <div>
-                      <label className="block mb-1">
-                        Main Operation Name *
-                      </label>
-                      <Field
-                        name="mainOperationName"
-                        type="text"
-                        className={`form-input-base ${
-                          errors.mainOperationName && touched.mainOperationName
-                            ? "border-red-500"
-                            : ""
-                        }`}
-                        onBlur={handleBlur}
-                      />
-                      <ErrorMessage
-                        name="mainOperation"
-                        component="div"
-                        className="text-red-500 text-sm mt-1"
-                      />
-                    </div>
+                    {values.mainOperation == 1 ? (
+                      <div>
+                        <label className="block mb-1">
+                          Main Operation Name *
+                        </label>
+                        <Field
+                          name="mainOperationName"
+                          type="text"
+                          className={`form-input-base ${
+                            errors.mainOperationName &&
+                            touched.mainOperationName
+                              ? "border-red-500"
+                              : ""
+                          }`}
+                          onBlur={handleBlur}
+                        />
+                        <ErrorMessage
+                          name="mainOperation"
+                          component="div"
+                          className="text-red-500 text-sm mt-1"
+                        />
+                      </div>
+                    ) : (
+                      ""
+                    )}
 
                     <div>
                       <label className="block mb-1">Style Number *</label>
@@ -499,7 +502,7 @@ const OperationBulleting = () => {
                       />
                     </div>
 
-                    {values.mainOperation === "Machine Operator" ? (
+                    {values.mainOperation === "1" ? (
                       <FullForm
                         values={values}
                         setFieldValue={setFieldValue}
@@ -507,7 +510,7 @@ const OperationBulleting = () => {
                         touched={touched}
                         handleBlur={handleBlur}
                       />
-                    ) : values.mainOperation === "Helper" ? (
+                    ) : values.mainOperation === "2" ? (
                       <HelperForm
                         values={values}
                         errors={errors}
@@ -629,35 +632,30 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
     values.needleType || [{ type: "" }]
   );
 
-  // Handle needle tread changes
   const handleNeedleTreadChange = (index, value) => {
     const newTreads = [...values.needleTreads];
     newTreads[index] = value;
     setFieldValue("needleTreads", newTreads);
   };
 
-  // Handle bobbin tread changes
   const handleBobbinTreadChange = (index, value) => {
     const newTreads = [...values.bobbinTreadLoopers];
     newTreads[index] = value;
     setFieldValue("bobbinTreadLoopers", newTreads);
   };
 
-  // Add new needle type
   const addNeedleType = () => {
     const newTypes = [...needleTypes, { type: "" }];
     setNeedleTypes(newTypes);
     setFieldValue("needleType", newTypes);
   };
 
-  // Remove needle type
   const removeNeedleType = (index) => {
     const newTypes = needleTypes.filter((_, i) => i !== index);
     setNeedleTypes(newTypes);
     setFieldValue("needleType", newTypes);
   };
 
-  // Handle needle type change
   const handleNeedleTypeChange = (index, value) => {
     const newTypes = [...needleTypes];
     newTypes[index] = { type: value };
@@ -665,18 +663,15 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
     setFieldValue("needleType", newTypes);
   };
 
-  // Update needle count and adjust arrays
   const updateNeedleCount = (count) => {
     const newCount = Math.max(1, count);
     setFieldValue("needleCount", newCount);
 
-    // Adjust needle treads array
     const newTreads = [...values.needleTreads];
     while (newTreads.length < newCount) newTreads.push("");
     while (newTreads.length > newCount) newTreads.pop();
     setFieldValue("needleTreads", newTreads.slice(0, newCount));
 
-    // Adjust bobbin treads array
     const newBobbinTreads = [...values.bobbinTreadLoopers];
     while (newBobbinTreads.length < newCount) newBobbinTreads.push("");
     while (newBobbinTreads.length > newCount) newBobbinTreads.pop();
@@ -686,7 +681,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
   return (
     <div className="">
       <div className="">
-        {/* sub operation section */}
         <motion.section
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -771,7 +765,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
           </fieldset>
         </motion.section>
 
-        {/* machine type section */}
         <motion.section
           className="mt-8"
           initial={{ opacity: 0 }}
@@ -939,7 +932,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
           </fieldset>
         </motion.section>
 
-        {/* needle section */}
         <motion.section
           className="mt-8"
           initial={{ opacity: 0 }}
@@ -951,7 +943,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               Needle Configuration
             </legend>
 
-            {/* Needle Count */}
             <div className="mt-4">
               <label htmlFor="">Needle Count *</label>
               <div className="">
@@ -977,7 +968,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               </div>
             </div>
 
-            {/* Needle Treads - dynamic based on needleCount */}
             <div className="grid grid-cols-2 gap-4">
               <div className="mt-6">
                 <label className="block mb-2 font-medium">
@@ -1023,7 +1013,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                 </div>
               </div>
 
-              {/* Bobbin Treads - dynamic based on needleCount */}
               <div className="mt-6">
                 <label className="block mb-2 font-medium">
                   Bobbin Tread/Looper *
@@ -1076,9 +1065,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
   );
 };
 
-// Helper Form Component
 const HelperForm = ({ values, errors, touched, handleBlur, setFieldValue }) => {
-  // Helper form doesn't need machine details, so we'll keep it simple
   return (
     <motion.div
       className="space-y-4 mt-4"
@@ -1159,7 +1146,6 @@ const HelperForm = ({ values, errors, touched, handleBlur, setFieldValue }) => {
         />
       </div>
 
-      {/* Hidden fields for machine details (required by validation but not shown for helpers) */}
       <Field type="hidden" name="machineType" value="HLP" />
       <Field type="hidden" name="machineNo" value="" />
       <Field type="hidden" name="machineName" value="" />
@@ -1172,8 +1158,5 @@ const HelperForm = ({ values, errors, touched, handleBlur, setFieldValue }) => {
     </motion.div>
   );
 };
-
-// FullForm and HelperForm components remain the same as in your original code
-// ... [Include the FullForm and HelperForm components exactly as you have them]
 
 export default OperationBulleting;

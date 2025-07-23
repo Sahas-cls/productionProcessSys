@@ -1,17 +1,101 @@
-import React from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { IoSearchSharp } from "react-icons/io5";
 import { motion } from "framer-motion";
+import axios from "axios";
 
-const ViewOperation = ({ operation, onBack }) => {
+const ViewOperation = ({ refreshOperations }) => {
   const navigate = useNavigate();
-  console.log("Operation - ", operation.operation);
+  const location = useLocation();
+  const [operation, setOperation] = useState(null);
+  const [editingSubOperation, setEditingSubOperation] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (location.state) {
+      setOperation(location.state);
+      setLoading(false);
+    } else {
+      const operationId = location.pathname.split("/").pop();
+      fetchOperation(operationId);
+    }
+  }, [location]);
+
+  const fetchOperation = async (operationId) => {
+    try {
+      // Replace with your actual API endpoint
+      // const response = await axios.get(`/api/operations/${operationId}`);
+      // setOperation(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching operation:", error);
+      setLoading(false);
+    }
+  };
+
+  const handleBack = () => {
+    navigate(-1);
+  };
+
+  // Handler for deleting the main operation
+  const handleDeleteOperation = async () => {
+    if (
+      window.confirm(
+        "Are you sure you want to delete this operation and all its sub-operations?"
+      )
+    ) {
+      setIsDeleting(true);
+      try {
+        // await axios.delete(`/api/operations/${operation.operation_id}`);
+        refreshOperations?.();
+        handleBack();
+      } catch (error) {
+        console.error("Error deleting operation:", error);
+        alert("Failed to delete operation");
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  // Handler for deleting a sub-operation
+  const handleDeleteSubOperation = async (subOperationId) => {
+    if (window.confirm("Are you sure you want to delete this sub-operation?")) {
+      try {
+        // await axios.delete(`/api/sub-operations/${subOperationId}`);
+        refreshOperations?.();
+      } catch (error) {
+        console.error("Error deleting sub-operation:", error);
+        alert("Failed to delete sub-operation");
+      }
+    }
+  };
+
+  // Handler for editing a sub-operation
+  const handleEditSubOperation = (subOperation) => {
+    navigate(
+      `/operations/${operation.operation_id}/sub-operations/${subOperation.sub_operation_id}/edit`,
+      {
+        state: { subOperation, operationId: operation.operation_id },
+      }
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+
   if (!operation) {
     return (
       <div className="p-8 text-center">
         <p className="text-red-500">No operation data available</p>
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           Back to List
@@ -25,11 +109,10 @@ const ViewOperation = ({ operation, onBack }) => {
     operation_name,
     createdAt,
     updatedAt,
-    style,
+    style = {},
     subOperations = [],
-  } = operation.operation;
+  } = operation;
 
-  // Format date for display
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -42,11 +125,10 @@ const ViewOperation = ({ operation, onBack }) => {
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-6xl">
-      {/* Header Section */}
       <header className="mb-8">
         <div className="flex justify-between items-start">
           <button
-            onClick={onBack}
+            onClick={handleBack}
             className="flex items-center text-blue-600 hover:text-blue-800 transition-colors"
           >
             <svg
@@ -77,13 +159,32 @@ const ViewOperation = ({ operation, onBack }) => {
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        {/* Operation Details Section */}
         <section className="p-6 border-b border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-700 mb-4">
-            Operation Details
-          </h3>
+          <div className="flex justify-between items-start">
+            <h3 className="text-xl font-semibold text-gray-700 mb-4">
+              Operation Details
+            </h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={() =>
+                  navigate(`/operations/edit/${operation_id}`, {
+                    state: { operation },
+                  })
+                }
+                className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleDeleteOperation}
+                disabled={isDeleting}
+                className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm disabled:bg-red-300"
+              >
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-gray-600">
@@ -104,12 +205,21 @@ const ViewOperation = ({ operation, onBack }) => {
           </div>
         </section>
 
-        {/* Sub-Operations Section */}
         <section className="p-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-gray-700">
               Sub-Operations ({subOperations.length})
             </h3>
+            <button
+              onClick={() =>
+                navigate(`/operations/${operation_id}/sub-operations/new`, {
+                  state: { operationId: operation_id },
+                })
+              }
+              className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors text-sm"
+            >
+              Add Sub-Operation
+            </button>
           </div>
 
           {subOperations.length > 0 ? (
@@ -128,11 +238,27 @@ const ViewOperation = ({ operation, onBack }) => {
                         ID: {subOp.sub_operation_id}
                       </p>
                     </div>
-                    {subOp.smv && (
-                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded-md text-sm font-medium">
-                        SMV: {subOp.smv}
-                      </span>
-                    )}
+                    <div className="flex space-x-2">
+                      {subOp.smv && (
+                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded-md text-sm font-medium">
+                          SMV: {subOp.smv}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => handleEditSubOperation(subOp)}
+                        className="px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-xs"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() =>
+                          handleDeleteSubOperation(subOp.sub_operation_id)
+                        }
+                        className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-xs"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
 
                   {subOp.machine && (
@@ -148,10 +274,6 @@ const ViewOperation = ({ operation, onBack }) => {
                         <p>
                           <span className="font-medium">Number:</span>{" "}
                           {subOp.machine.machine_no}
-                        </p>
-                        <p>
-                          <span className="font-medium">Type:</span>{" "}
-                          {subOp.machine.machine_type}
                         </p>
                       </div>
                     </div>
@@ -176,23 +298,23 @@ const ViewOperation = ({ operation, onBack }) => {
         </section>
       </div>
 
-      {/* Footer Actions */}
       <div className="mt-6 flex justify-end space-x-3">
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
         >
           Back to List
         </button>
-        {/* <button
-          onClick={() => {
-            // Add edit functionality here
-            navigate(`/operations/edit/${operation_id}`);
-          }}
+        <button
+          onClick={() =>
+            navigate(`/operations/edit/${operation_id}`, {
+              state: { operation },
+            })
+          }
           className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
         >
           Edit Operation
-        </button> */}
+        </button>
       </div>
     </div>
   );

@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { IoSearchSharp, IoCloudUploadOutline } from "react-icons/io5";
 import { MdModeEditOutline, MdDeleteForever } from "react-icons/md";
 import { TbEyeSpark } from "react-icons/tb";
+import { useNavigate } from "react-router-dom";
 
 const AddMachine = ({ onViewMachine }) => {
   const [isAddStyle, setIsAddStyle] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-
+  const navigate = useNavigate();
   // Sample machine data - replace with your actual data
   const [machines, setMachines] = useState([
     {
@@ -243,7 +244,10 @@ const AddMachine = ({ onViewMachine }) => {
                 <td className="py-2 text-center whitespace-nowrap">
                   <div className="flex justify-center gap-3">
                     <TbEyeSpark
-                      onClick={() => onViewMachine(machine.id)}
+                      // onClick={() => onViewMachine(machine.id)}
+                      onClick={() =>
+                        navigate("/view-machine", { state: machine })
+                      }
                       className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
                     />
                     <MdModeEditOutline className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer" />

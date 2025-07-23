@@ -147,7 +147,7 @@ const AddCustomer = () => {
       .string()
       .required("Customer name is required")
       .min(3, "Customer name must be at least 3 characters")
-      .matches(/^[A-Za-z]+$/, "Customer name should contain letters only"),
+      .matches(/^[A-Za-z /]+$/, "Customer name should contain letters only"),
     userId: yup.string().required(),
   });
 

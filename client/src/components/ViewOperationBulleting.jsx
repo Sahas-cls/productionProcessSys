@@ -3,6 +3,7 @@ import ReactPaginate from "react-paginate";
 import useOperationBulletin from "../hooks/useOperationBulletin";
 import { IoSearchSharp } from "react-icons/io5";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -16,24 +17,31 @@ const ViewOperationBulletin = ({ onViewBO }) => {
 
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
+  const navigate = useNavigate();
 
   // Memoized filtered list based on search term
   const filteredList = useMemo(() => {
     if (!Array.isArray(operationBulletingList)) return [];
-    
+
     const term = searchTerm.toLowerCase();
     if (!term) return operationBulletingList;
 
     return operationBulletingList.filter((ob) => {
-      return (
-        (ob.style?.style_no?.toLowerCase().includes(term)) ||
-        (ob.operation_id?.toString().includes(term)) ||
-        (ob.operation_name?.toLowerCase().includes(term)) ||
-        (ob.subOperations?.length?.toString().includes(term)) ||
-        (ob.subOperations?.some(subOp => 
-          subOp.sub_operation_name?.toLowerCase().includes(term)
-        ))
-      );
+      const matchesType1 =
+        ob.style?.style_no?.toLowerCase().includes(term) ||
+        ob.operation_id?.toString().includes(term) ||
+        ob.operation_name?.toLowerCase().includes(term) ||
+        ob.subOperations?.length?.toString().includes(term);
+
+      const matchesType2 =
+        ob.style?.style_no?.toLowerCase().includes(term) ||
+        ob.helper_id?.toString().includes(term) ||
+        ob.operation_name?.toLowerCase().includes(term) ||
+        ob.operation_code?.toLowerCase().includes(term) ||
+        ob.mc_smv?.toString().includes(term) ||
+        ob.comments?.toLowerCase().includes(term);
+
+      return ob.operation_type_id === 1 ? matchesType1 : matchesType2;
     });
   }, [operationBulletingList, searchTerm]);
 
@@ -56,10 +64,16 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     setCurrentPage(0); // Reset to first page when searching
   }, []);
 
-  const handleViewDetails = useCallback((ob, e) => {
-    e.preventDefault();
-    onViewBO(ob);
-  }, [onViewBO]);
+  const handleViewDetails = useCallback(
+    (ob) => {
+      ob.operation_type_id == 1
+        ? navigate("/operation-bulletin/operation-details", { state: ob })
+        : navigate("/operation-bulletin/helper-operation-details", {
+            state: ob,
+          });
+    },
+    [navigate]
+  );
 
   if (isLoading) {
     return (
@@ -102,13 +116,15 @@ const ViewOperationBulletin = ({ onViewBO }) => {
             <MemoizedOperationCard
               key={ob.operation_id}
               operation={ob}
-              onViewDetails={handleViewDetails}
+              onViewDetails={() => handleViewDetails(ob)}
             />
           ))
         ) : (
           <div className="col-span-full py-12 text-center">
             <div className="text-gray-500 text-lg">
-              {searchTerm ? "No matching operations found" : "No operations found"}
+              {searchTerm
+                ? "No matching operations found"
+                : "No operations found"}
             </div>
             <button
               onClick={refreshOB}
@@ -134,46 +150,87 @@ const ViewOperationBulletin = ({ onViewBO }) => {
 };
 
 // Memoized Operation Card Component to prevent unnecessary re-renders
-const OperationCard = ({ operation: ob, onViewDetails }) => (
-  <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
-    {/* Card Header */}
-    <div className="bg-teal-600 px-4 py-3">
-      <h3 className="text-white font-semibold text-center truncate">
-        Style No: {ob.style?.style_no || "N/A"}
-      </h3>
-    </div>
+const OperationCard = ({ operation: ob, onViewDetails }) => {
+  const isType1 = ob.operation_type_id === 1;
+  const isType2 = ob.operation_type_id === 2;
 
-    {/* Card Body */}
-    <div className="p-4 space-y-3">
-      <div className="flex items-center border-b-2 border-black/10">
-        <span className="font-medium text-gray-700 w-32">Operation ID:</span>
-        <span className="inline-block bg-yellow-100 text-blue-800 font-bold px-2 py-1 rounded-md text-sm">
-          {ob.operation_id}
-        </span>
-      </div>
-
-      <div className="flex items-center border-b-2 border-black/10">
-        <span className="font-medium text-gray-700 w-32">Name:</span>
-        <span className="truncate">{ob.operation_name}</span>
-      </div>
-
-      <div className="flex items-center border-b-2 border-black/10">
-        <span className="font-medium text-gray-700 w-32">Sub-OP Count:</span>
-        <span>{ob.subOperations?.length || 0}</span>
-      </div>
-    </div>
-
-    {/* Card Footer */}
-    <div className="px-4 pb-4 text-right">
-      <button
-        onClick={(e) => onViewDetails(ob, e)}
-        className="text-blue-600 font-medium hover:text-blue-800 transition-colors focus:outline-none"
+  return (
+    <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+      {/* Card Header */}
+      <div
+        className={`${
+          ob.operation_type_id == 1 ? "bg-teal-500" : "bg-blue-600"
+        } px-4 py-3`}
       >
-        View Details →
-      </button>
+        <h3 className="text-white font-semibold text-center truncate">
+          Style No: {ob.style?.style_no || "N/A"}
+        </h3>
+        {/* {isType2 && (
+          <p className="text-white text-sm text-center truncate">
+            {ob.operation_code}
+          </p>
+        )} */}
+      </div>
+
+      {/* Card Body */}
+      <div className="p-4 space-y-3">
+        <div className="flex items-center border-b-2 border-black/10">
+          <span className="font-medium text-gray-700 w-32">
+            {ob.operation_type_id == 1 ? "Operation ID:" : "Helper OP ID: "}
+          </span>
+          <span className="inline-block bg-yellow-100 text-blue-800 font-bold px-2 py-1 rounded-md text-sm">
+            {ob.operation_type_id == 1 ? ob.operation_id : ob.helper_id}
+          </span>
+        </div>
+
+        <div className="flex items-center border-b-2 border-black/10">
+          <span className="font-medium text-gray-700 w-32">Name:</span>
+          <span className="truncate">{ob.operation_name}</span>
+        </div>
+
+        {isType1 && (
+          <div className="flex items-center border-b-2 border-black/10">
+            <span className="font-medium text-gray-700 w-32">
+              Sub-OP Count:
+            </span>
+            <span>{ob.subOperations?.length || 0}</span>
+          </div>
+        )}
+
+        {isType2 && (
+          <>
+            {/* <div className="flex items-center border-b-2 border-black/10">
+              <span className="font-medium text-gray-700 w-32">
+                Operation type:
+              </span>
+              <span>
+                {ob.operation_type_id == 2 ? "Helper Operation" : "" || "N/A"}
+              </span>
+            </div> */}
+            <div className="flex items-center border-b-2 border-black/10">
+              <span className="font-medium text-gray-700 w-32">MC SMV:</span>
+              <span>{ob.mc_smv || "N/A"}</span>
+            </div>
+            <div className="flex items-center border-b-2 border-black/10">
+              <span className="font-medium text-gray-700 w-32">Comments:</span>
+              <span className="truncate">{ob.comments || "N/A"}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Card Footer */}
+      <div className="px-4 pb-4 text-right">
+        <button
+          onClick={onViewDetails}
+          className="text-blue-600 font-medium hover:text-blue-800 transition-colors focus:outline-none"
+        >
+          View Details →
+        </button>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const MemoizedOperationCard = React.memo(OperationCard);
 

@@ -4,5 +4,6 @@ const controller = require("../controllers/OperationBuletinController");
 
 routes.get("/getAllOB", controller.getBOList);
 routes.post("/createOB", controller.createBulkOperations);
+routes.post("/createHelperOps", controller.createHelperOps);
 
 module.exports = routes;
