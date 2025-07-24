@@ -14,7 +14,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     operationBulletingList,
     setOperationBulletingList,
   } = useOperationBulletin();
-
+  const [isEditingMo, setisEditingMo] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();

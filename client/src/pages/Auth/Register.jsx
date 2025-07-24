@@ -12,7 +12,9 @@ import swal from "sweetalert2";
 
 const Register = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
-  const factoryList = useFactory(); // This should return an array of factories
+  const factoryes = useFactory(); // This should return an array of factories
+  const factoryList = factoryes.factories;
+  // console.log("factory list:- ", factoryList.factories);
   const userCategoryes = useUserCategory();
   const { userCategories } = userCategoryes;
   // const [departmentList, setDepartmentList] = useState(null);

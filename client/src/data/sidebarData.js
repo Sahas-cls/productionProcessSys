@@ -75,6 +75,7 @@ import { GiSewingMachine } from "react-icons/gi";
 import { PiListBulletsFill } from "react-icons/pi";
 import { IoAddCircleSharp } from "react-icons/io5";
 import { FaRegEye } from "react-icons/fa";
+import { RiLayoutMasonryFill } from "react-icons/ri";
 
 export const adminSidebarData = [
   {
@@ -126,6 +127,24 @@ export const adminSidebarData = [
       },
     ],
   },
+  {
+    id: 7,
+    title: "Layout",
+    icon: RiLayoutMasonryFill,
+    submenu: [
+      {
+        id: 71,
+        title: "New Layout",
+        icon: IoAddCircleSharp,
+        navigateTo: "/layout/create-new-layout",
+      },
+      {
+        id: 72,
+        title: "View Layout",
+        icon: FaRegEye,
+      },
+    ],
+  },
 ];
 
 export const userSidebar = [
@@ -142,4 +161,3 @@ export const userSidebar = [
     navigateTo: "/customer",
   },
 ];
-

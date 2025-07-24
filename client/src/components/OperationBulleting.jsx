@@ -237,91 +237,143 @@ const OperationBulleting = () => {
     }
 
     try {
+      // Debug: Show what we're about to send
+      console.log("Pending operations to save:", pendingOperations);
+
       const { styleNumber, mainOperation, mainOperationName } =
         pendingOperations[0];
 
-      // Separate operations by type
-      const machineOperations = pendingOperations.filter(
-        (op) => op.mainOperation === "Machine Operator"
-      );
-      const helperOperations = pendingOperations.filter(
-        (op) => op.mainOperation === "Helper"
-      );
+      // Separate operations by type with proper validation
+      const machineOperations = pendingOperations
+        .filter((op) => op.mainOperation === "1") // Machine Operator
+        .map((op) => ({
+          ...formatMachineOperation(op),
+          styleNumber, // Ensure styleNumber is included
+          mainOperation,
+          mainOperationName,
+        }));
 
-      // Prepare payloads for each type
-      const machinePayload = {
-        styleNumber,
-        mainOperation,
-        mainOperationName,
-        currentOPId: localStorage.getItem("currentItem") || null,
-        operations: machineOperations.map(formatMachineOperation),
-      };
+      const helperOperations = pendingOperations
+        .filter((op) => op.mainOperation === "2") // Helper
+        .map((op) => ({
+          ...formatHelperOperation(op),
+          styleNumber, // Ensure styleNumber is included
+          mainOperation,
+          mainOperationName,
+        }));
 
-      const helperPayload = {
-        styleNumber,
-        mainOperation,
-        mainOperationName,
-        currentOPId: localStorage.getItem("currentItem") || null,
-        operations: helperOperations.map(formatHelperOperation),
-      };
+      console.log("Machine operations payload:", machineOperations);
+      console.log("Helper operations payload:", helperOperations);
 
-      // =============================================
-      // SEND SEPARATE REQUESTS FOR DIFFERENT OPERATION TYPES
-      // =============================================
+      let mainOPId = localStorage.getItem("currentItem") || null;
+      let hasSaved = false;
 
-      // Send machine operations to machine-specific endpoint
+      // Send machine operations if any exist
       if (machineOperations.length > 0) {
-        await axios.post(
-          `${apiUrl}/api/operationBuleting/createOB`,
+        console.log("Attempting to save machine operations...");
+        const machinePayload = {
+          styleNumber,
+          mainOperation,
+          mainOperationName,
+          currentOPId: mainOPId,
+          operations: machineOperations,
+        };
+
+        const machineResponse = await axios.post(
+          `${apiUrl}/api/operationBulleting/createOB`,
           machinePayload,
-          { withCredentials: true }
+          {
+            withCredentials: true,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
         );
+
+        console.log("Machine operations response:", machineResponse.data);
+
+        if (machineResponse.data?.mainOPId) {
+          mainOPId = machineResponse.data.mainOPId;
+          hasSaved = true;
+          console.log("Saved machine operations with ID:", mainOPId);
+        }
       }
 
-      // Send helper operations to helper-specific endpoint
-      console.log("sending request");
+      // Send helper operations if any exist
       if (helperOperations.length > 0) {
-        await axios.post(
-          `${apiUrl}/api/operationBuleting/createHelperOps`,
+        console.log("Attempting to save helper operations...");
+        const helperPayload = {
+          styleNumber,
+          mainOperation,
+          mainOperationName,
+          currentOPId: mainOPId,
+          operations: helperOperations,
+        };
+
+        const helperResponse = await axios.post(
+          `${apiUrl}/api/operationBulleting/createHelperOps`,
           helperPayload,
-          { withCredentials: true }
+          {
+            withCredentials: true,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        console.log("Helper operations response:", helperResponse.data);
+
+        if (helperResponse.data?.mainOPId) {
+          mainOPId = helperResponse.data.mainOPId;
+          hasSaved = true;
+          console.log("Saved helper operations with ID:", mainOPId);
+        }
+      }
+
+      if (!hasSaved) {
+        throw new Error(
+          "No operations were saved - backend didn't respond with IDs"
         );
       }
 
-      // =============================================
-      // END OF API REQUESTS
-      // =============================================
-
-      // Update local storage and state
-      const mainOPId =
-        machineOperations.length > 0
-          ? machineOperations[0].operation_id
-          : helperOperations[0].operation_id;
-
-      localStorage.setItem("currentItem", mainOPId);
-      setCurrentOPId(mainOPId);
+      // Only update state if we successfully saved
+      if (mainOPId) {
+        localStorage.setItem("currentItem", mainOPId);
+        setCurrentOPId(mainOPId);
+        setPendingOperations([]);
+      }
 
       Swal.fire({
         title: "Success",
         text: `Saved ${pendingOperations.length} operations (${machineOperations.length} machine, ${helperOperations.length} helper)`,
         icon: "success",
       });
-
-      setPendingOperations([]);
     } catch (error) {
-      console.error("Bulk save error:", error);
-      let errorMessage = "Failed to save operations";
+      console.error("Bulk save failed:", error);
+      console.error("Error details:", {
+        message: error.message,
+        response: error.response?.data,
+        stack: error.stack,
+      });
 
-      if (error.response?.data) {
+      let errorMessage = "Failed to save operations";
+      if (error.response) {
         errorMessage =
-          error.response.data.message || JSON.stringify(error.response.data);
-      } else if (error.message) {
-        errorMessage = error.message;
+          error.response.data?.message ||
+          JSON.stringify(error.response.data) ||
+          `Server responded with ${error.response.status}`;
+      } else if (error.request) {
+        errorMessage = "No response received from server";
+      } else {
+        errorMessage = error.message || "Unknown error occurred";
       }
 
       Swal.fire({
         title: "Error",
-        html: `<div>${errorMessage}</div><small>Check console for details</small>`,
+        html: `
+        <div>${errorMessage}</div>
+        <small class="text-gray-500">Check console for details</small>
+      `,
         icon: "error",
       });
     }

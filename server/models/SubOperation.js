@@ -29,16 +29,34 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   SubOperation.associate = (models) => {
-    // Belongs to MainOperation (M:1)
+    // M:N with Machine
+    SubOperation.belongsToMany(models.Machine, {
+      through: "SubOperationMachine",
+      foreignKey: "sub_operation_id",
+      otherKey: "machine_id",
+      as: "machines",
+    });
+
+    // M:1 with MainOperation
     SubOperation.belongsTo(models.MainOperation, {
       foreignKey: "main_operation_id",
       as: "mainOperation",
     });
 
-    // Has one Machine (1:1)
-    SubOperation.hasOne(models.Machine, {
+    // 1:M with other needle-related tables
+    SubOperation.hasMany(models.NeedleType, {
       foreignKey: "sub_operation_id",
-      as: "machine",
+      as: "needle_types",
+    });
+
+    SubOperation.hasMany(models.NeedleTread, {
+      foreignKey: "sub_operation_id",
+      as: "needle_treads",
+    });
+
+    SubOperation.hasMany(models.NeedleLooper, {
+      foreignKey: "sub_operation_id",
+      as: "needle_loopers",
     });
   };
 

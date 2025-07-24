@@ -10,7 +10,7 @@ function useOperationBulleting() {
     try {
       setIsLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/operationBuleting/getAllOB`,
+        `${apiUrl}/api/operationBulleting/getAllOB`,
         {
           withCredentials: true,
         }

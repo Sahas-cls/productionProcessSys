@@ -1,4 +1,3 @@
-
 module.exports = (sequelize, DataTypes) => {
   const NeedleLooper = sequelize.define(
     "NeedleLooper",
@@ -7,6 +6,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
+      },
+      sub_operation_id: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "sub_operation",
+          key: "sub_operation_id",
+        },
       },
       looper_type: {
         type: DataTypes.STRING, // e.g., "Rotary", "Oscillating"
@@ -31,6 +37,11 @@ module.exports = (sequelize, DataTypes) => {
     NeedleLooper.belongsTo(models.Machine, {
       foreignKey: "machine_id",
       as: "machine",
+    });
+
+    NeedleLooper.belongsTo(models.SubOperation, {
+      foreignKey: "sub_operation_id",
+      as: "sub_operation",
     });
   };
 

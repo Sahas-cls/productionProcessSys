@@ -18,6 +18,8 @@ import ViewOperation from "./components/ViewOperation";
 import ViewMachinePage from "./pages/ViewMachinePage";
 import ViewHelperOperation from "./pages/ViewHelperOperation";
 import EditMainOperation from "./components/admin/EditMainOperation";
+import EditSubOperationPage from "./pages/admin/EditSubOperationPage";
+import AddLayoutPage from "./pages/AddLayoutPage";
 // import StylePage from "./pages/StylePage";
 // import ViewMachine from "./pages/ViewMachine";
 
@@ -53,8 +55,17 @@ const App = () => (
 
         {/* edit main operation */}
         <Route path="/operations/edit/:id" element={<EditMainOperation />} />
+
+        {/* edit sub operation */}
+        <Route
+          path="/operations/edit-sub-operation"
+          element={<EditSubOperationPage />}
+        />
         {/* <Route path="/view/machine" element={<ViewMachine />} /> */}
         {/* <Route path="/view/machine" element={<ViewMachine />} /> */}
+
+        {/* to create new layout */}
+        <Route path="/layout/create-new-layout" element={<AddLayoutPage />} />
       </Routes>
     </BrowserRouter>
   </UserProvider>

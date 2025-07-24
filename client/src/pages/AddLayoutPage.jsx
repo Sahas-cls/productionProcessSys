@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
+import React, { useState } from "react";
 import Header from "../components/Header";
+import AddFactory from "../components/admin/AddFactory";
+import Sidebar from "../components/Sidebar";
 import { motion, AnimatePresence } from "framer-motion";
-import AddCustomer from "../components/admin/AddCustomer";
-import AddSeason from "../components/admin/AddSeason";
-import AddStyle from "../components/admin/AddStyle";
-import OperationBulleting from "../components/OperationBulleting";
-
-const AddOperationBulletingPage = () => {
+import AddLineLayout from "../components/AddLineLayout";
+const AddLayoutPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
+
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
       <Sidebar
@@ -28,12 +26,12 @@ const AddOperationBulletingPage = () => {
             exit="exit"
             className="bg-gray-200 w-full min-h-screen"
           >
-            <OperationBulleting />
+            <AddLineLayout/>
           </motion.div>
         </AnimatePresence>
       </div>
     </div>
   );
-};  
+};
 
-export default AddOperationBulletingPage;
+export default AddLayoutPage;
