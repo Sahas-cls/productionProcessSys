@@ -3,6 +3,7 @@ const { Style, Customer, Factory, Season } = require("../models");
 
 // for get all styles
 exports.getStyles = async (req, res, next) => {
+  console.log("get style called");
   try {
     const styles = await Style.findAll({
       include: [
@@ -23,6 +24,7 @@ exports.getStyles = async (req, res, next) => {
       ],
     });
     // console.log("styles list:- ", styles);
+    console.log(styles);
     if (styles) {
       res.status(200).json({ status: "success", data: styles });
     }

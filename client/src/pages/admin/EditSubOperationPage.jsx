@@ -8,24 +8,20 @@ const EditSubOperationPage = () => {
   const location = useLocation();
   const { subOperation, operationId } = location.state;
   const subOperationId = location.state?.subOperation.sub_operation_id;
-  // alert(subOperationId);
   const navigate = useNavigate();
   console.log(location.state);
+  
   const handleGoBack = () => {
     navigate(-1);
   };
 
-  // Extract needle data from the first machine (assuming there's at least one machine)
-  const machine = subOperation.machines[0];
-  const needleTypes = machine.needleTypes?.map((nt) => nt.type) || [""];
-  const needleThreads = machine.needleTreads?.map((nt) => nt.tread) || [""];
-  const needleLoopers = machine.needleLoopers?.map((nl) => nl.looper_type) || [
-    "",
-  ];
+  // Extract needle data from subOperation (not machine)
+  const needleTypes = subOperation.needle_types?.map((nt) => nt.type) || [""];
+  const needleThreads = subOperation.needle_treads?.map((nt) => nt.tread) || [""];
+  const needleLoopers = subOperation.needle_loopers?.map((nl) => nl.looper_type) || [""];
+  const machine = subOperation.machines?.[0] || {};
 
   const apiUrl = import.meta.env.VITE_API_URL;
-
-  console.log("needle treads", needleTypes);
 
   return (
     <div className="bg-gray-50">
@@ -55,15 +51,20 @@ const EditSubOperationPage = () => {
           onSubmit={async (values) => {
             try {
               console.log("Form submitted", values);
-              const respons = await axios.put(
+              const response = await axios.put(
                 `${apiUrl}/api/operationBulleting/edit-sub-operation/${subOperationId}`,
                 values,
                 {
                   withCredentials: true,
                 }
               );
-              console.log(respons);
-            } catch (error) {}
+              console.log(response);
+              if (response.status === 200) {
+                navigate(-1); // Go back after successful update
+              }
+            } catch (error) {
+              console.error("Error updating sub-operation:", error);
+            }
           }}
         >
           {({ resetForm, values }) => (
@@ -96,6 +97,7 @@ const EditSubOperationPage = () => {
                     name="smv"
                     className="border rounded px-3 py-2"
                     type="number"
+                    step="0.01"
                   />
                   <ErrorMessage
                     name="smv"

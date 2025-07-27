@@ -26,26 +26,24 @@ exports.getBOList = async (req, res, next) => {
               model: Machine,
               as: "machines",
               through: { attributes: [] },
-              include: [
-                {
-                  model: NeedleType,
-                  as: "needleTypes",
-                },
-                {
-                  model: NeedleTread,
-                  as: "needleTreads",
-                },
-                {
-                  model: NeedleLooper,
-                  as: "needleLoopers",
-                },
-              ],
+            },
+            {
+              model: NeedleType,
+              as: "needle_types",
+            },
+            {
+              model: NeedleTread,
+              as: "needle_treads",
+            },
+            {
+              model: NeedleLooper,
+              as: "needle_loopers",
             },
           ],
         },
         {
           model: Style,
-          as: "style", // if you set alias when associating
+          as: "style",
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -245,194 +243,10 @@ exports.editMainOperation = async (req, res, next) => {
   }
 };
 
-// const handleBulkSubmit = async (operations, styleNumber, mainOperation) => {
-//   console.log("Submitting bulk operations:", operations);
-
-//   try {
-//     const operationData = {
-//       styleNumber,
-//       mainOperation,
-//       operations: operations.map(op => ({
-//         ...op,
-//         needleTreads: op.needleTreads.filter(tread => tread !== ""),
-//         bobbinTreadLoopers: op.bobbinTreadLoopers.filter(tread => tread !== ""),
-//       })),
-//       currentOPId: localStorage.getItem("currentItem") || null
-//     };
-
-//     const response = await axios.post(
-//       `${apiUrl}/api/operationBuleting/createBulkOB`,
-//       operationData,
-//       { withCredentials: true }
-//     );
-
-//     if (response.status === 200 || response.status === 201) {
-//       const mainOPId = response.data.mainOPId;
-//       localStorage.setItem("currentItem", mainOPId || null);
-
-//       Swal.fire({
-//         title: "Success",
-//         text: "Bulk operation bulletin creation successful",
-//         icon: "success",
-//       });
-
-//       // Refresh operations
-//       const opsResponse = await axios.get(`${apiUrl}/api/operationBuleting`, {
-//         withCredentials: true,
-//       });
-//       setOperations(opsResponse.data);
-
-//       return mainOPId;
-//     }
-//   } catch (error) {
-//     console.error("Error saving bulk operations:", error);
-//     throw error;
-//   }
-// };
-
-// to edit operation
-
-// exports.createBulkOperations = async (req, res, next) => {
-//   console.log(req.body);
-//   console.log("creating operations");
-
-//   try {
-//     const {
-//       styleNumber,
-//       mainOperation,
-//       operations,
-//       currentOPId,
-//       mainOperationName,
-//     } = req.body;
-
-//     // Validate required fields
-//     if (!mainOperation) {
-//       return res.status(400).json({
-//         error: "mainOperation is required at the top level",
-//       });
-//     }
-
-//     if (!operations || !Array.isArray(operations)) {
-//       return res.status(400).json({
-//         error: "operations must be an array",
-//       });
-//     }
-
-//     await sequelize.transaction(async (t) => {
-//       // 1. Verify style exists
-//       const styleExist = await Style.findOne({
-//         where: { style_no: styleNumber },
-//         transaction: t,
-//       });
-
-//       if (!styleExist) {
-//         throw new Error(`Style ${styleNumber} not found`);
-//       }
-
-//       // 2. Create Main Operation
-//       const [mainOp, created] = await MainOperation.findOrCreate({
-//         where: {
-//           style_no: styleExist.style_id,
-//           operation_name: mainOperationName,
-//         },
-//         defaults: {
-//           style_no: styleExist.style_id,
-//           operation_type_id: 1,
-//           operation_name: mainOperationName,
-//         },
-//         transaction: t,
-//       });
-
-//       // 3. Process sub-operations in parallel
-//       await Promise.all(
-//         operations.map(async (op) => {
-//           // Validate sub-operation
-//           if (!op.operationName) {
-//             throw new Error("Sub-operation requires operationName");
-//           }
-
-//           // Create SubOperation
-//           const subOp = await SubOperation.create(
-//             {
-//               main_operation_id: mainOp.operation_id,
-//               sub_operation_name: op.operationName,
-//               operation_number: op.operationNumber,
-//               msv: op.smv,
-//               remark: op.remarks,
-//             },
-//             { transaction: t }
-//           );
-
-//           // MODIFIED: Check if machine exists by machine_no only
-//           const [machine, machineCreated] = await Machine.findOrCreate({
-//             where: {
-//               machine_no: op.machineNo, // Only check by machine number
-//             },
-//             defaults: {
-//               machine_no: op.machineNo,
-//               machine_name: op.machineName,
-//               machine_type: op.machineType,
-//               machine_brand: op.machineBrand,
-//               machine_location: op.machineLocation,
-//               needle_count: op.needleCount,
-//             },
-//             transaction: t,
-//           });
-
-//           // MODIFIED: Always associate machine with sub-operation
-//           await machine.addSubOperation(subOp, { transaction: t });
-
-//           // Create needle-related records (regardless of machine creation)
-//           if (op.needleType?.length > 0) {
-//             await NeedleType.bulkCreate(
-//               op.needleType.map((needle) => ({
-//                 type: needle.type || null,
-//                 machine_id: machine.machine_id,
-//                 sub_operation_id: subOp.sub_operation_id,
-//               })),
-//               { transaction: t }
-//             );
-//           }
-
-//           if (op.needleTreads?.length > 0) {
-//             await NeedleTread.bulkCreate(
-//               op.needleTreads.map((tread) => ({
-//                 tread: tread,
-//                 machine_id: machine.machine_id,
-//                 sub_operation_id: subOp.sub_operation_id,
-//               })),
-//               { transaction: t }
-//             );
-//           }
-
-//           if (op.bobbinTreadLoopers?.length > 0) {
-//             await NeedleLooper.bulkCreate(
-//               op.bobbinTreadLoopers.map((looper) => ({
-//                 looper_type: looper,
-//                 machine_id: machine.machine_id,
-//                 sub_operation_id: subOp.sub_operation_id,
-//               })),
-//               { transaction: t }
-//             );
-//           }
-//         })
-//       );
-
-//       console.log("operation create success");
-//       return res.status(201).json({
-//         status: "success",
-//         mainOPId: mainOp.operation_id,
-//         message: `Processed ${operations.length} operations`,
-//         created: operations.length,
-//       });
-//     });
-//   } catch (error) {
-//     console.error("Bulk operation error:", error);
-//     next(error);
-//   }
-// };
-
+// to create bulk operations including, Main Operation, SubOperations, Machines, NeedleTypes, NeedleTreads, NeedleLoopers
 exports.createBulkOperations = async (req, res, next) => {
+  // console.log(req.body);
+  // return;
   try {
     const { styleNumber, mainOperation, operations, mainOperationName } =
       req.body;
@@ -444,7 +258,9 @@ exports.createBulkOperations = async (req, res, next) => {
       !operations ||
       !Array.isArray(operations)
     ) {
-      return res.status(400).json({ error: "Missing required fields" });
+      const error = new Error("Missing required fields");
+      error.status = 400;
+      return next(error);
     }
 
     const result = await sequelize.transaction(async (t) => {
@@ -501,6 +317,7 @@ exports.createBulkOperations = async (req, res, next) => {
           {
             main_operation_id: mainOp.operation_id,
             sub_operation_name: op.operationName,
+            sub_operation_number: op.operationNumber,
             operation_number: op.operationNumber,
             smv: parseFloat(op.smv),
             remark: op.remarks,

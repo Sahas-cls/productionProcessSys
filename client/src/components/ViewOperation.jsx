@@ -85,7 +85,7 @@ const ViewOperation = ({ refreshOperations }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isEditingMo, setIsEditingMo] = useState(false);
-
+  console.log("location state: ", location.state.subOperations[0]);
   useEffect(() => {
     if (location.state) {
       setOperation(location.state);
@@ -369,6 +369,7 @@ const ViewOperation = ({ refreshOperations }) => {
                   </div>
 
                   {/* Machines Section */}
+                  {/* Machines Section */}
                   {subOp.machines?.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <h5 className="font-medium text-gray-700 mb-2">
@@ -407,52 +408,76 @@ const ViewOperation = ({ refreshOperations }) => {
                           </div>
 
                           {/* Needle Types */}
-                          {machine.needleTypes?.length > 0 && (
-                            <div className="mt-2">
-                              <h6 className="text-sm font-medium">
-                                Needle Types:
-                              </h6>
-                              <ul className="list-disc list-inside">
-                                {machine.needleTypes.map((needle, idx) => (
-                                  <li key={idx} className="text-sm">
-                                    {needle.type}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {subOp.needle_types?.length > 0 &&
+                            subOp.needle_types.some(
+                              (nt) => nt.machine_id === machine.machine_id
+                            ) && (
+                              <div className="mt-2">
+                                <h6 className="text-sm font-medium">
+                                  Needle Types:
+                                </h6>
+                                <ul className="list-disc list-inside">
+                                  {subOp.needle_types
+                                    .filter(
+                                      (nt) =>
+                                        nt.machine_id === machine.machine_id
+                                    )
+                                    .map((needle, idx) => (
+                                      <li key={idx} className="text-sm">
+                                        {needle.type}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            )}
 
                           {/* Needle Treads */}
-                          {machine.needleTreads?.length > 0 && (
-                            <div className="mt-2">
-                              <h6 className="text-sm font-medium">
-                                Needle Treads:
-                              </h6>
-                              <ul className="list-disc list-inside">
-                                {machine.needleTreads.map((tread, idx) => (
-                                  <li key={idx} className="text-sm">
-                                    {tread.tread}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {subOp.needle_treads?.length > 0 &&
+                            subOp.needle_treads.some(
+                              (nt) => nt.machine_id === machine.machine_id
+                            ) && (
+                              <div className="mt-2">
+                                <h6 className="text-sm font-medium">
+                                  Needle Treads:
+                                </h6>
+                                <ul className="list-disc list-inside">
+                                  {subOp.needle_treads
+                                    .filter(
+                                      (nt) =>
+                                        nt.machine_id === machine.machine_id
+                                    )
+                                    .map((tread, idx) => (
+                                      <li key={idx} className="text-sm">
+                                        {tread.tread}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            )}
 
                           {/* Needle Loopers */}
-                          {machine.needleLoopers?.length > 0 && (
-                            <div className="mt-2">
-                              <h6 className="text-sm font-medium">
-                                Bobbin Tread/Loopers:
-                              </h6>
-                              <ul className="list-disc list-inside">
-                                {machine.needleLoopers.map((looper, idx) => (
-                                  <li key={idx} className="text-sm">
-                                    {looper.looper_type}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                          {subOp.needle_loopers?.length > 0 &&
+                            subOp.needle_loopers.some(
+                              (nl) => nl.machine_id === machine.machine_id
+                            ) && (
+                              <div className="mt-2">
+                                <h6 className="text-sm font-medium">
+                                  Bobbin Tread/Loopers:
+                                </h6>
+                                <ul className="list-disc list-inside">
+                                  {subOp.needle_loopers
+                                    .filter(
+                                      (nl) =>
+                                        nl.machine_id === machine.machine_id
+                                    )
+                                    .map((looper, idx) => (
+                                      <li key={idx} className="text-sm">
+                                        {looper.looper_type}
+                                      </li>
+                                    ))}
+                                </ul>
+                              </div>
+                            )}
                         </div>
                       ))}
                     </div>

@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
+      sub_operation_number: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       sub_operation_name: {
         type: DataTypes.STRING,
         validate: { len: [0, 255] },
