@@ -108,7 +108,7 @@ const AddLineLayout = () => {
     if (window.confirm("Are you sure you want to delete this workstation?")) {
       try {
         const response = await axios.delete(
-          `${apiUrl}/api/layout/workstations/${workstationId}`,
+          `${apiUrl}/api/workstations/deleteWS/${workstationId}`,
           { withCredentials: true }
         );
         if (response.status === 200) {
@@ -297,10 +297,14 @@ const AddLineLayout = () => {
           <div className="p-4">
             <Formik
               initialValues={{
-                workstations: workstationData,
+                workstations: workstationData.map((ws) => ({
+                  ...ws,
+                  workstation_no: "", // Add workstation_no to each workstation
+                })),
               }}
               validationSchema={operationSchema}
               onSubmit={async (values) => {
+                console.log("values: ", values);
                 try {
                   const response = await axios.post(
                     `${apiUrl}/api/layout/save-operations`,
@@ -385,6 +389,9 @@ const AddLineLayout = () => {
                               <thead className="bg-gradient-to-r from-blue-600 to-blue-400">
                                 <tr>
                                   <th className="py-2 border border-white">
+                                    Workstation No
+                                  </th>
+                                  <th className="py-2 border border-white">
                                     Operation No
                                   </th>
                                   <th className="py-2 border border-white">
@@ -420,6 +427,27 @@ const AddLineLayout = () => {
                                         workstation.operations.map(
                                           (operation, opIndex) => (
                                             <tr key={opIndex}>
+                                              <td className="border px-2 py-1">
+                                                <Field
+                                                  name={`workstations.${wsIndex}.workstation_no`} // Note the changed path
+                                                  className={`border px-2 py-1 w-full ${
+                                                    editingWorkstation ===
+                                                    workstation.workstation_id
+                                                      ? ""
+                                                      : "bg-gray-100"
+                                                  }`}
+                                                  disabled={
+                                                    editingWorkstation !==
+                                                    workstation.workstation_id
+                                                  }
+                                                />
+                                                <ErrorMessage
+                                                  name={`workstations.${wsIndex}.workstation_no`}
+                                                  component="div"
+                                                  className="text-red-600 text-sm"
+                                                />
+                                              </td>
+
                                               <td className="border px-2 py-1">
                                                 <Field
                                                   name={`workstations.${wsIndex}.operations.${opIndex}.operation_no`}
@@ -606,7 +634,7 @@ const AddLineLayout = () => {
                     )}
                   </FieldArray>
 
-                  <div className="mt-8 flex justify-center">
+                  {/* <div className="mt-8 flex justify-center">
                     <button
                       type="submit"
                       disabled={isSubmitting}
@@ -614,7 +642,7 @@ const AddLineLayout = () => {
                     >
                       {isSubmitting ? "Saving..." : "Save All Operations"}
                     </button>
-                  </div>
+                  </div> */}
                 </Form>
               )}
             </Formik>
