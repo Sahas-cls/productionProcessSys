@@ -57,11 +57,11 @@ exports.createLayout = async (req, res, next) => {
           transaction: t,
         });
 
-        console.log("mo: ", mainOperations);
+        // console.log("mo: ", mainOperations);
         // 4. Flatten the sub operations
         const subOperations = mainOperations.flatMap((mo) => mo.subOperations);
-        console.log("sub operations: ", subOperations);
-
+        // console.log("sub operations: ", subOperations);
+        console.log("sub op: ", subOperations);
         return { createL, createWorkStation, subOperations };
       });
 

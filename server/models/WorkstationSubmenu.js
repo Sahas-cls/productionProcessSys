@@ -14,7 +14,7 @@ module.exports = (sequelize, DataTypes) => {
           key: "workstation_id",
         },
       },
-      suboperatoin_id: {
+      sub_operation_id: {
         type: DataTypes.INTEGER,
         referecess: {
           model: "sub_operation",

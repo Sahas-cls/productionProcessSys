@@ -77,6 +77,10 @@ app.use("/api/operationBulleting", operationBulletinRoute);
 const layoutRoutes = require("./Routes/LayoutRoute.js");
 app.use("/api/layout", layoutRoutes);
 
+// workstation routes
+const workstationRoutes = require("./Routes/Workstation.js");
+app.use("/api/workstations", workstationRoutes)
+
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
 
