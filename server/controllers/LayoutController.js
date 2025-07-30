@@ -4,9 +4,54 @@ const {
   sequelize,
   MainOperation,
   SubOperation,
+  Style,
 } = require("../models");
 
 // to retrive data from layout tbl
+exports.getLayouts = async (req, res, next) => {
+  try {
+    const layoutList = await Layout.findAll();
+    res.status(200).json({ status: "Success", data: layoutList });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to retrive all sub operations belongs to one layout
+exports.getSubOperations = async (req, res, next) => {
+  //
+  const { id } = req.params;
+  console.log(req.params);
+  console.log("id ============== ", id);
+  console.log("request recived");
+  try {
+    const subOps = await Layout.findByPk(id, {
+      include: [
+        {
+          model: Style,
+          as: "style",
+          include: [
+            {
+              model: MainOperation,
+              as: "operations",
+              include: [{ model: SubOperation, as: "subOperations" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const allSubOperations = subOps.style.operations.flatMap(
+      (op) => op.subOperations
+    );
+
+
+
+    res.status(200).json({ status: "success", data: allSubOperations });
+  } catch (error) {
+    return next(error);
+  }
+};
 
 // to create new layout
 exports.createLayout = async (req, res, next) => {

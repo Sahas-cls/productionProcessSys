@@ -142,6 +142,7 @@ export const adminSidebarData = [
         id: 72,
         title: "View Layout",
         icon: FaRegEye,
+        navigateTo: "/layout/list-view"
       },
     ],
   },

@@ -7,6 +7,10 @@ module.exports = (sequelize, DataTypes) => {
         autoIncrement: true,
         primaryKey: true,
       },
+      workstation_no: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       layout_id: {
         type: DataTypes.INTEGER,
         references: {
@@ -27,6 +31,11 @@ module.exports = (sequelize, DataTypes) => {
       as: "layout",
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
+    });
+
+    Workstation.hasMany(models.WorkstationSubmenu, {
+      foreignKey: "workstation_id",
+      as: "subOperations",
     });
 
     // Workstation.belongsTo(models.w, {

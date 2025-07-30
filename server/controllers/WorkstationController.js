@@ -1,41 +1,130 @@
 const { where } = require("sequelize");
-const { WorkstationSubmenu, Workstation, Layout } = require("../models");
+// const {Workstation, WorkstationSubmenu} = require("../models")
+const {
+  WorkstationSubmenu,
+  Workstation,
+  Layout,
+  SubOperation,
+  MainOperation,
+} = require("../models");
+
+// get specific workstation details with it's sub operations
+exports.getWorkstation = async (req, res, next) => {
+  const { id } = req.params;
+  console.log("the request is reaches :  ", id);
+  try {
+    const workstation = await Workstation.findByPk(id);
+
+    console.log("workstation ====================== ", workstation);
+
+    // Safety check to avoid null crash
+    // if (!workstation) {
+    //   return res
+    //     .status(404)
+    //     .json({ status: "fail", message: "Workstation not found" });
+    // }
+
+    res.status(200).json({ status: "success", data: workstation });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+};
+
+exports.getWorkstations = async (req, res, next) => {
+  //
+  console.log(req.params);
+  const { id } = req.params;
+  console.log("param id: ", id);
+  try {
+    const workstations = await Workstation.findAll({
+      where: { layout_id: id },
+      include: [
+        {
+          model: WorkstationSubmenu,
+          as: "subOperations",
+          include: [
+            {
+              model: SubOperation,
+              as: "suboperatoin",
+              include: [
+                {
+                  model: MainOperation,
+                  as: "mainOperation",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "data selected successfully",
+      data: workstations,
+    });
+
+    // console.log("workstations: ", workstations);
+  } catch (error) {
+    return next(error);
+  }
+};
+
 exports.createWS = async (req, res, next) => {
   console.log("Request body:", req.body);
-  return;
+
   try {
-    const workstations = req.body.workstations
-      ? req.body.workstations
-      : [req.body];
+    const { workstation_id, operations } = req.body;
 
     await WorkstationSubmenu.sequelize.transaction(async (t) => {
-      for (const ws of workstations) {
-        if (!ws || !ws.workstation_id || !Array.isArray(ws.operations)) {
-          throw new Error(`Invalid workstation format: ${JSON.stringify(ws)}`);
+      // 1. First find the existing workstation to get its layout_id
+      const existingWorkstation = await Workstation.findByPk(workstation_id, {
+        transaction: t,
+      });
+
+      if (!existingWorkstation) {
+        throw new Error(`Workstation ${workstation_id} not found`);
+      }
+
+      const layout_id = existingWorkstation.layout_id;
+      if (!layout_id) {
+        throw new Error(
+          `No layout_id associated with workstation ${workstation_id}`
+        );
+      }
+
+      // 2. Clear existing operations for this workstation
+      await WorkstationSubmenu.destroy({
+        where: { workstation_id },
+        transaction: t,
+      });
+
+      // 3. Create new operations
+      const submenuEntries = operations.map((op) => {
+        if (!op.sub_operation_id) {
+          throw new Error(
+            `Operation missing sub_operation_id: ${JSON.stringify(op)}`
+          );
         }
+        return {
+          workstation_id,
+          sub_operation_id: op.sub_operation_id,
+          // Add other fields if your model supports them
+        };
+      });
 
-        const { workstation_id, operations } = ws;
+      await WorkstationSubmenu.bulkCreate(submenuEntries, { transaction: t });
 
-        // Clear existing operations
-        await WorkstationSubmenu.destroy({
-          where: { workstation_id },
-          transaction: t,
-        });
-
-        // Create new operations
-        const submenuEntries = operations.map((op) => {
-          if (!op.sub_operation_id) {
-            throw new Error(
-              `Operation missing sub_operation_id: ${JSON.stringify(op)}`
-            );
-          }
-          return {
-            workstation_id,
-            sub_operation_id: op.sub_operation_id,
-          };
-        });
-
-        await WorkstationSubmenu.bulkCreate(submenuEntries, { transaction: t });
+      // 4. Update workstation numbers if needed
+      // (Assuming you want to keep the first operation's workstation_no)
+      if (operations.length > 0) {
+        await existingWorkstation.update(
+          {
+            workstation_no: operations[0].workstation_no,
+          },
+          { transaction: t }
+        );
       }
     });
 
@@ -69,11 +158,11 @@ exports.deleteWorkstation = async (req, res, next) => {
         ],
         transaction: t,
       });
-
       if (!workstation) {
         throw new Error("Workstation not found");
       }
 
+      console.log("layout ================ : ", workstation);
       // Delete all associated operations
       await WorkstationSubmenu.destroy({
         where: { workstation_id: id },
@@ -110,5 +199,45 @@ exports.deleteWorkstation = async (req, res, next) => {
       status: "error",
       message: error.message,
     });
+  }
+};
+
+// to add a sub opeartion to workstation
+exports.addSubOperation = async (req, res, next) => {
+  //
+  console.log(req.body);
+  console.log(req.params);
+  const { workstation_id, sub_operation_id } = req.body;
+  try {
+    const createSO = await WorkstationSubmenu.create({
+      workstation_id,
+      sub_operation_id,
+    });
+
+    res
+      .status(200)
+      .json({ status: "success", message: "sub operation created" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to delete sub operation from workstation
+exports.deleteSubOperation = async (req, res, next) => {
+  //
+  console.log(req.body);
+  console.log(req.params);
+  const { subOpId, wsId } = req.params;
+
+  try {
+    const isdelete = await WorkstationSubmenu.destroy({
+      where: { sub_operation_id: subOpId, workstation_id: wsId },
+    });
+
+    res
+      .status(200)
+      .json({ status: "succes", message: "Operation delete success" });
+  } catch (error) {
+    return next(error);
   }
 };

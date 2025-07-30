@@ -1,0 +1,359 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import axios from "axios";
+import { ClipLoader } from "react-spinners";
+import { BsArrowsMove } from "react-icons/bs";
+import { MdEdit } from "react-icons/md";
+import { MdOutlineDeleteForever } from "react-icons/md";
+import { BiPlus } from "react-icons/bi";
+import { IoClose } from "react-icons/io5";
+import Swal from "sweetalert2";
+import AddSubOperation from "./AddSubOperation";
+
+
+const ViewWorkstations = () => {
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { state } = location;
+  const [workstationList, setWorkstationList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isAddingSubM, setIsAddingSubM] = useState(false);
+  const [selectedWorkstation, setSelectedWorkstation] = useState(null);
+
+  const getWorkstations = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get(
+        `${apiUrl}/api/workstations/getWorkstations/${state}`
+      );
+      setWorkstationList(response.data.data);
+    } catch (error) {
+      console.error(error);
+      setError("Failed to load workstation data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWorkstationDelete = async (workstation_id) => {
+    const isDelete = await Swal.fire({
+      title: `Are you sure want to delete #${workstation_id} workstation`,
+      icon: "warning",
+      showCancelButton: true,
+    });
+
+    if (!isDelete.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(
+        `${apiUrl}/api/workstations/deleteWS/${workstation_id}`
+      );
+      if (response.status === 200) {
+        await Swal.fire({
+          title: "Workstation delete success",
+          icon: "success",
+        });
+        getWorkstations();
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleDeleteSubOP = async (subOpId, wsId) => {
+    // alert(wsId);
+    const isDelete = await Swal.fire({
+      title:
+        "Are you sure want to delete this sub operation from your workstation?",
+      icon: "question",
+      showCancelButton: true,
+    });
+
+    if (!isDelete.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(
+        `${apiUrl}/api/workstations/deleteSubOperation/${subOpId}/${wsId}`
+      );
+
+      if (response.status === 200) {
+        Swal.fire({
+          title: "Sub Operation delete success",
+          icon: "success",
+        });
+        getWorkstations();
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleEditWorkstation = (workstation) => {
+    navigate("/workstation/edit", { state: workstation });
+  };
+
+  const openAddSubOperationModal = (workstation) => {
+    setSelectedWorkstation(workstation);
+    setIsAddingSubM(true);
+  };
+
+  const closeAddSubOperationModal = () => {
+    setIsAddingSubM(false);
+    setSelectedWorkstation(null);
+  };
+
+  useEffect(() => {
+    getWorkstations();
+  }, [state]);
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <ClipLoader size={50} color="#2563EB" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border-l-4 border-red-500 p-4 my-6 rounded">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg
+              className="h-5 w-5 text-red-500"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">{error}</p>
+            <button
+              onClick={getWorkstations}
+              className="mt-2 text-sm text-red-600 hover:text-red-500 font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-6 sm:px-6 lg:px-8 relative">
+      {/* Modal Overlay */}
+      {isAddingSubM && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-2/4 ">
+            <div className="flex justify-between items-center border-b p-4">
+              <h3 className="text-lg font-semibold">
+                Add Sub-Operation to Workstation #
+                {selectedWorkstation?.workstation_id}
+              </h3>
+              <button
+                onClick={closeAddSubOperationModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <IoClose className="text-2xl" />
+              </button>
+            </div>
+            <div className="p-4">
+              <AddSubOperation
+                style_id={state}
+                workstation_id={selectedWorkstation?.workstation_id}
+                onSuccess={() => {
+                  closeAddSubOperationModal();
+                  getWorkstations();
+                }}
+                onCancel={closeAddSubOperationModal}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+            Workstation Details
+          </h1>
+          <p className="mt-2 text-gray-600">
+            Viewing workstation information for layout #{state}
+          </p>
+        </div>
+
+        {Array.isArray(workstationList) && workstationList.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-8 text-center border border-gray-200">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-12 w-12 mx-auto text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <h3 className="mt-4 text-lg font-medium text-gray-900">
+              No Workstations Found
+            </h3>
+            <p className="mt-2 text-gray-500">
+              There are no workstations configured for this layout.
+            </p>
+            <button
+              onClick={getWorkstations}
+              className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            >
+              Refresh
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {Array.isArray(workstationList) &&
+              workstationList.map((workstation) => (
+                <div
+                  key={workstation.workstation_id}
+                  className="bg-white shadow overflow-hidden rounded-lg divide-y divide-gray-200"
+                >
+                  <div className="px-4 py-5 sm:px-6 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900">
+                        Workstation #{workstation.workstation_id}
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm text-gray-500">
+                          Created: {formatDate(workstation.createdAt)}
+                        </span>
+                        <button
+                          className="bg-green-300/40 p-1 text-green-700 rounded"
+                          onClick={() => openAddSubOperationModal(workstation)}
+                        >
+                          <BiPlus className="text-2xl hover:scale-150" />
+                        </button>
+                        <button
+                          className="bg-red-300/40 p-1 text-red-700 rounded"
+                          onClick={() =>
+                            handleWorkstationDelete(workstation.workstation_id)
+                          }
+                        >
+                          <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-4 py-5 sm:p-6">
+                    <h4 className="text-md font-medium text-gray-900 mb-3">
+                      Sub-Operations ({workstation.subOperations.length})
+                    </h4>
+
+                    {workstation.subOperations.length === 0 ? (
+                      <p className="text-gray-500 text-sm">
+                        No sub-operations assigned
+                      </p>
+                    ) : (
+                      <div className="overflow-hidden border border-gray-200 rounded-lg">
+                        <table className="min-w-full divide-y divide-gray-200 table-fixed">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th
+                                scope="col"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16"
+                              >
+                                ID
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64"
+                              >
+                                Operation Name
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24"
+                              >
+                                SMV
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40"
+                              >
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {workstation.subOperations.map((subOp) => (
+                              <tr key={subOp.sub_operation_id}>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 w-16">
+                                  {subOp.sub_operation_id}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium w-64 truncate">
+                                  {subOp.suboperatoin?.sub_operation_name ||
+                                    "N/A"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 w-24">
+                                  {subOp.suboperatoin?.smv || "0.00"}
+                                </td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 w-24">
+                                  <div className="space-x-2">
+                                    <button className="bg-green-300/40 p-1 text-green-700 rounded">
+                                      <BsArrowsMove className="text-lg hover:scale-125" />
+                                    </button>
+                                    <button className="bg-red-300/40 p-1 text-red-700 rounded">
+                                      <MdOutlineDeleteForever
+                                        onClick={() =>
+                                          handleDeleteSubOP(
+                                            subOp.sub_operation_id,
+                                            workstation.workstation_id
+                                          )
+                                        }
+                                        className="text-lg hover:scale-150"
+                                      />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ViewWorkstations;

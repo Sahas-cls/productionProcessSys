@@ -20,6 +20,9 @@ import ViewHelperOperation from "./pages/ViewHelperOperation";
 import EditMainOperation from "./components/admin/EditMainOperation";
 import EditSubOperationPage from "./pages/admin/EditSubOperationPage";
 import AddLayoutPage from "./pages/AddLayoutPage";
+import ViewLayoutPage from "./pages/ViewLayoutPage";
+import ViewWorkstationPage from "./pages/ViewWorkstationPage";
+import EditWorkstation from "./components/EditWorkstation";
 // import StylePage from "./pages/StylePage";
 // import ViewMachine from "./pages/ViewMachine";
 
@@ -66,6 +69,18 @@ const App = () => (
 
         {/* to create new layout */}
         <Route path="/layout/create-new-layout" element={<AddLayoutPage />} />
+
+        {/* to display all views  */}
+        <Route path="/layout/list-view" element={<ViewLayoutPage />} />
+
+        {/* to dispaly workstations according to layout */}
+        <Route
+          path="/workstation/list-view"
+          element={<ViewWorkstationPage />}
+        />
+
+        {/* to edit workstation */}
+        <Route path="/workstation/edit" element={<EditWorkstation />} />
       </Routes>
     </BrowserRouter>
   </UserProvider>

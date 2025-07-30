@@ -27,6 +27,7 @@ const AddLineLayout = () => {
         workstation_id: yup.string().required("Workstation ID required"),
         operations: yup.array().of(
           yup.object().shape({
+            workstation_no: yup.string().required("Workstation No required"),
             sub_operation_id: yup
               .string()
               .required("Sub Operation ID required"),
@@ -299,7 +300,10 @@ const AddLineLayout = () => {
               initialValues={{
                 workstations: workstationData.map((ws) => ({
                   ...ws,
-                  workstation_no: "", // Add workstation_no to each workstation
+                  operations: ws.operations.map(op => ({
+                    ...op,
+                    workstation_no: op.workstation_no || ""
+                  }))
                 })),
               }}
               validationSchema={operationSchema}
@@ -417,7 +421,7 @@ const AddLineLayout = () => {
                                       {workstation.operations.length === 0 ? (
                                         <tr>
                                           <td
-                                            colSpan={5}
+                                            colSpan={6}
                                             className="text-center py-4"
                                           >
                                             No operations added yet
@@ -429,7 +433,7 @@ const AddLineLayout = () => {
                                             <tr key={opIndex}>
                                               <td className="border px-2 py-1">
                                                 <Field
-                                                  name={`workstations.${wsIndex}.workstation_no`} // Note the changed path
+                                                  name={`workstations.${wsIndex}.operations.${opIndex}.workstation_no`}
                                                   className={`border px-2 py-1 w-full ${
                                                     editingWorkstation ===
                                                     workstation.workstation_id
@@ -442,7 +446,7 @@ const AddLineLayout = () => {
                                                   }
                                                 />
                                                 <ErrorMessage
-                                                  name={`workstations.${wsIndex}.workstation_no`}
+                                                  name={`workstations.${wsIndex}.operations.${opIndex}.workstation_no`}
                                                   component="div"
                                                   className="text-red-600 text-sm"
                                                 />
@@ -599,13 +603,14 @@ const AddLineLayout = () => {
                                       )}
                                       <tr>
                                         <td
-                                          colSpan={5}
+                                          colSpan={6}
                                           className="text-center py-2"
                                         >
                                           <button
                                             type="button"
                                             onClick={() =>
                                               pushOp({
+                                                workstation_no: "",
                                                 sub_operation_id: "",
                                                 operation_no: "",
                                                 operation_name: "",
@@ -634,7 +639,7 @@ const AddLineLayout = () => {
                     )}
                   </FieldArray>
 
-                  {/* <div className="mt-8 flex justify-center">
+                  <div className="mt-8 flex justify-center">
                     <button
                       type="submit"
                       disabled={isSubmitting}
@@ -642,7 +647,7 @@ const AddLineLayout = () => {
                     >
                       {isSubmitting ? "Saving..." : "Save All Operations"}
                     </button>
-                  </div> */}
+                  </div>
                 </Form>
               )}
             </Formik>
