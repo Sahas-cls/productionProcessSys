@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { IoSearchSharp, IoCloudUploadOutline } from "react-icons/io5";
+import { IoSearchSharp, IoCloudUploadOutline, IoClose } from "react-icons/io5";
 import { MdModeEditOutline, MdDeleteForever } from "react-icons/md";
 import useFactories from "../../hooks/useFactories";
 import useCustomer from "../../hooks/useCustomer";
@@ -106,8 +106,14 @@ const AddStyle = () => {
       styleNo: style.style_no,
       styleName: style.style_name,
       styleDescription: style.style_description || "",
+      poNumber: style.po_number || "",
     });
     setCurrentCustomer(style.customer_id);
+
+    // If editing, set the existing images as previews
+    if (style.images && style.images.length > 0) {
+      setPreviews(style.images.map((img) => `${apiUrl}/${img.image_path}`));
+    }
   };
 
   // Handle style deletion
@@ -140,6 +146,27 @@ const AddStyle = () => {
     } catch (err) {
       console.error("Error deleting style:", err);
       alert("Failed to delete style");
+    }
+  };
+
+  // Handle removing an image
+  const handleRemoveImage = (index) => {
+    const newFiles = [...files];
+    const newPreviews = [...previews];
+
+    // Remove the file if it exists in the files array
+    if (index < newFiles.length) {
+      newFiles.splice(index, 1);
+      setFiles(newFiles);
+    }
+
+    // Remove the preview
+    newPreviews.splice(index, 1);
+    setPreviews(newPreviews);
+
+    // Revoke the object URL if it's a newly uploaded file
+    if (previews[index].startsWith("blob:")) {
+      URL.revokeObjectURL(previews[index]);
     }
   };
 
@@ -247,50 +274,109 @@ const AddStyle = () => {
       styleCustomer: "",
       styleSeason: "",
       styleNo: "",
+      poNumber: "",
       styleName: "",
       styleDescription: "",
       userId: localStorage.getItem("userId"),
     },
     validationSchema: validationSchema,
     onSubmit: async (values) => {
-      console.log(values);
-      console.log("values ", values);
       setIsSubmitting(true);
       try {
         const formData = new FormData();
-        Object.entries(values).forEach(([key, val]) =>
-          formData.append(key, val)
-        );
-        files.forEach((file) => formData.append("images", file));
+
+        // Append all form values with correct field names
+        formData.append("styleFactory", values.styleFactory);
+        formData.append("styleCustomer", values.styleCustomer);
+        formData.append("styleSeason", values.styleSeason);
+        formData.append("styleNo", values.styleNo);
+        formData.append("poNumber", values.poNumber);
+        formData.append("styleName", values.styleName);
+        formData.append("styleDescription", values.styleDescription);
+        formData.append("userId", values.userId);
+
+        // Append all files to formData
+        files.forEach((file) => {
+          formData.append("images", file);
+        });
+
+        // Debug: Log FormData contents
+        console.log("FormData contents:");
+        for (const [key, value] of formData.entries()) {
+          console.log(key, value);
+        }
 
         let response;
         if (editingStyle) {
+          // For editing, include existing images
+          formData.append(
+            "existingImages",
+            JSON.stringify(
+              previews
+                .filter((preview) => !preview.startsWith("blob:"))
+                .map((preview) => preview.replace(`${apiUrl}/`, ""))
+            )
+          );
+
           response = await axios.put(
             `${apiUrl}/api/styles/editStyle/${editingStyle.style_id}`,
-            values
+            formData,
+            {
+              headers: {
+                "Content-Type": "multipart/form-data",
+              },
+              withCredentials: true,
+            }
           );
         } else {
-          console.log("form data, ", formData);
-          response = await axios.post(`${apiUrl}/api/styles/addStyle`, values, {
-            withCredentials: true,
-          });
+          console.log("values: ", formData);
+          response = await axios.post(
+            `${apiUrl}/api/styles/addStyle`,
+            formData,
+            {
+              withCredentials: true,
+            }
+          );
         }
+
+        const handleExcelDownload = async () => {
+          // clg
+          try {
+            const response = await axios.get(`${apiUrl}/api/styles/getExcel`, {
+              withCredentials: true,
+            });
+          } catch (error) {
+            console.error(error);
+          }
+        };
 
         formik.resetForm();
         setFiles([]);
         setPreviews([]);
-        alert(`Style ${editingStyle ? "updated" : "created"} successfully!`);
+        setCurrentCustomer(null);
+
+        swal.fire({
+          icon: "success",
+          title: "Success",
+          text: `Style ${editingStyle ? "updated" : "created"} successfully!`,
+          confirmButtonText: "Ok",
+        });
+
         setIsAddStyle(false);
-        setIsSubmitting(false);
         setEditingStyle(null);
         refresh();
       } catch (err) {
         console.error("Error:", err);
-        alert(`Failed to ${editingStyle ? "update" : "create"} style!`);
-        refresh();
+        swal.fire({
+          icon: "error",
+          title: "Error",
+          text: `Failed to ${editingStyle ? "update" : "create"} style! ${
+            err.response?.data?.message || err.message
+          }`,
+          confirmButtonText: "Ok",
+        });
       } finally {
         setIsSubmitting(false);
-        refresh();
       }
     },
     validateOnBlur: true,
@@ -312,15 +398,24 @@ const AddStyle = () => {
   // Handle file upload
   const handleFileChange = (e) => {
     const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
-    const previewUrls = selectedFiles.map((file) => URL.createObjectURL(file));
-    setPreviews(previewUrls);
+    const newFiles = [...files, ...selectedFiles];
+    setFiles(newFiles);
+
+    const newPreviews = [...previews];
+    selectedFiles.forEach((file) => {
+      newPreviews.push(URL.createObjectURL(file));
+    });
+    setPreviews(newPreviews);
   };
 
   // Clean up object URLs
   useEffect(() => {
     return () => {
-      previews.forEach((url) => URL.revokeObjectURL(url));
+      previews.forEach((url) => {
+        if (url.startsWith("blob:")) {
+          URL.revokeObjectURL(url);
+        }
+      });
     };
   }, [previews]);
 
@@ -356,6 +451,7 @@ const AddStyle = () => {
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
+            onClick={() => handleExcelDownload()}
           >
             Download
           </motion.button>
@@ -544,6 +640,32 @@ const AddStyle = () => {
               )}
             </motion.div>
 
+            {/* po number */}
+            <motion.div variants={itemVariants} className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                PO Number
+              </label>
+              <input
+                type="text"
+                name="poNumber"
+                value={formik.values.poNumber}
+                onChange={formik.handleChange}
+                onBlur={formik.handleBlur}
+                className="form-input-base w-full"
+                placeholder="PO No"
+              />
+              {formik.touched.poNumber && formik.errors.poNumber && (
+                <motion.div
+                  className="text-red-500 text-xs mt-1"
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  {formik.errors.poNumber}
+                </motion.div>
+              )}
+            </motion.div>
+
             {/* Description */}
             <motion.div variants={itemVariants} className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -612,6 +734,18 @@ const AddStyle = () => {
                           alt={`preview-${idx}`}
                           className="w-full h-32 object-cover rounded-md shadow"
                         />
+                        <motion.button
+                          type="button"
+                          className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleRemoveImage(idx);
+                          }}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                        >
+                          <IoClose className="w-4 h-4" />
+                        </motion.button>
                       </motion.div>
                     ))}
                   </motion.div>

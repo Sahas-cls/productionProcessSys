@@ -35,7 +35,8 @@ exports.getStyles = async (req, res, next) => {
 
 // for add new style
 exports.addStyle = async (req, res, next) => {
-  console.log(req.body);
+  // console.log("request body: ", req.body);
+  // return;
   const {
     styleFactory,
     styleCustomer,
@@ -44,6 +45,7 @@ exports.addStyle = async (req, res, next) => {
     styleName,
     styleDescription,
     userId,
+    poNumber,
   } = req.body;
 
   try {
@@ -52,6 +54,7 @@ exports.addStyle = async (req, res, next) => {
       customer_id: styleCustomer,
       season_id: styleSeason,
       style_no: styleNo,
+      po_number: poNumber,
       style_name: styleName,
       style_description: styleDescription,
       created_by: userId,
@@ -71,8 +74,9 @@ exports.addStyle = async (req, res, next) => {
 exports.editStyle = async (req, res, next) => {
   console.log("edit route called");
   console.log(req.body);
+  console.log("req.params ", req.params);
+  const styleId = req.params.id;
   const {
-    styleId,
     styleFactory,
     styleCustomer,
     styleSeason,
@@ -113,8 +117,8 @@ exports.editStyle = async (req, res, next) => {
 
 // for delete existing style
 exports.deleteStyle = async (req, res, next) => {
-  console.log(req.body);
-  console.log(req.params.id);
+  // console.log(req.body);
+  // console.log(req.params.id);
   const styleId = req.params.id;
   try {
     const style = await Style.findByPk(styleId);
@@ -132,4 +136,10 @@ exports.deleteStyle = async (req, res, next) => {
   } catch (error) {
     return next(error);
   }
+};
+
+// to generate excel file using style details
+exports.generateExcel = async (req, res, next) => {
+  // ------------------
+  console.log("generating excel file");
 };

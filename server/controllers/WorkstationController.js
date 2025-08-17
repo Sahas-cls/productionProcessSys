@@ -8,6 +8,26 @@ const {
   MainOperation,
 } = require("../models");
 
+// to create a empty workstation
+exports.createEmptyWS = async (req, res, next) => {
+  //
+  const { layoutId } = req.params;
+  const { workstation_no } = req.body;
+  console.log(req.body);
+  try {
+    const createWs = await Workstation.create({
+      workstation_no,
+      layout_id: layoutId,
+    });
+
+    res
+      .status(200)
+      .json({ status: "success", message: "Workstation create success" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 // get specific workstation details with it's sub operations
 exports.getWorkstation = async (req, res, next) => {
   const { id } = req.params;
@@ -57,6 +77,7 @@ exports.getWorkstations = async (req, res, next) => {
           ],
         },
       ],
+      order: [["workstation_no", "ASC"]],
     });
 
     res.status(200).json({

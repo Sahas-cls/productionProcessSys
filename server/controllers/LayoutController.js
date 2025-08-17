@@ -10,7 +10,21 @@ const {
 // to retrive data from layout tbl
 exports.getLayouts = async (req, res, next) => {
   try {
-    const layoutList = await Layout.findAll();
+    const layoutList = await Layout.findAll({
+      include: [
+        {
+          model: Style,
+          as: "style",
+          include: [
+            {
+              model: MainOperation,
+              as: "operations",
+              include: [{ model: SubOperation, as: "subOperations" }],
+            },
+          ],
+        },
+      ],
+    });
     res.status(200).json({ status: "Success", data: layoutList });
   } catch (error) {
     return next(error);
@@ -44,8 +58,6 @@ exports.getSubOperations = async (req, res, next) => {
     const allSubOperations = subOps.style.operations.flatMap(
       (op) => op.subOperations
     );
-
-
 
     res.status(200).json({ status: "success", data: allSubOperations });
   } catch (error) {

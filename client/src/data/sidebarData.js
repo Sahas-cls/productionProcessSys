@@ -76,6 +76,7 @@ import { PiListBulletsFill } from "react-icons/pi";
 import { IoAddCircleSharp } from "react-icons/io5";
 import { FaRegEye } from "react-icons/fa";
 import { RiLayoutMasonryFill } from "react-icons/ri";
+import { TbReport } from "react-icons/tb";
 
 export const adminSidebarData = [
   {
@@ -142,9 +143,15 @@ export const adminSidebarData = [
         id: 72,
         title: "View Layout",
         icon: FaRegEye,
-        navigateTo: "/layout/list-view"
+        navigateTo: "/layout/list-view",
       },
     ],
+  },
+  {
+    id: 8,
+    title: "Report",
+    icon: TbReport,
+    navigateTo: "/report",
   },
 ];
 

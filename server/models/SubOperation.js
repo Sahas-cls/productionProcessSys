@@ -25,6 +25,9 @@ module.exports = (sequelize, DataTypes) => {
       remark: {
         type: DataTypes.TEXT,
       },
+      needle_count: {
+        type: DataTypes.INTEGER,
+      },
     },
     {
       tableName: "sub_operation",

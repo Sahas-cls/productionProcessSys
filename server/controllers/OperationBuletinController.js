@@ -10,54 +10,108 @@ const {
   NeedleTread,
   NeedleLooper,
   Helper,
+  SubOperationMachine,
 } = require("../models");
 
 exports.getBOList = async (req, res, next) => {
   try {
     console.log(req.body);
 
-    const operations = await MainOperation.findAll({
+    const operations = await Style.findAll({
       include: [
         {
-          model: SubOperation,
-          as: "subOperations",
+          model: MainOperation,
+          as: "operations",
+          required: true, // <-- only include styles that have main operations
           include: [
             {
-              model: Machine,
-              as: "machines",
-              through: { attributes: [] },
-            },
-            {
-              model: NeedleType,
-              as: "needle_types",
-            },
-            {
-              model: NeedleTread,
-              as: "needle_treads",
-            },
-            {
-              model: NeedleLooper,
-              as: "needle_loopers",
+              model: SubOperation,
+              as: "subOperations",
+              include: [
+                {
+                  model: Machine,
+                  as: "machines",
+                  through: { attributes: [] },
+                },
+                {
+                  model: NeedleType,
+                  as: "needle_types",
+                },
+                {
+                  model: NeedleTread,
+                  as: "needle_treads",
+                },
+                {
+                  model: NeedleLooper,
+                  as: "needle_loopers",
+                },
+              ],
             },
           ],
         },
-        {
-          model: Style,
-          as: "style",
-        },
       ],
-      order: [["createdAt", "DESC"]],
-    });
-
-    const helperOperations = await Helper.findAll({
-      include: [{ model: Style, as: "style" }],
     });
 
     console.log("data selected success........!");
-    res.status(200).json({ data: [...operations, ...helperOperations] });
+    // res.status(200).json({ data: [...operations, ...helperOperations] });
+    res.status(200).json({ data: operations });
   } catch (error) {
     console.error("Error fetching operation list:", error);
     res.status(500).json({ error: "Something went wrong" });
+  }
+};
+
+// to get operations and suboperations for specific style
+exports.getSBO = async (req, res, next) => {
+  const { styleId } = req.params;
+  console.log("get sbo called =========================================== ");
+  console.log(req.params);
+  try {
+    console.log(req.body);
+
+    const operations = await Style.findOne({
+      include: [
+        {
+          model: MainOperation,
+          as: "operations",
+          include: [
+            {
+              model: SubOperation,
+              as: "subOperations",
+              include: [
+                {
+                  model: Machine,
+                  as: "machines",
+                  through: { attributes: [] },
+                },
+                {
+                  model: NeedleType,
+                  as: "needle_types",
+                },
+                {
+                  model: NeedleTread,
+                  as: "needle_treads",
+                },
+                {
+                  model: NeedleLooper,
+                  as: "needle_loopers",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      where: {
+        style_id: styleId,
+      },
+    });
+    console.log("data selected success one ........!");
+    // res.status(200).json({ data: [...operations, ...helperOperations] });
+    res.status(200).json({ data: operations });
+  } catch (error) {
+    console.error("Error fetching operation list:", error);
+    // res.status(500).json({ error: "Something went wrong" });
+    return next(error);
   }
 };
 
@@ -200,6 +254,139 @@ exports.createOperation = async (req, res, next) => {
   }
 };
 
+// to create one main operation based on style
+exports.createMainOperation = async (req, res, next) => {
+  //
+  console.log("request body", req.body);
+  const { style_no, operation_type, operation_name } = req.body;
+
+  try {
+    const createOPeration = await MainOperation.create({
+      style_no,
+      operation_type_id: operation_type,
+      operation_name: operation_name,
+    });
+
+    res
+      .status(200)
+      .json({ status: "success", message: "Operation create success" });
+  } catch (error) {
+    console.error("Error while creating main operation: ", error);
+    return next(error);
+  }
+};
+
+// to create sub operation based on main opeartion
+exports.createSubOp = async (req, res, next) => {
+  console.log("creating sub operation", req.body);
+
+  const {
+    subOperationNo,
+    smv,
+    subOperationName,
+    machineNo,
+    needleCount,
+    needles,
+    needleTypes: needleTypesInput = [], // Default to empty array if undefined
+    needleTreads: needleTreadsInput = [], // Default to empty array if undefined
+    needleLoopers: needleLoopersInput = [], // Default to empty array if undefined
+    remark,
+    mainOperation_id, // holds the main operation id
+  } = req.body;
+
+  try {
+    await sequelize.transaction(async (t) => {
+      // 1. Check main operation exists
+      const mainOp = await MainOperation.findByPk(mainOperation_id, {
+        transaction: t,
+        lock: t.LOCK.UPDATE, // Add locking for concurrent operations
+      });
+
+      if (!mainOp) {
+        const error = new Error("Main operation not found");
+        error.status = 404; // 404 is more appropriate for "not found"
+        throw error; // Use throw instead of return next() in transaction
+      }
+
+      // 2. Validate machine exists first before creating sub-operation
+      const machine = await Machine.findOne({
+        where: { machine_no: machineNo },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      if (!machine) {
+        const error = new Error("Machine not found");
+        error.status = 404;
+        throw error;
+      }
+
+      // 3. Create sub-operation
+      const subOperation = await SubOperation.create(
+        {
+          main_operation_id: mainOperation_id,
+          sub_operation_number: subOperationNo,
+          sub_operation_name: subOperationName,
+          smv,
+          remark,
+          needle_count: needleCount,
+        },
+        { transaction: t }
+      );
+
+      // 4. Link machine to sub-operation
+      await SubOperationMachine.create(
+        {
+          sub_operation_id: subOperation.sub_operation_id,
+          machine_id: machine.machine_id,
+        },
+        { transaction: t }
+      );
+
+      // 5. Process all needle-related data in parallel for better performance
+      await Promise.all([
+        // Needle types
+        NeedleType.bulkCreate(
+          needleTypesInput.map((nt) => ({
+            sub_operation_id: subOperation.sub_operation_id,
+            type: nt,
+            machine_id: machine.machine_id,
+          })),
+          { transaction: t }
+        ),
+
+        // Needle threads
+        NeedleTread.bulkCreate(
+          needleTreadsInput.map((nt) => ({
+            sub_operation_id: subOperation.sub_operation_id,
+            tread: nt,
+            machine_id: machine.machine_id,
+          })),
+          { transaction: t }
+        ),
+
+        // Needle loopers
+        NeedleLooper.bulkCreate(
+          needleLoopersInput.map((nt) => ({
+            sub_operation_id: subOperation.sub_operation_id,
+            looper: nt,
+            machine_id: machine.machine_id,
+          })),
+          { transaction: t }
+        ),
+      ]);
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Sub-operation created successfully",
+    });
+  } catch (error) {
+    console.error("Error creating sub-operation:", error);
+    next(error); // Make sure to pass the error to the error handler
+  }
+};
+
 // edit main operation data
 exports.editMainOperation = async (req, res, next) => {
   console.log(req.body);
@@ -247,9 +434,15 @@ exports.editMainOperation = async (req, res, next) => {
 exports.createBulkOperations = async (req, res, next) => {
   // console.log(req.body);
   // return;
+  // console.log("request body: ", req.body);
   try {
-    const { styleNumber, mainOperation, operations, mainOperationName } =
-      req.body;
+    const {
+      styleNumber,
+      mainOperation,
+      operations,
+      mainOperationName,
+      needleCount,
+    } = req.body;
 
     // Validate required fields
     if (
@@ -321,6 +514,7 @@ exports.createBulkOperations = async (req, res, next) => {
             operation_number: op.operationNumber,
             smv: parseFloat(op.smv),
             remark: op.remarks,
+            needle_count: op.needleCount,
           },
           { transaction: t }
         );

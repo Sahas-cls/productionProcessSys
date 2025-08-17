@@ -2,6 +2,9 @@ const express = require("express");
 const router = express.Router();
 const controllers = require("../controllers/WorkstationController");
 
+// to create empty workstation
+router.post("/addEmptyWorkstation/:layoutId", controllers.createEmptyWS);
+
 // to get workstation based on the provided workstation id
 router.get("/getWorkstation/:id", controllers.getWorkstation);
 
@@ -18,6 +21,9 @@ router.delete("/deleteWS/:id", controllers.deleteWorkstation);
 router.post("/addSubOperationToWorkstation/:wsId", controllers.addSubOperation);
 
 // to delete sub operation from workstation
-router.delete("/deleteSubOperation/:subOpId/:wsId", controllers.deleteSubOperation);
+router.delete(
+  "/deleteSubOperation/:subOpId/:wsId",
+  controllers.deleteSubOperation
+);
 
 module.exports = router;

@@ -23,6 +23,8 @@ import AddLayoutPage from "./pages/AddLayoutPage";
 import ViewLayoutPage from "./pages/ViewLayoutPage";
 import ViewWorkstationPage from "./pages/ViewWorkstationPage";
 import EditWorkstation from "./components/EditWorkstation";
+import AddMediaPage from "./pages/AddMediaPage";
+import CameraOrBrowse from "./components/CameraOrBrowse";
 // import StylePage from "./pages/StylePage";
 // import ViewMachine from "./pages/ViewMachine";
 
@@ -38,6 +40,7 @@ const App = () => (
         <Route path="/season" element={<SeasonPage />} />
         <Route path="/style" element={<StylePage />} />
         <Route path="/machine" element={<MachinePage />} />
+        <Route path="/open-camera" element={<CameraOrBrowse />} />
         <Route
           path="/operation-bulletin/add"
           element={<AddOperationBulletingPage />}
@@ -78,9 +81,10 @@ const App = () => (
           path="/workstation/list-view"
           element={<ViewWorkstationPage />}
         />
-
         {/* to edit workstation */}
         <Route path="/workstation/edit" element={<EditWorkstation />} />
+        {/* to upload medias */}
+        <Route path="/sub-Operation/add-media" element={<AddMediaPage />} />
       </Routes>
     </BrowserRouter>
   </UserProvider>

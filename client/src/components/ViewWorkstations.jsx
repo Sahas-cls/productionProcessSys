@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import { ClipLoader } from "react-spinners";
@@ -9,18 +9,70 @@ import { BiPlus } from "react-icons/bi";
 import { IoClose } from "react-icons/io5";
 import Swal from "sweetalert2";
 import AddSubOperation from "./AddSubOperation";
-
+import { motion, AnimatePresence } from "framer-motion";
+import { LuConstruction } from "react-icons/lu"; //workstation icon
+import { ArrowLeftIcon, CameraIcon } from "@heroicons/react/24/outline";
+import { FaArrowLeft } from "react-icons/fa6";
+import { BsFillCloudUploadFill } from "react-icons/bs"; //upload icon
+import CameraOrBrowse from "./CameraOrBrowse";
 
 const ViewWorkstations = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
   const location = useLocation();
   const navigate = useNavigate();
-  const { state } = location;
+  const { state } = location; //layout id
+  // alert(state);
   const [workstationList, setWorkstationList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddingSubM, setIsAddingSubM] = useState(false);
   const [selectedWorkstation, setSelectedWorkstation] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const isUploadRef = useRef(null);
+
+  useEffect(() => {
+    // alert("is uploading ", isUploading);
+    function handleClickOutside(event) {
+      if (isUploadRef.current && !isUploadRef.current.contains(event.target)) {
+        // call close function
+        setIsUploading(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isUploading]);
+
+  console.log("ws list: ", workstationList);
+
+  const workstatoinVarient = {
+    hidden: {
+      opacity: 0,
+    },
+    visible: {
+      opacity: 1,
+      transition: {
+        duration: 0.5,
+        staggerChildren: 0.2,
+      },
+    },
+    exit: {
+      opacity: 0,
+      x: 5,
+    },
+  };
+
+  const workstationCardVariant = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.3 },
+    },
+  };
 
   const getWorkstations = async () => {
     try {
@@ -34,6 +86,39 @@ const ViewWorkstations = () => {
       setError("Failed to load workstation data");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGoBack = () => {
+    navigate(-1);
+  };
+
+  const handleAddNewWorkstation = async () => {
+    const { value: workstationNo } = await Swal.fire({
+      title: "Enter number of your workstation",
+      input: "text",
+      inputLabel: "Workstation Number",
+      inputPlaceholder: "e.g., WS-01",
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) {
+          return "You must enter a workstation number!";
+        }
+        return null;
+      },
+    });
+
+    try {
+      const response = await axios.post(
+        `${apiUrl}/api/workstations/addEmptyWorkstation/${state}`,
+        { workstation_no: workstationNo },
+        { withCredentials: true }
+      );
+      if (response.status === 200) {
+        getWorkstations();
+      }
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -53,10 +138,10 @@ const ViewWorkstations = () => {
         `${apiUrl}/api/workstations/deleteWS/${workstation_id}`
       );
       if (response.status === 200) {
-        await Swal.fire({
-          title: "Workstation delete success",
-          icon: "success",
-        });
+        // await Swal.fire({
+        //   title: "Workstation delete success",
+        //   icon: "success",
+        // });
         getWorkstations();
       }
     } catch (error) {
@@ -162,8 +247,35 @@ const ViewWorkstations = () => {
     );
   }
 
+  const handleNavigatetoMedia = (sub_operation_id) => {
+    alert(sub_operation_id);
+    navigate("/sub-Operation/add-media", { state: sub_operation_id });
+    // console.log("selected sub op ===== ", sub_operation);
+  };
+
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 relative">
+      {/* take image or upload video */}
+      <AnimatePresence>
+        {!isAddingSubM && isUploading && (
+          <motion.div
+            ref={isUploadRef}
+            initial={{ y: "100%", opacity: 0 }} // Start fully off-screen (bottom)
+            animate={{ y: 0, opacity: 1 }} // Slide up into place
+            exit={{ y: "100%", opacity: 0 }} // Slide back down when exiting
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 30,
+            }}
+            className="fixed left-0 backdrop-brightness-50 right-0 bottom-0 w-full z-50 lg:w-full lg:h-screen lg:flex lg:justify-center lg:items-center"
+          >
+            <div className="lg:w-[40%]">
+              <CameraOrBrowse setIsUploading={setIsUploading} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Modal Overlay */}
       {isAddingSubM && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -194,15 +306,40 @@ const ViewWorkstations = () => {
           </div>
         </div>
       )}
-
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-            Workstation Details
-          </h1>
-          <p className="mt-2 text-gray-600">
-            Viewing workstation information for layout #{state}
-          </p>
+        <div className="flex items-center justify-between">
+          <div className="mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+              Workstation Details
+            </h1>
+            <p className="mt-2 text-gray-600">
+              <span className="hidden md:inline">Viewing workstation</span>{" "}
+              information for layout #{state}
+            </p>
+          </div>
+
+          <div className="">
+            <button
+              type="button"
+              className="bg-blue-500 text-white px-2 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150"
+              onClick={() => handleAddNewWorkstation()}
+            >
+              <div className="flex items-center font-semibold gap-x-2">
+                <span className="hidden md:inline">Add workstation</span>
+                <LuConstruction className="text-3xl text-yellow-300" />
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div className="text-blue-600 hover:underline duration-150">
+          <button
+            type="button"
+            className="flex items-center gap-2"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft /> Go back
+          </button>
         </div>
 
         {Array.isArray(workstationList) && workstationList.length === 0 ? (
@@ -235,121 +372,135 @@ const ViewWorkstations = () => {
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
-            {Array.isArray(workstationList) &&
-              workstationList.map((workstation) => (
-                <div
-                  key={workstation.workstation_id}
-                  className="bg-white shadow overflow-hidden rounded-lg divide-y divide-gray-200"
-                >
-                  <div className="px-4 py-5 sm:px-6 bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-lg leading-6 font-medium text-gray-900">
-                        Workstation #{workstation.workstation_id}
-                      </h3>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm text-gray-500">
-                          Created: {formatDate(workstation.createdAt)}
-                        </span>
-                        <button
-                          className="bg-green-300/40 p-1 text-green-700 rounded"
-                          onClick={() => openAddSubOperationModal(workstation)}
-                        >
-                          <BiPlus className="text-2xl hover:scale-150" />
-                        </button>
-                        <button
-                          className="bg-red-300/40 p-1 text-red-700 rounded"
-                          onClick={() =>
-                            handleWorkstationDelete(workstation.workstation_id)
-                          }
-                        >
-                          <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
-                        </button>
+          <AnimatePresence>
+            <motion.div
+              variants={workstatoinVarient}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="space-y-6"
+            >
+              {Array.isArray(workstationList) &&
+                workstationList.map((workstation) => (
+                  <motion.div
+                    key={workstation.workstation_id}
+                    variants={workstationCardVariant} // ✅ this enables staggering
+                    className="bg-white shadow overflow-hidden rounded-lg divide-y divide-gray-200"
+                  >
+                    <div className="px-4 py-5 sm:px-6 bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">
+                          {/* Workstation #{workstation.workstation_id} */}
+                          <h5 className="mt-4 text-xs text-gray-400">
+                            Workstation No #
+                            {workstation.workstation_no
+                              ? workstation.workstation_no
+                              : "Not assigned yet"}
+                          </h5>
+                        </h3>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm text-gray-500">
+                            Created: {formatDate(workstation.createdAt)}
+                          </span>
+                          <button
+                            className="bg-green-300/40 p-1 text-green-700 rounded"
+                            onClick={() =>
+                              openAddSubOperationModal(workstation)
+                            }
+                          >
+                            <BiPlus className="text-2xl hover:scale-150" />
+                          </button>
+                          <button
+                            className="bg-red-300/40 p-1 text-red-700 rounded"
+                            onClick={() =>
+                              handleWorkstationDelete(
+                                workstation.workstation_id
+                              )
+                            }
+                          >
+                            <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="px-4 py-5 sm:p-6">
-                    <h4 className="text-md font-medium text-gray-900 mb-3">
-                      Sub-Operations ({workstation.subOperations.length})
-                    </h4>
+                    <div className="px-4 py-5 sm:p-6">
+                      <h4 className="text-md font-medium text-gray-900 mb-3">
+                        Sub-op Count - {workstation.subOperations.length}
+                      </h4>
 
-                    {workstation.subOperations.length === 0 ? (
-                      <p className="text-gray-500 text-sm">
-                        No sub-operations assigned
-                      </p>
-                    ) : (
-                      <div className="overflow-hidden border border-gray-200 rounded-lg">
-                        <table className="min-w-full divide-y divide-gray-200 table-fixed">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16"
-                              >
-                                ID
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64"
-                              >
-                                Operation Name
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24"
-                              >
-                                SMV
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40"
-                              >
-                                Actions
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {workstation.subOperations.map((subOp) => (
-                              <tr key={subOp.sub_operation_id}>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 w-16">
-                                  {subOp.sub_operation_id}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-medium w-64 truncate">
-                                  {subOp.suboperatoin?.sub_operation_name ||
-                                    "N/A"}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 w-24">
-                                  {subOp.suboperatoin?.smv || "0.00"}
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500 w-24">
-                                  <div className="space-x-2">
-                                    <button className="bg-green-300/40 p-1 text-green-700 rounded">
-                                      <BsArrowsMove className="text-lg hover:scale-125" />
-                                    </button>
-                                    <button className="bg-red-300/40 p-1 text-red-700 rounded">
-                                      <MdOutlineDeleteForever
-                                        onClick={() =>
-                                          handleDeleteSubOP(
-                                            subOp.sub_operation_id,
-                                            workstation.workstation_id
-                                          )
-                                        }
-                                        className="text-lg hover:scale-150"
-                                      />
-                                    </button>
-                                  </div>
-                                </td>
+                      {workstation.subOperations.length === 0 ? (
+                        <p className="text-gray-500 text-sm">
+                          No sub-operations assigned
+                        </p>
+                      ) : (
+                        <div className="overflow-y-hidden overflow-x-auto md:overflow-x-hidden border border-gray-200 rounded-lg">
+                          <table className="min-w-full divide-y divide-gray-200 table-fixed">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                                  ID
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">
+                                  Operation Name
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                                  SMV
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                  Actions
+                                </th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-          </div>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {workstation.subOperations.map((subOp) => (
+                                <tr key={subOp.sub_operation_id}>
+                                  <td className="px-4 py-3 text-sm font-medium text-gray-900 w-16">
+                                    {subOp.sub_operation_id}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-900 font-medium w-64 truncate">
+                                    {subOp.suboperatoin?.sub_operation_name ||
+                                      "N/A"}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-500 w-24">
+                                    {subOp.suboperatoin?.smv || "0.00"}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-gray-500 w-24">
+                                    <div className="space-x-2 flex">
+                                      <button className="bg-green-300/40 p-1 text-green-700 rounded">
+                                        <BsArrowsMove className="text-xl hover:scale-125" />
+                                      </button>
+                                      <button className="bg-red-300/40 p-1 text-red-700 rounded">
+                                        <MdOutlineDeleteForever
+                                          onClick={() =>
+                                            handleDeleteSubOP(
+                                              subOp.sub_operation_id,
+                                              workstation.workstation_id
+                                            )
+                                          }
+                                          className="text-xl hover:scale-150"
+                                        />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="bg-blue-300/40 p-1 text-blue-700 rounded"
+                                        onClick={() => setIsUploading(true)}
+                                      >
+                                        <BsFillCloudUploadFill className="text-xl hover:scale-125" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+            </motion.div>
+          </AnimatePresence>
         )}
       </div>
     </div>

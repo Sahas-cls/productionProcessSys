@@ -4,12 +4,14 @@ const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const dotenv = require("dotenv");
 const db = require("./models");
+const multer = require("multer");
 // const routes = require("./routes/index");
 
 dotenv.config();
 
 const app = express();
 
+const upload = multer();
 // Middlewares
 app.use(
   cors({
@@ -69,6 +71,10 @@ app.use("/api/seasons/", seasonRoutes);
 const styleRoute = require("./Routes/StylesRoutes.js");
 app.use("/api/styles/", styleRoute);
 
+// machine route
+const machineRoute = require("./Routes/MachineRoutes.js");
+app.use("/api/machine/", machineRoute);
+
 // operation bulletin route
 const operationBulletinRoute = require("./Routes/OperationBulletinRoutes.js");
 app.use("/api/operationBulleting", operationBulletinRoute);
@@ -79,34 +85,60 @@ app.use("/api/layout", layoutRoutes);
 
 // workstation routes
 const workstationRoutes = require("./Routes/Workstation.js");
-app.use("/api/workstations", workstationRoutes)
+app.use("/api/workstations", workstationRoutes);
 
+// media routes
+const mediaRoutes = require("./Routes/HandleMediaRoute.js");
+app.use("/api/media", mediaRoutes);
+
+// error handler
 app.use((err, req, res, next) => {
   const statusCode = err.status || 500;
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  // Log full error in development
-  if (process.env.NODE_ENV === "development") {
-    console.error("Error:", {
-      message: err.message,
-      stack: err.stack,
-      errors: err.errors,
-    });
-  }
-
-  // Handle validation errors differently
-  if (statusCode === 422 && err.errors) {
-    return res.status(422).json({
-      success: false,
-      message: "Validation errors",
-      errors: err.errors,
-    });
-  }
-
-  // Handle general errors
-  return res.status(statusCode).json({
-    success: false,
-    message: err.message || "Internal server error",
+  // Log error details
+  console.error({
+    message: err.message,
+    statusCode,
+    stack: !isProduction ? err.stack : undefined,
+    errors: err.errors,
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString()
   });
+
+  // Response structure
+  const response = {
+    success: false,
+    message: err.message || 'Internal server error',
+    ...(!isProduction && { stack: err.stack }) // Only include stack in development
+  };
+
+  // Add validation errors if they exist
+  if (err.errors) {
+    response.errors = err.errors;
+    if (!err.message) {
+      response.message = 'Validation failed';
+    }
+  }
+
+  // Special handling for certain status codes
+  switch (statusCode) {
+    case 401:
+      response.message = response.message || 'Unauthorized';
+      break;
+    case 403:
+      response.message = response.message || 'Forbidden';
+      break;
+    case 404:
+      response.message = response.message || 'Not found';
+      break;
+    case 422:
+      response.message = response.message || 'Validation failed';
+      break;
+  }
+
+  return res.status(statusCode).json(response);
 });
 
 db.sequelize.sync().then(() => {

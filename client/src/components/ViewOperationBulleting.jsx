@@ -14,7 +14,6 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     operationBulletingList,
     setOperationBulletingList,
   } = useOperationBulletin();
-  const [isEditingMo, setisEditingMo] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
@@ -26,22 +25,17 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     const term = searchTerm.toLowerCase();
     if (!term) return operationBulletingList;
 
-    return operationBulletingList.filter((ob) => {
-      const matchesType1 =
-        ob.style?.style_no?.toLowerCase().includes(term) ||
-        ob.operation_id?.toString().includes(term) ||
-        ob.operation_name?.toLowerCase().includes(term) ||
-        ob.subOperations?.length?.toString().includes(term);
-
-      const matchesType2 =
-        ob.style?.style_no?.toLowerCase().includes(term) ||
-        ob.helper_id?.toString().includes(term) ||
-        ob.operation_name?.toLowerCase().includes(term) ||
-        ob.operation_code?.toLowerCase().includes(term) ||
-        ob.mc_smv?.toString().includes(term) ||
-        ob.comments?.toLowerCase().includes(term);
-
-      return ob.operation_type_id === 1 ? matchesType1 : matchesType2;
+    return operationBulletingList.filter((style) => {
+      return (
+        style.style_no?.toLowerCase().includes(term) ||
+        style.po_number?.toLowerCase().includes(term) ||
+        style.operations?.length?.toString().includes(term) ||
+        style.operations?.some(
+          (op) =>
+            op.subOperations?.length?.toString().includes(term) ||
+            op.operation_name?.toLowerCase().includes(term)
+        )
+      );
     });
   }, [operationBulletingList, searchTerm]);
 
@@ -65,12 +59,8 @@ const ViewOperationBulletin = ({ onViewBO }) => {
   }, []);
 
   const handleViewDetails = useCallback(
-    (ob) => {
-      ob.operation_type_id == 1
-        ? navigate("/operation-bulletin/operation-details", { state: ob })
-        : navigate("/operation-bulletin/helper-operation-details", {
-            state: ob,
-          });
+    (style) => {
+      navigate("/operation-bulletin/operation-details", { state: style });
     },
     [navigate]
   );
@@ -87,7 +77,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     <div className="container mx-auto p-4 md:p-6">
       <header className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-gray-800 mb-2">
-          All Main Operations
+          Operation Bulletin Summary
         </h1>
       </header>
 
@@ -100,7 +90,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
         >
           <input
             type="text"
-            placeholder="Search by style no, operation name, ID..."
+            placeholder="Search by style no, PO number, operation counts..."
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
             value={searchTerm}
             onChange={handleSearchChange}
@@ -112,19 +102,17 @@ const ViewOperationBulletin = ({ onViewBO }) => {
       {/* Operation Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {currentItems.length > 0 ? (
-          currentItems.map((ob) => (
-            <MemoizedOperationCard
-              key={ob.operation_id}
-              operation={ob}
-              onViewDetails={() => handleViewDetails(ob)}
+          currentItems.map((style) => (
+            <MemoizedStyleCard
+              key={style.style_id}
+              style={style}
+              onViewDetails={() => handleViewDetails(style.style_id)}
             />
           ))
         ) : (
           <div className="col-span-full py-12 text-center">
             <div className="text-gray-500 text-lg">
-              {searchTerm
-                ? "No matching operations found"
-                : "No operations found"}
+              {searchTerm ? "No matching styles found" : "No styles found"}
             </div>
             <button
               onClick={refreshOB}
@@ -149,78 +137,67 @@ const ViewOperationBulletin = ({ onViewBO }) => {
   );
 };
 
-// Memoized Operation Card Component to prevent unnecessary re-renders
-const OperationCard = ({ operation: ob, onViewDetails }) => {
-  const isType1 = ob.operation_type_id === 1;
-  const isType2 = ob.operation_type_id === 2;
+// Memoized Style Card Component to prevent unnecessary re-renders
+const StyleCard = ({ style, onViewDetails }) => {
+  // Calculate total sub-operations across all main operations
+  const totalSubOperations =
+    style.operations?.reduce((total, op) => {
+      return total + (op.subOperations?.length || 0);
+    }, 0) || 0;
 
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
       {/* Card Header */}
-      <div
-        className={`${
-          ob.operation_type_id == 1 ? "bg-teal-500" : "bg-blue-600"
-        } px-4 py-3`}
-      >
-        <h3 className="text-white font-semibold text-center truncate">
-          Style No: {ob.style?.style_no || "N/A"}
+      <div className="bg-gray-300 px-4 py-3">
+        <h3 className="text-black font-semibold text-center truncate">
+          Style No: {style.style_no || "N/A"}
         </h3>
-        {/* {isType2 && (
-          <p className="text-white text-sm text-center truncate">
-            {ob.operation_code}
-          </p>
-        )} */}
+        <h5 className="text-center">PO No: {style.po_number || "N/A"}</h5>
       </div>
 
       {/* Card Body */}
       <div className="p-4 space-y-3">
-        <div className="flex items-center border-b-2 border-black/10">
-          <span className="font-medium text-gray-700 w-32">
-            {ob.operation_type_id == 1 ? "Operation ID:" : "Helper OP ID: "}
-          </span>
-          <span className="inline-block bg-yellow-100 text-blue-800 font-bold px-2 py-1 rounded-md text-sm">
-            {ob.operation_type_id == 1 ? ob.operation_id : ob.helper_id}
+        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
+          <span className="font-medium text-gray-700">Style Name:</span>
+          <span className="text-right truncate">
+            {style.style_name || "N/A"}
           </span>
         </div>
 
-        <div className="flex items-center border-b-2 border-black/10">
-          <span className="font-medium text-gray-700 w-32">Name:</span>
-          <span className="truncate">{ob.operation_name}</span>
+        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
+          <span className="font-medium text-gray-700">Main Ops:</span>
+          <span className="inline-block bg-blue-100 text-blue-800 font-bold px-2 py-1 rounded-md text-sm">
+            {style.operations?.length || 0}
+          </span>
         </div>
 
-        {isType1 && (
-          <div className="flex items-center border-b-2 border-black/10">
-            <span className="font-medium text-gray-700 w-32">
-              Sub-OP Count:
-            </span>
-            <span>{ob.subOperations?.length || 0}</span>
-          </div>
-        )}
+        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
+          <span className="font-medium text-gray-700">Sub Ops:</span>
+          <span className="inline-block bg-green-100 text-green-800 font-bold px-2 py-1 rounded-md text-sm">
+            {totalSubOperations}
+          </span>
+        </div>
 
-        {isType2 && (
-          <>
-            {/* <div className="flex items-center border-b-2 border-black/10">
-              <span className="font-medium text-gray-700 w-32">
-                Operation type:
-              </span>
-              <span>
-                {ob.operation_type_id == 2 ? "Helper Operation" : "" || "N/A"}
-              </span>
-            </div> */}
-            <div className="flex items-center border-b-2 border-black/10">
-              <span className="font-medium text-gray-700 w-32">MC SMV:</span>
-              <span>{ob.mc_smv || "N/A"}</span>
-            </div>
-            <div className="flex items-center border-b-2 border-black/10">
-              <span className="font-medium text-gray-700 w-32">Comments:</span>
-              <span className="truncate">{ob.comments || "N/A"}</span>
-            </div>
-          </>
-        )}
+        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
+          <span className="font-medium text-gray-700">Description:</span>
+          <span className="text-right truncate">
+            {style.style_description || "N/A"}
+          </span>
+        </div>
       </div>
 
       {/* Card Footer */}
-      <div className="px-4 pb-4 text-right">
+      <div className="px-4 pb-4 text-right flex justify-between items-center">
+        <p className="text-xs text-gray-500">
+          Created:{" "}
+          <span className="font-medium">
+            {new Date(style?.createdAt).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        </p>
         <button
           onClick={onViewDetails}
           className="text-blue-600 font-medium hover:text-blue-800 transition-colors focus:outline-none"
@@ -232,7 +209,7 @@ const OperationCard = ({ operation: ob, onViewDetails }) => {
   );
 };
 
-const MemoizedOperationCard = React.memo(OperationCard);
+const MemoizedStyleCard = React.memo(StyleCard);
 
 // Extracted Pagination Controls for better readability
 const PaginationControls = React.memo(({ pageCount, onPageChange }) => (

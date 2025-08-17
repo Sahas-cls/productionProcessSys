@@ -31,6 +31,10 @@ module.exports = (sequelize, DataTypes) => {
           key: "season_id",
         },
       },
+      po_number: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       style_no: {
         type: DataTypes.STRING,
         unique: true,

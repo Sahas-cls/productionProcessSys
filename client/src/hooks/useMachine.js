@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-export function useFetchLayout() {
+export function useMachine() {
   const apiUrl = import.meta.env.VITE_API_URL; // Check your Vite env variable naming
-  const [lineLayout, setLineLayout] = useState(null);
+  const [machines, setMachies] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const getLayout = useCallback(async () => {
+  const getMachine = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(`${apiUrl}/api/layout/getLayouts`);
+      const response = await axios.get(`${apiUrl}/api/machine/getMachiens`);
       if (response.status === 200) {
-        setLineLayout(response.data.data);
+        setMachies(response.data.data);
       } else {
-        setLineLayout(null);
+        setMachies(null);
         throw new Error("Data cannot be fetched...");
       }
     } catch (error) {
@@ -24,14 +24,14 @@ export function useFetchLayout() {
   }, [apiUrl]);
 
   useEffect(() => {
-    getLayout();
-  }, [getLayout]);
+    getMachine();
+  }, [getMachine]);
 
   return {
     isLoading,
-    layoutList: lineLayout,
-    refresh: getLayout,
+    machineList: machines,
+    refresh: getMachine,
   };
 }
 
-export default useFetchLayout;
+export default useMachine;

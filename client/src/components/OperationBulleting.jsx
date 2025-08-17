@@ -8,6 +8,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import { VscSaveAll } from "react-icons/vsc";
 import { IoIosArrowDropdown } from "react-icons/io";
+import useMachine from "../hooks/useMachine";
 
 const OperationBulleting = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -20,14 +21,19 @@ const OperationBulleting = () => {
     styleNumber: "",
     mainOperation: "",
   });
+  const { machineList, isLoading, refresh } = useMachine();
+  console.log(machineList);
   const [currentOPId, setCurrentOPId] = useState("");
 
   useEffect(() => {
     const fetchOperations = async () => {
       try {
-        const response = await axios.get(`${apiUrl}/api/operationBuleting`, {
-          withCredentials: true,
-        });
+        const response = await axios.get(
+          `${apiUrl}/api/operationBuleting/getAllOB`,
+          {
+            withCredentials: true,
+          }
+        );
         setOperations(response.data);
       } catch (error) {
         console.error("Error fetching operations:", error);
@@ -108,7 +114,7 @@ const OperationBulleting = () => {
       console.log(values);
       try {
         const response = await axios.post(
-          `${apiUrl}/api/operationBuleting/createHelperOps`,
+          `${apiUrl}/api/operationBulleting/createHelperOps`,
           values,
           { withCredentials: true }
         );
@@ -411,11 +417,11 @@ const OperationBulleting = () => {
     <div className="px-4 py-4">
       <section className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-center">
         <div className="md:col-span-8 w-2/4">
-          <input
+          {/* <input
             type="text"
             className="w-2/4 form-input-base py-3 px-4 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
             placeholder="Search operations..."
-          />
+          /> */}
         </div>
 
         <div className="md:col-span-4 grid grid-cols-2 gap-3 md:gap-4 w-full">
@@ -680,9 +686,41 @@ const OperationBulleting = () => {
 
 // Full Form Component
 const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
+  const { machineList } = useMachine();
   const [needleTypes, setNeedleTypes] = useState(
     values.needleType || [{ type: "" }]
   );
+
+  // Handle machine selection and autofill
+  const handleMachineSelect = (machineNo, machineStatus) => {
+    console.log(machineNo);
+    const currentMachine = machineList.filter(
+      (mch) => mch.machine_no === machineNo
+    );
+    console.log("current machine = ", currentMachine[0].machine_status);
+    if (currentMachine) {
+      if (currentMachine[0].machine_status === "inactive") {
+        Swal.fire({
+          text: "You can't use this machine because it's borken or inactive",
+          icon: "warning",
+        });
+        return;
+      }
+    }
+
+    if (machineStatus) {
+    }
+    const selectedMachine = machineList?.find(
+      (m) => m.machine_no === machineNo
+    );
+    if (selectedMachine) {
+      setFieldValue("machineNo", selectedMachine.machine_no);
+      setFieldValue("machineType", selectedMachine.machine_type);
+      setFieldValue("machineName", selectedMachine.machine_name);
+      setFieldValue("machineBrand", selectedMachine.machine_brand);
+      setFieldValue("machineLocation", selectedMachine.machine_location);
+    }
+  };
 
   const handleNeedleTreadChange = (index, value) => {
     const newTreads = [...values.needleTreads];
@@ -828,6 +866,39 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               Machine Details
             </legend>
             <div className="mt-4">
+              <label htmlFor="">Machine No *</label>
+              <Field
+                name="machineNo"
+                as="select"
+                className={`form-input-base ${
+                  errors.machineNo && touched.machineNo ? "border-red-500" : ""
+                }`}
+                onChange={(e) => handleMachineSelect(e.target.value)}
+                onBlur={handleBlur}
+              >
+                <option value="">Select Machine</option>
+                {machineList?.map((mch) => (
+                  <option
+                    className={`${
+                      mch.machine_status == "active"
+                        ? "text-green-600 font-semibold"
+                        : "text-red-600 font-semibold"
+                    }`}
+                    key={mch.machine_id}
+                    // mch.machine_no
+                    value={mch.machine_no}
+                  >
+                    {mch.machine_no}
+                  </option>
+                ))}
+              </Field>
+              <ErrorMessage
+                name="machineNo"
+                component="div"
+                className="text-red-500 text-sm mt-1"
+              />
+            </div>
+            <div className="mt-4">
               <label htmlFor="">Machine Type *</label>
               <Field
                 name="machineType"
@@ -838,26 +909,10 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                     : ""
                 }`}
                 onBlur={handleBlur}
+                readOnly
               />
               <ErrorMessage
                 name="machineType"
-                component="div"
-                className="text-red-500 text-sm mt-1"
-              />
-            </div>
-            <div className="mt-4">
-              <label htmlFor="">Machine No *</label>
-              <Field
-                name="machineNo"
-                type="text"
-                className={`form-input-base ${
-                  errors.machineNo && touched.machineNo ? "border-red-500" : ""
-                }`}
-                placeholder="Machine number"
-                onBlur={handleBlur}
-              />
-              <ErrorMessage
-                name="machineNo"
                 component="div"
                 className="text-red-500 text-sm mt-1"
               />
@@ -874,6 +929,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                     : ""
                 }`}
                 onBlur={handleBlur}
+                readOnly
               />
               <ErrorMessage
                 name="machineName"
@@ -893,6 +949,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                     : ""
                 }`}
                 onBlur={handleBlur}
+                readOnly
               />
               <ErrorMessage
                 name="machineBrand"
@@ -911,6 +968,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                     : ""
                 }`}
                 onBlur={handleBlur}
+                readOnly
               />
               <ErrorMessage
                 name="machineLocation"
@@ -1008,7 +1066,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                       : ""
                   }`}
                   onChange={(e) =>
-                    updateNeedleCount(parseInt(e.target.value) || 1)
+                    updateNeedleCount(parseInt(e.target.value)) || 1
                   }
                   onBlur={handleBlur}
                 />

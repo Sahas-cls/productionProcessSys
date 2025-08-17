@@ -1,17 +1,16 @@
-import React, { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
+import React, { useState } from "react";
 import Header from "../components/Header";
+import AddFactory from "../components/admin/AddFactory";
+import Sidebar from "../components/Sidebar";
 import { motion, AnimatePresence } from "framer-motion";
-import AddCustomer from "../components/admin/AddCustomer";
-import AddSeason from "../components/admin/AddSeason";
-import AddStyle from "../components/admin/AddStyle";
-import AddMachine from "../components/admin/AddMachine";
+import AddLineLayout from "../components/AddLineLayout";
+import AddMedia from "../components/AddMedia";
 
-const MachinePage = () => {
+const AddMediaPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
+
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
-      
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
@@ -29,7 +28,7 @@ const MachinePage = () => {
             exit="exit"
             className="bg-gray-200 w-full min-h-screen"
           >
-            <AddMachine />
+            <AddMedia />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -37,4 +36,4 @@ const MachinePage = () => {
   );
 };
 
-export default MachinePage;
+export default AddMediaPage;

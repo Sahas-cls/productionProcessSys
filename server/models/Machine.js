@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       machine_no: {
         type: DataTypes.STRING,
         allowNull: false,
+        unique: true,
       },
       machine_name: {
         type: DataTypes.STRING,
@@ -23,8 +24,17 @@ module.exports = (sequelize, DataTypes) => {
       machine_location: {
         type: DataTypes.STRING,
       },
-      needle_count: {
-        type: DataTypes.INTEGER,
+      purchase_date: {
+        type: DataTypes.DATE,
+      },
+      supplier: {
+        type: DataTypes.STRING,
+      },
+      service_date: {
+        type: DataTypes.DATE,
+      },
+      machine_status: {
+        type: DataTypes.STRING, 
       },
     },
     {
