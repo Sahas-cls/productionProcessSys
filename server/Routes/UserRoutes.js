@@ -19,5 +19,13 @@ routes.post(
 routes.get("/getUserCategories", userController.getUserCategories);
 
 // for user login
-routes.post("/login", LoginValidation, validateRequest, userController.userLogin);
+routes.post(
+  "/login",
+  LoginValidation,
+  validateRequest,
+  userController.userLogin
+);
+
+// auth user
+routes.get("/authCheck", userController.authCheck);
 module.exports = routes;

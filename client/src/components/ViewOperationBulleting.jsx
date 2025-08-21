@@ -60,7 +60,9 @@ const ViewOperationBulletin = ({ onViewBO }) => {
 
   const handleViewDetails = useCallback(
     (style) => {
-      navigate("/operation-bulletin/operation-details", { state: style });
+      navigate("/operation-bulletin/operation-details", {
+        state: style.style_id,
+      });
     },
     [navigate]
   );
@@ -106,7 +108,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
             <MemoizedStyleCard
               key={style.style_id}
               style={style}
-              onViewDetails={() => handleViewDetails(style.style_id)}
+              onViewDetails={() => handleViewDetails(style)}
             />
           ))
         ) : (

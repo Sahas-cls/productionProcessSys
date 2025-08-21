@@ -11,8 +11,10 @@ import getUserTypes from "../../hooks/useCustomerTypes.js";
 import swal from "sweetalert2";
 import useCustomer from "../../hooks/useCustomer.js";
 import { useUser } from "../../contexts/userContext.jsx";
+import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 
-const AddCustomer = () => {
+const AddCustomer = ({ userRole }) => {
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL;
   const { customerTypes } = getUserTypes();
@@ -23,6 +25,8 @@ const AddCustomer = () => {
   const { user } = useUser();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
   // Animation variants
   const containerVariants = {
@@ -159,21 +163,24 @@ const AddCustomer = () => {
 
   // Handle form submission
   const handleSubmit = async (values, { resetForm }) => {
-    alert("submitting");
-    // alert(currentCustomerId);
+    if (isSubmitting) return;
+    if (!formik.isValid) {
+      console.log("Form is invalid", formik.errors);
+      return;
+    }
+
+    setIsSubmitting(true);
+    
     try {
       let response;
 
       if (isEditMode) {
-        // Update existing customer
-        alert("crr customer: " + currentCustomerId);
         response = await axios.put(
           `${apiUrl}/api/customers/editCustomer/${currentCustomerId}`,
           values,
           { withCredentials: true }
         );
       } else {
-        // Create new customer
         response = await axios.post(
           `${apiUrl}/api/customers/createCustomer`,
           values,
@@ -208,13 +215,36 @@ const AddCustomer = () => {
         setCurrentCustomerId(null);
       }
     } catch (error) {
-      console.error("Error:", error.response?.data || error.message);
+      console.error("Error:", {
+        message: error.message,
+        response: error.response,
+        stack: error.stack
+      });
+
+      if (error.message === "Network Error") {
+        setServerMessage({
+          status: "error",
+          message: "Network error - please check your connection",
+        });
+        return;
+      }
+
+      if (error.response?.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "You don't have permission to perform this action",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
+      
       setServerMessage({
         status: "error",
         message:
           error.response?.data?.message ||
           "An error occurred. Please try again.",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -277,6 +307,13 @@ const AddCustomer = () => {
       }
     } catch (error) {
       console.error("Error:", error.response?.data || error.message);
+      if (error.response?.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "You don't have permission to perform this action",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
       setServerMessage({
         status: "error",
         message:
@@ -337,19 +374,23 @@ const AddCustomer = () => {
         </motion.div>
 
         {/* Add Customer Button */}
-        <motion.button
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
-          onClick={isAddFormOpen ? handleCancel : handleOpenAddForm}
-          variants={buttonVariants}
-          whileHover="hover"
-          whileTap="tap"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <IoMdAdd className="text-xl" />
-          {isAddFormOpen ? "Close Form" : "Add Customer"}
-        </motion.button>
+        {userRole === "Admin" ? (
+          <motion.button
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
+            onClick={isAddFormOpen ? handleCancel : handleOpenAddForm}
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <IoMdAdd className="text-xl" />
+            {isAddFormOpen ? "Close Form" : "Add Customer"}
+          </motion.button>
+        ) : (
+          ""
+        )}
       </div>
 
       {/* Form Section */}
@@ -487,8 +528,10 @@ const AddCustomer = () => {
                     variants={buttonVariants}
                     whileHover="hover"
                     whileTap="tap"
+                    disabled={isSubmitting || !formik.isValid}
                   >
-                    {isEditMode ? "Update Customer" : "Save Customer"}
+                    {isSubmitting ? "Processing..." : 
+                     isEditMode ? "Update Customer" : "Save Customer"}
                   </motion.button>
                 </motion.div>
               </form>
@@ -525,9 +568,13 @@ const AddCustomer = () => {
                 <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Customer Name
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
-                  Actions
-                </th>
+                {userRole === "Admin" ? (
+                  <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
+                    Actions
+                  </th>
+                ) : (
+                  ""
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -552,26 +599,32 @@ const AddCustomer = () => {
                         {customer.customer_name}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex justify-center space-x-4">
-                        <motion.button
-                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleEditCustomer(customer)}
-                        >
-                          <MdModeEditOutline className="text-2xl" />
-                        </motion.button>
-                        <motion.button
-                          className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={(e) => handleDelete(e, customer.customer_id)}
-                        >
-                          <MdDeleteForever className="text-2xl" />
-                        </motion.button>
-                      </div>
-                    </td>
+                    {userRole === "Admin" ? (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex justify-center space-x-4">
+                          <motion.button
+                            className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleEditCustomer(customer)}
+                          >
+                            <MdModeEditOutline className="text-2xl" />
+                          </motion.button>
+                          <motion.button
+                            className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={(e) =>
+                              handleDelete(e, customer.customer_id)
+                            }
+                          >
+                            <MdDeleteForever className="text-2xl" />
+                          </motion.button>
+                        </div>
+                      </td>
+                    ) : (
+                      ""
+                    )}
                   </motion.tr>
                 ))
               ) : (

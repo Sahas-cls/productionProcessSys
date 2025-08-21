@@ -68,7 +68,11 @@ exports.getSubOperations = async (req, res, next) => {
 // to create new layout
 exports.createLayout = async (req, res, next) => {
   //
-  console.log(req.body);
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   //   return;
   const { styleNo, styleDescriptoin, style, season, workstationCount } =
     req.body;

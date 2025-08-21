@@ -10,8 +10,10 @@ import axios from "axios";
 import swal from "sweetalert2";
 import useCustomer from "../../hooks/useCustomer.js";
 import useSeasons from "../../hooks/useSeasons.js";
+import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 
-const AddSeason = () => {
+const AddSeason = ({ userRole }) => {
   const [isAddFactory, setIsAddFactory] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editingSeasonId, setEditingSeasonId] = useState(null);
@@ -24,6 +26,7 @@ const AddSeason = () => {
   const { seasonsList, seasonRefresh } = useSeasons();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const navigate = useNavigate();
 
   // Memoized filtered seasons based on search term
   const filteredSeasons = useMemo(() => {
@@ -235,6 +238,13 @@ const AddSeason = () => {
         }
       } catch (error) {
         console.error("Error saving seasons:", error);
+        if (error.status === 401) {
+          Swal.fire({
+            title: "Unauthorized",
+            text: "You don't have permission to perform this action",
+            icon: "error",
+          }).then(() => navigate("/"));
+        }
         setServerMessage({
           status: "error",
           message: error.response?.data?.message || "Failed to save seasons",
@@ -319,6 +329,13 @@ const AddSeason = () => {
       }
     } catch (error) {
       console.error("Error deleting season:", error);
+      if (error.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "You don't have permission to perform this action",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
       swal.fire("Error!", "Failed to delete season.", "error");
     }
   };
@@ -353,22 +370,26 @@ const AddSeason = () => {
         </motion.div>
 
         {/* Add Season Button */}
-        <motion.button
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
-          onClick={() => {
-            handleCancel();
-            setIsAddFactory(!isAddFactory);
-          }}
-          variants={buttonVariants}
-          whileHover="hover"
-          whileTap="tap"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <IoMdAdd className="text-xl" />
-          {isAddFactory ? "Close Form" : "Add Season"}
-        </motion.button>
+        {userRole === "Admin" ? (
+          <motion.button
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
+            onClick={() => {
+              handleCancel();
+              setIsAddFactory(!isAddFactory);
+            }}
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <IoMdAdd className="text-xl" />
+            {isAddFactory ? "Close Form" : "Add Season"}
+          </motion.button>
+        ) : (
+          ""
+        )}
       </div>
 
       {/* Form Section */}
@@ -490,9 +511,13 @@ const AddSeason = () => {
                           <th className="px-4 py-2 bg-blue-500 text-white border">
                             Season List
                           </th>
-                          <th className="px-4 py-2 bg-blue-500 text-white border">
-                            Actions
-                          </th>
+                          {/* {userRole === "Admin" ? (
+                            <th className="px-4 py-2 bg-blue-500 text-white border">
+                              Actions
+                            </th>
+                          ) : (
+                            ""
+                          )} */}
                         </tr>
                       </thead>
                       <tbody>
@@ -516,26 +541,30 @@ const AddSeason = () => {
                               <td className="text-center border py-2 px-4">
                                 {season.name}
                               </td>
-                              <td className="text-center border py-2 px-4">
-                                <div className="flex justify-center gap-4">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      handleEditSeason(index, season)
-                                    }
-                                    className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                                  >
-                                    <FaEdit className="text-xl" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteSeason(index)}
-                                    className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                                  >
-                                    <MdDeleteForever className="text-xl" />
-                                  </button>
-                                </div>
-                              </td>
+                              {userRole === "Admin" ? (
+                                <td className="text-center border py-2 px-4">
+                                  <div className="flex justify-center gap-4">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleEditSeason(index, season)
+                                      }
+                                      className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                                    >
+                                      <FaEdit className="text-xl" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSeason(index)}
+                                      className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                                    >
+                                      <MdDeleteForever className="text-xl" />
+                                    </button>
+                                  </div>
+                                </td>
+                              ) : (
+                                ""
+                              )}
                             </tr>
                           ))
                         )}
@@ -619,9 +648,13 @@ const AddSeason = () => {
               <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                 Season
               </th>
-              <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
-                Actions
-              </th>
+              {userRole === "Admin" ? (
+                <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
+                  Actions
+                </th>
+              ) : (
+                ""
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -652,28 +685,32 @@ const AddSeason = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-700">{season.season}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <div className="flex justify-center space-x-4">
-                      <motion.button
-                        className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleEditSeasonFromTable(season)}
-                      >
-                        <MdModeEditOutline className="text-2xl" />
-                      </motion.button>
-                      <motion.button
-                        className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() =>
-                          handleDeleteSeasonFromTable(season.season_id)
-                        }
-                      >
-                        <MdDeleteForever className="text-2xl" />
-                      </motion.button>
-                    </div>
-                  </td>
+                  {userRole === "Admin" ? (
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex justify-center space-x-4">
+                        <motion.button
+                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleEditSeasonFromTable(season)}
+                        >
+                          <MdModeEditOutline className="text-2xl" />
+                        </motion.button>
+                        <motion.button
+                          className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() =>
+                            handleDeleteSeasonFromTable(season.season_id)
+                          }
+                        >
+                          <MdDeleteForever className="text-2xl" />
+                        </motion.button>
+                      </div>
+                    </td>
+                  ) : (
+                    ""
+                  )}
                 </motion.tr>
               ))
             )}

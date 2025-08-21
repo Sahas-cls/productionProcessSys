@@ -15,8 +15,12 @@ import { ArrowLeftIcon, CameraIcon } from "@heroicons/react/24/outline";
 import { FaArrowLeft } from "react-icons/fa6";
 import { BsFillCloudUploadFill } from "react-icons/bs"; //upload icon
 import CameraOrBrowse from "./CameraOrBrowse";
+import { useAuth } from "../hooks/useAuth";
 
 const ViewWorkstations = () => {
+  // alert("user role: ", userRole);
+  const { user, loading } = useAuth();
+  const userRole = user?.userRole;
   const apiUrl = import.meta.env.VITE_API_URL;
   const location = useLocation();
   const navigate = useNavigate();
@@ -319,16 +323,20 @@ const ViewWorkstations = () => {
           </div>
 
           <div className="">
-            <button
-              type="button"
-              className="bg-blue-500 text-white px-2 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150"
-              onClick={() => handleAddNewWorkstation()}
-            >
-              <div className="flex items-center font-semibold gap-x-2">
-                <span className="hidden md:inline">Add workstation</span>
-                <LuConstruction className="text-3xl text-yellow-300" />
-              </div>
-            </button>
+            {userRole === "Admin" ? (
+              <button
+                type="button"
+                className="bg-blue-500 text-white px-2 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150"
+                onClick={() => handleAddNewWorkstation()}
+              >
+                <div className="flex items-center font-semibold gap-x-2">
+                  <span className="hidden md:inline">Add workstation</span>
+                  <LuConstruction className="text-3xl text-yellow-300" />
+                </div>
+              </button>
+            ) : (
+              ""
+            )}
           </div>
         </div>
 
@@ -402,24 +410,30 @@ const ViewWorkstations = () => {
                           <span className="text-sm text-gray-500">
                             Created: {formatDate(workstation.createdAt)}
                           </span>
-                          <button
-                            className="bg-green-300/40 p-1 text-green-700 rounded"
-                            onClick={() =>
-                              openAddSubOperationModal(workstation)
-                            }
-                          >
-                            <BiPlus className="text-2xl hover:scale-150" />
-                          </button>
-                          <button
-                            className="bg-red-300/40 p-1 text-red-700 rounded"
-                            onClick={() =>
-                              handleWorkstationDelete(
-                                workstation.workstation_id
-                              )
-                            }
-                          >
-                            <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
-                          </button>
+                          {userRole === "Admin" ? (
+                            <div className="gap-x-2 flex">
+                              <button
+                                className="bg-green-300/40 p-1 text-green-700 rounded"
+                                onClick={() =>
+                                  openAddSubOperationModal(workstation)
+                                }
+                              >
+                                <BiPlus className="text-2xl hover:scale-150" />
+                              </button>
+                              <button
+                                className="bg-red-300/40 p-1 text-red-700 rounded"
+                                onClick={() =>
+                                  handleWorkstationDelete(
+                                    workstation.workstation_id
+                                  )
+                                }
+                              >
+                                <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
+                              </button>
+                            </div>
+                          ) : (
+                            ""
+                          )}
                         </div>
                       </div>
                     </div>
@@ -466,29 +480,33 @@ const ViewWorkstations = () => {
                                     {subOp.suboperatoin?.smv || "0.00"}
                                   </td>
                                   <td className="px-4 py-3 text-sm text-gray-500 w-24">
-                                    <div className="space-x-2 flex">
-                                      <button className="bg-green-300/40 p-1 text-green-700 rounded">
-                                        <BsArrowsMove className="text-xl hover:scale-125" />
-                                      </button>
-                                      <button className="bg-red-300/40 p-1 text-red-700 rounded">
-                                        <MdOutlineDeleteForever
-                                          onClick={() =>
-                                            handleDeleteSubOP(
-                                              subOp.sub_operation_id,
-                                              workstation.workstation_id
-                                            )
-                                          }
-                                          className="text-xl hover:scale-150"
-                                        />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="bg-blue-300/40 p-1 text-blue-700 rounded"
-                                        onClick={() => setIsUploading(true)}
-                                      >
-                                        <BsFillCloudUploadFill className="text-xl hover:scale-125" />
-                                      </button>
-                                    </div>
+                                    {userRole === "Admin" ? (
+                                      <div className="space-x-2 flex">
+                                        <button className="bg-green-300/40 p-1 text-green-700 rounded">
+                                          <BsArrowsMove className="text-xl hover:scale-125" />
+                                        </button>
+                                        <button className="bg-red-300/40 p-1 text-red-700 rounded">
+                                          <MdOutlineDeleteForever
+                                            onClick={() =>
+                                              handleDeleteSubOP(
+                                                subOp.sub_operation_id,
+                                                workstation.workstation_id
+                                              )
+                                            }
+                                            className="text-xl hover:scale-150"
+                                          />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="bg-blue-300/40 p-1 text-blue-700 rounded"
+                                          onClick={() => setIsUploading(true)}
+                                        >
+                                          <BsFillCloudUploadFill className="text-xl hover:scale-125" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      ""
+                                    )}
                                   </td>
                                 </tr>
                               ))}

@@ -36,7 +36,7 @@ module.exports = (sequelize, DataTypes) => {
 
     // Belongs to Style
     MainOperation.belongsTo(models.Style, {
-      foreignKey: "style_no", // ✅ Match the field
+      foreignKey: "style_no",
       as: "style",
     });
 

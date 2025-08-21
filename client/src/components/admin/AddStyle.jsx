@@ -11,9 +11,12 @@ import axios from "axios";
 import { useUser } from "../../contexts/userContext.jsx";
 import useStyles from "../../hooks/useStyles.js";
 import swal from "sweetalert2";
+import Swal from "sweetalert2";
+import { useNavigate } from "react-router-dom";
 
-const AddStyle = () => {
+const AddStyle = ({ userRole }) => {
   const { user } = useUser();
+  const navigate = useNavigate();
   // State management
   const { factories } = useFactories();
   const { customerList } = useCustomer();
@@ -21,8 +24,10 @@ const AddStyle = () => {
   const [isAddStyle, setIsAddStyle] = useState(false);
   const [currentCustomer, setCurrentCustomer] = useState(null);
   const [filteredSeasons, setFilteredSeasons] = useState([]);
-  const [files, setFiles] = useState([]);
-  const [previews, setPreviews] = useState([]);
+  const [frontImage, setFrontImage] = useState(null);
+  const [backImage, setBackImage] = useState(null);
+  const [frontPreview, setFrontPreview] = useState(null);
+  const [backPreview, setBackPreview] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingStyles, setLoadingStyles] = useState(false);
   const [errorStyles, setErrorStyles] = useState(null);
@@ -54,6 +59,26 @@ const AddStyle = () => {
           .includes(searchTerm.toLowerCase())
     );
   }, [stylesList, searchTerm]);
+
+  const excelDownload = async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/api/styles/getExcel`, {
+        withCredentials: true,
+        responseType: "blob", // important for Excel/other files
+      });
+
+      // Create a download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "styles.xlsx"); // filename
+      document.body.appendChild(link);
+      link.click();
+      link.remove(); // cleanup
+    } catch (error) {
+      console.error("Excel download failed:", error);
+    }
+  };
 
   // Improved search function with debounce
   const handleSearch = (e) => {
@@ -88,8 +113,10 @@ const AddStyle = () => {
     setIsSubmitting(false);
     if (!isAddStyle) {
       formik.resetForm();
-      setFiles([]);
-      setPreviews([]);
+      setFrontImage(null);
+      setBackImage(null);
+      setFrontPreview(null);
+      setBackPreview(null);
     }
   };
 
@@ -99,7 +126,6 @@ const AddStyle = () => {
     setIsAddStyle(true);
     setIsSubmitting(false);
     formik.setValues({
-      styleId: style.style_id,
       styleFactory: style.factory_id,
       styleCustomer: style.customer_id,
       styleSeason: style.season_id,
@@ -107,12 +133,19 @@ const AddStyle = () => {
       styleName: style.style_name,
       styleDescription: style.style_description || "",
       poNumber: style.po_number || "",
+      userId: localStorage.getItem("userId"),
     });
     setCurrentCustomer(style.customer_id);
 
     // If editing, set the existing images as previews
-    if (style.images && style.images.length > 0) {
-      setPreviews(style.images.map((img) => `${apiUrl}/${img.image_path}`));
+    if (style.StyleMedia && style.StyleMedia.length > 0) {
+      style.StyleMedia.forEach((media) => {
+        if (media.media_type === "front") {
+          setFrontPreview(media.media_url);
+        } else if (media.media_type === "back") {
+          setBackPreview(media.media_url);
+        }
+      });
     }
   };
 
@@ -145,28 +178,31 @@ const AddStyle = () => {
       });
     } catch (err) {
       console.error("Error deleting style:", err);
+      if (err.response?.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "You don't have permission to perform this action please login again",
+          icon: "error",
+        }).then(() => navigate("./"));
+      }
       alert("Failed to delete style");
     }
   };
 
   // Handle removing an image
-  const handleRemoveImage = (index) => {
-    const newFiles = [...files];
-    const newPreviews = [...previews];
-
-    // Remove the file if it exists in the files array
-    if (index < newFiles.length) {
-      newFiles.splice(index, 1);
-      setFiles(newFiles);
-    }
-
-    // Remove the preview
-    newPreviews.splice(index, 1);
-    setPreviews(newPreviews);
-
-    // Revoke the object URL if it's a newly uploaded file
-    if (previews[index].startsWith("blob:")) {
-      URL.revokeObjectURL(previews[index]);
+  const handleRemoveImage = (type) => {
+    if (type === "front") {
+      if (frontPreview && frontPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(frontPreview);
+      }
+      setFrontImage(null);
+      setFrontPreview(null);
+    } else if (type === "back") {
+      if (backPreview && backPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(backPreview);
+      }
+      setBackImage(null);
+      setBackPreview(null);
     }
   };
 
@@ -286,73 +322,69 @@ const AddStyle = () => {
         const formData = new FormData();
 
         // Append all form values with correct field names
-        formData.append("styleFactory", values.styleFactory);
-        formData.append("styleCustomer", values.styleCustomer);
-        formData.append("styleSeason", values.styleSeason);
-        formData.append("styleNo", values.styleNo);
-        formData.append("poNumber", values.poNumber);
-        formData.append("styleName", values.styleName);
-        formData.append("styleDescription", values.styleDescription);
-        formData.append("userId", values.userId);
-
-        // Append all files to formData
-        files.forEach((file) => {
-          formData.append("images", file);
+        Object.entries(values).forEach(([key, value]) => {
+          formData.append(key, value);
         });
 
-        // Debug: Log FormData contents
-        console.log("FormData contents:");
-        for (const [key, value] of formData.entries()) {
-          console.log(key, value);
+        // Append front image if exists
+        if (frontImage) {
+          formData.append("frontImage", frontImage);
         }
+
+        // Append back image if exists
+        if (backImage) {
+          formData.append("backImage", backImage);
+        }
+
+        // For editing, include existing images
+        if (editingStyle) {
+          const existingImages = [];
+          if (frontPreview && !frontPreview.startsWith("blob:")) {
+            existingImages.push({
+              path: frontPreview,
+              type: "front",
+            });
+          }
+          if (backPreview && !backPreview.startsWith("blob:")) {
+            existingImages.push({
+              path: backPreview,
+              type: "back",
+            });
+          }
+
+          formData.append("existingImages", JSON.stringify(existingImages));
+        }
+
+        // Create config with timeout to prevent premature termination
+        const config = {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          withCredentials: true,
+          timeout: 30000, // 30 second timeout
+        };
 
         let response;
         if (editingStyle) {
-          // For editing, include existing images
-          formData.append(
-            "existingImages",
-            JSON.stringify(
-              previews
-                .filter((preview) => !preview.startsWith("blob:"))
-                .map((preview) => preview.replace(`${apiUrl}/`, ""))
-            )
-          );
-
           response = await axios.put(
             `${apiUrl}/api/styles/editStyle/${editingStyle.style_id}`,
             formData,
-            {
-              headers: {
-                "Content-Type": "multipart/form-data",
-              },
-              withCredentials: true,
-            }
+            config
           );
         } else {
-          console.log("values: ", formData);
           response = await axios.post(
             `${apiUrl}/api/styles/addStyle`,
             formData,
-            {
-              withCredentials: true,
-            }
+            config
           );
         }
 
-        const handleExcelDownload = async () => {
-          // clg
-          try {
-            const response = await axios.get(`${apiUrl}/api/styles/getExcel`, {
-              withCredentials: true,
-            });
-          } catch (error) {
-            console.error(error);
-          }
-        };
-
+        // Reset form and show success message
         formik.resetForm();
-        setFiles([]);
-        setPreviews([]);
+        setFrontImage(null);
+        setBackImage(null);
+        setFrontPreview(null);
+        setBackPreview(null);
         setCurrentCustomer(null);
 
         swal.fire({
@@ -367,14 +399,29 @@ const AddStyle = () => {
         refresh();
       } catch (err) {
         console.error("Error:", err);
-        swal.fire({
-          icon: "error",
-          title: "Error",
-          text: `Failed to ${editingStyle ? "update" : "create"} style! ${
-            err.response?.data?.message || err.message
-          }`,
-          confirmButtonText: "Ok",
-        });
+        if (err.response?.status === 401) {
+          Swal.fire({
+            title: "Unauthorized",
+            text: "You don't have permission to perform this action please login again",
+            icon: "error",
+          }).then(() => navigate("/"));
+        } else if (err.code === "ECONNABORTED") {
+          swal.fire({
+            icon: "error",
+            title: "Timeout",
+            text: "The request took too long. Please try again.",
+            confirmButtonText: "Ok",
+          });
+        } else {
+          swal.fire({
+            icon: "error",
+            title: "Error",
+            text: `Failed to ${editingStyle ? "update" : "create"} style! ${
+              err.response?.data?.message || err.message
+            }`,
+            confirmButtonText: "Ok",
+          });
+        }
       } finally {
         setIsSubmitting(false);
       }
@@ -395,29 +442,31 @@ const AddStyle = () => {
     }
   }, [currentCustomer, seasonsList]);
 
-  // Handle file upload
-  const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    const newFiles = [...files, ...selectedFiles];
-    setFiles(newFiles);
+  // Handle file upload for specific image type
+  const handleFileChange = (e, type) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-    const newPreviews = [...previews];
-    selectedFiles.forEach((file) => {
-      newPreviews.push(URL.createObjectURL(file));
-    });
-    setPreviews(newPreviews);
+    if (type === "front") {
+      setFrontImage(file);
+      setFrontPreview(URL.createObjectURL(file));
+    } else if (type === "back") {
+      setBackImage(file);
+      setBackPreview(URL.createObjectURL(file));
+    }
   };
 
   // Clean up object URLs
   useEffect(() => {
     return () => {
-      previews.forEach((url) => {
-        if (url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
+      if (frontPreview && frontPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(frontPreview);
+      }
+      if (backPreview && backPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(backPreview);
+      }
     };
-  }, [previews]);
+  }, [frontPreview, backPreview]);
 
   return (
     <motion.div
@@ -451,20 +500,24 @@ const AddStyle = () => {
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
-            onClick={() => handleExcelDownload()}
+            onClick={() => excelDownload()}
           >
             Download
           </motion.button>
-          <motion.button
-            type="button"
-            className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
-            variants={buttonVariants}
-            whileHover="hover"
-            whileTap="tap"
-            onClick={handleIsAddingStyle}
-          >
-            {isAddStyle ? "Close Form" : "Add Style"}
-          </motion.button>
+          {userRole === "Admin" ? (
+            <motion.button
+              type="button"
+              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={handleIsAddingStyle}
+            >
+              {isAddStyle ? "Close Form" : "Add Style"}
+            </motion.button>
+          ) : (
+            ""
+          )}
         </div>
       </motion.div>
 
@@ -682,75 +735,131 @@ const AddStyle = () => {
               />
             </motion.div>
 
-            {/* File Upload */}
+            {/* File Upload Section */}
             <motion.div variants={itemVariants} className="mb-8">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Style Images
+              <label className="block text-sm font-medium text-gray-700 mb-4">
+                Style Images (Optional)
               </label>
-              <motion.label
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                className="flex flex-col items-center justify-center w-full p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
-              >
-                <IoCloudUploadOutline className="w-10 h-10 text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500 mb-1">
-                  <span className="font-semibold text-blue-600">
-                    Click to upload
-                  </span>{" "}
-                  or drag and drop
-                </p>
-                <p className="text-xs text-gray-400">PNG, JPG, GIF up to 5MB</p>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </motion.label>
 
-              {/* Image Previews */}
-              <AnimatePresence>
-                {previews.length > 0 && (
-                  <motion.div
-                    className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4"
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.1 }}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Front Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Front Image
+                  </label>
+                  <motion.label
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
                   >
-                    {previews.map((src, idx) => (
+                    <IoCloudUploadOutline className="w-8 h-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-500 mb-1">
+                      <span className="font-semibold text-blue-600">
+                        Click to upload
+                      </span>{" "}
+                      or drag and drop
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      PNG, JPG, GIF up to 5MB
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileChange(e, "front")}
+                      className="hidden"
+                    />
+                  </motion.label>
+
+                  {/* Front Image Preview */}
+                  <AnimatePresence>
+                    {frontPreview && (
                       <motion.div
-                        key={idx}
-                        className="relative group"
-                        whileHover={{ scale: 1.03 }}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        transition={{ type: "spring", stiffness: 200 }}
+                        className="relative mt-4"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.1 }}
                       >
-                        <img
-                          src={src}
-                          alt={`preview-${idx}`}
-                          className="w-full h-32 object-cover rounded-md shadow"
-                        />
-                        <motion.button
-                          type="button"
-                          className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleRemoveImage(idx);
-                          }}
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                        >
-                          <IoClose className="w-4 h-4" />
-                        </motion.button>
+                        <div className="relative group">
+                          <img
+                            src={frontPreview}
+                            alt="Front preview"
+                            className="w-full h-40 object-contain rounded-md shadow"
+                          />
+                          <motion.button
+                            type="button"
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveImage("front")}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <IoClose className="w-4 h-4" />
+                          </motion.button>
+                        </div>
                       </motion.div>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Back Image Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Back Image
+                  </label>
+                  <motion.label
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex flex-col items-center justify-center w-full p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 transition-colors"
+                  >
+                    <IoCloudUploadOutline className="w-8 h-8 text-gray-400 mb-2" />
+                    <p className="text-sm text-gray-500 mb-1">
+                      <span className="font-semibold text-blue-600">
+                        Click to upload
+                      </span>{" "}
+                      or drag and drop
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      PNG, JPG, GIF up to 5MB
+                    </p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleFileChange(e, "back")}
+                      className="hidden"
+                    />
+                  </motion.label>
+
+                  {/* Back Image Preview */}
+                  <AnimatePresence>
+                    {backPreview && (
+                      <motion.div
+                        className="relative mt-4"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.1 }}
+                      >
+                        <div className="relative group">
+                          <img
+                            src={backPreview}
+                            alt="Back preview"
+                            className="w-full h-40 object-contain rounded-md shadow"
+                          />
+                          <motion.button
+                            type="button"
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveImage("back")}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <IoClose className="w-4 h-4" />
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
             </motion.div>
 
             {/* Form Actions */}
@@ -795,7 +904,7 @@ const AddStyle = () => {
                       <path
                         className="opacity-75"
                         fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        d="M4 12a8 8 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       ></path>
                     </svg>
                     {editingStyle ? "Updating..." : "Creating..."}
@@ -824,10 +933,10 @@ const AddStyle = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                 Factory
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6极速 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                 Customer
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs极速 font-medium text-white uppercase tracking-wider">
                 Season
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
@@ -839,9 +948,13 @@ const AddStyle = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                 Description
               </th>
-              <th className="px-6 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
-                Actions
-              </th>
+              {userRole === "Admin" ? (
+                <th className="px-6 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
+                  Actions
+                </th>
+              ) : (
+                ""
+              )}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -865,7 +978,7 @@ const AddStyle = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-700">
+                    <div className="极速text-sm text-gray-700">
                       {style.season?.season || "N/A"}
                     </div>
                   </td>
@@ -884,26 +997,30 @@ const AddStyle = () => {
                       {style.style_description || "N/A"}
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <div className="flex justify-center space-x-4">
-                      <motion.button
-                        className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleEditStyle(style)}
-                      >
-                        <MdModeEditOutline className="text-2xl" />
-                      </motion.button>
-                      <motion.button
-                        className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                        whileHover={{ scale: 1.2 }}
-                        whileTap={{ scale: 0.9 }}
-                        onClick={() => handleDeleteStyle(style.style_id)}
-                      >
-                        <MdDeleteForever className="text-2xl" />
-                      </motion.button>
-                    </div>
-                  </td>
+                  {userRole === "Admin" ? (
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="flex justify-center space-x-4">
+                        <motion.button
+                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleEditStyle(style)}
+                        >
+                          <MdModeEditOutline className="text-2xl" />
+                        </motion.button>
+                        <motion.button
+                          className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                          whileHover={{ scale: 1.2 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => handleDeleteStyle(style.style_id)}
+                        >
+                          <MdDeleteForever className="text-2xl" />
+                        </motion.button>
+                      </div>
+                    </td>
+                  ) : (
+                    ""
+                  )}
                 </motion.tr>
               ))
             ) : (

@@ -18,10 +18,16 @@ exports.getFactories = async (req, res, next) => {
 
 // to create new factory
 exports.createFactory = async (req, res, next) => {
+  if (req.user.userRole !== "Admin") {
+    const error = new Error("Forbidden: Only Admins can create factories");
+    error.status = 403;
+    throw error;
+  }
+
   try {
     const { factoryCode, factoryName, userId } = req.body;
-    console.log(userId);
-    console.log(req.body);
+    // console.log(userId);
+    // console.log(req.body);
 
     // Check if factory code already exists
     const existingFactory = await Factory.findOne({
@@ -35,7 +41,7 @@ exports.createFactory = async (req, res, next) => {
     }
 
     // Create new factory
-    console.log("user id::: ", userId); //in here it's logind
+    // console.log("user id::: ", userId);
     const newFactory = await Factory.create({
       factory_code: factoryCode,
       factory_name: factoryName,
@@ -54,12 +60,17 @@ exports.createFactory = async (req, res, next) => {
 
 // edit factory
 exports.updateFactory = async (req, res, next) => {
-  console.log(req.body);
+  if (req.user.userRole !== "Admin") {
+    const error = new Error("Not enough permission to perform this action");
+    error.status = 403;
+    throw error;
+  }
+  // console.log(req.body);
   try {
     const { id } = req.params;
-    console.log("current id:", id);
+    // console.log("current id:", id);
     const { factoryCode, factoryName } = req.body;
-    console.log(req.body);
+    // console.log(req.body);
 
     // Find the factory to update
     const factory = await Factory.findByPk(id);
@@ -95,7 +106,7 @@ exports.updateFactory = async (req, res, next) => {
         },
       }
     );
-    console.log(`${id} update success`);
+    // console.log(`${id} update success`);
     return res.status(200).json({
       success: true,
       message: "Factory updated successfully",
@@ -108,6 +119,12 @@ exports.updateFactory = async (req, res, next) => {
 
 // delete a factory
 exports.deleteFactory = async (req, res, next) => {
+  if (req?.user?.userRole !== "Admin") {
+    console.log("delete factory canceled ============= ");
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   try {
     const { id } = req.params;
     const factory = await Factory.findByPk(id);

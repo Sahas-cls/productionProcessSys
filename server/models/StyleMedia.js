@@ -20,6 +20,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         validate: { len: [0, 255] },
       },
+      media_type: {
+        type: DataTypes.ENUM("front", "back"),
+        allowNull: false,
+      },
     },
     {
       tableName: "style_media",

@@ -26,7 +26,13 @@ exports.getCustomers = async (req, res, next) => {
 
 // to create new customer
 exports.createCustomer = async (req, res, next) => {
-  console.log(req.body);
+  // console.log(req.body);
+  console.log("user ====== ", req.user);
+  if (req.user.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   try {
     const { customerType, customerName, userId } = req.body;
     console.log("User ID:", userId);
@@ -51,8 +57,13 @@ exports.createCustomer = async (req, res, next) => {
 
 // to edit existing customer
 exports.editCustomer = async (req, res, next) => {
-  console.log(req.body);
+  // console.log(req.body);
   const cusId = req.params.id;
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   // console.log("params ", req.params.id);
   console.log("customer id: ", cusId);
   const { customerType, customerName, userId } = req.body;
@@ -82,6 +93,11 @@ exports.editCustomer = async (req, res, next) => {
 // to delete existing customer
 exports.deleteCustomer = async (req, res, next) => {
   // console.log(req.body);
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const customer_id = req.params.id;
   console.log(customer_id);
 

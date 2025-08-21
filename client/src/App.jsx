@@ -9,10 +9,7 @@ import CustomerPage from "./pages/CustomerPage";
 import SeasonPage from "./pages/SeasonPage";
 import StylePage from "./pages/StylePage";
 import MachinePage from "./pages/MachinePage";
-import OperationBulleting from "./components/OperationBulleting";
-import AddOperationBulleting from "./pages/AddOperationBulletingPage";
 import AddOperationBulletingPage from "./pages/AddOperationBulletingPage";
-import ViewOperationBulletin from "./components/ViewOperationBulleting";
 import ViewOperationBulletingPage from "./pages/ViewOperationBulletingPage";
 import ViewOperation from "./components/ViewOperation";
 import ViewMachinePage from "./pages/ViewMachinePage";
@@ -25,69 +22,86 @@ import ViewWorkstationPage from "./pages/ViewWorkstationPage";
 import EditWorkstation from "./components/EditWorkstation";
 import AddMediaPage from "./pages/AddMediaPage";
 import CameraOrBrowse from "./components/CameraOrBrowse";
-// import StylePage from "./pages/StylePage";
-// import ViewMachine from "./pages/ViewMachine";
+import { useAuth } from "./hooks/useAuth";
+import Reports from "./components/ReportsPage";
 
-const App = () => (
-  <UserProvider>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/admin-panel" element={<AdminPanel />} />
-        <Route path="/user/registration" element={<Register />} />
-        <Route path="/factory" element={<FactoryPage />} />
-        <Route path="/customer" element={<CustomerPage />} />
-        <Route path="/season" element={<SeasonPage />} />
-        <Route path="/style" element={<StylePage />} />
-        <Route path="/machine" element={<MachinePage />} />
-        <Route path="/open-camera" element={<CameraOrBrowse />} />
-        <Route
-          path="/operation-bulletin/add"
-          element={<AddOperationBulletingPage />}
-        />
-        <Route
-          path="/operation-bulletin/list"
-          element={<ViewOperationBulletingPage />}
-        />
-        <Route
-          path="/operation-bulletin/operation-details"
-          element={<ViewOperation />}
-        />
-        <Route
-          path="/operation-bulletin/helper-operation-details"
-          element={<ViewHelperOperation />}
-        />
-        <Route path="/view-machine" element={<ViewMachinePage />} />
+const App = () => {
+  const { user, loading } = useAuth(); // ✅ use inside component
 
-        {/* edit main operation */}
-        <Route path="/operations/edit/:id" element={<EditMainOperation />} />
+  // alert(user?.userRole);
 
-        {/* edit sub operation */}
-        <Route
-          path="/operations/edit-sub-operation"
-          element={<EditSubOperationPage />}
-        />
-        {/* <Route path="/view/machine" element={<ViewMachine />} /> */}
-        {/* <Route path="/view/machine" element={<ViewMachine />} /> */}
+  if (loading) {
+    return <div>Loading...</div>; // simple loading UI
+  }
 
-        {/* to create new layout */}
-        <Route path="/layout/create-new-layout" element={<AddLayoutPage />} />
+  return (
+    <UserProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route path="/admin-panel" element={<AdminPanel />} />
+          <Route path="/factory" element={<FactoryPage />} />
+          <Route path="/customer" element={<CustomerPage />} />
+          <Route path="/season" element={<SeasonPage />} />
+          <Route path="/style" element={<StylePage />} />
+          <Route path="/machine" element={<MachinePage />} />
+          <Route path="/open-camera" element={<CameraOrBrowse />} />
+          <Route path="/user/registration" element={<Register />} />
 
-        {/* to display all views  */}
-        <Route path="/layout/list-view" element={<ViewLayoutPage />} />
+          <Route
+            path="/operation-bulletin/add"
+            element={<AddOperationBulletingPage />}
+          />
+          <Route
+            path="/operation-bulletin/list"
+            element={<ViewOperationBulletingPage />}
+          />
+          <Route
+            path="/operation-bulletin/operation-details"
+            element={<ViewOperation />}
+          />
+          <Route
+            path="/operation-bulletin/helper-operation-details"
+            element={<ViewHelperOperation />}
+          />
+          <Route path="/view-machine" element={<ViewMachinePage />} />
 
-        {/* to dispaly workstations according to layout */}
-        <Route
-          path="/workstation/list-view"
-          element={<ViewWorkstationPage />}
-        />
-        {/* to edit workstation */}
-        <Route path="/workstation/edit" element={<EditWorkstation />} />
-        {/* to upload medias */}
-        <Route path="/sub-Operation/add-media" element={<AddMediaPage />} />
-      </Routes>
-    </BrowserRouter>
-  </UserProvider>
-);
+          {/* edit main operation */}
+          <Route path="/operations/edit/:id" element={<EditMainOperation />} />
+
+          {/* edit sub operation */}
+          <Route
+            path="/operations/edit-sub-operation"
+            element={<EditSubOperationPage />}
+          />
+
+          {/* to create new layout */}
+          <Route
+            path="/layout/create-new-layout"
+            element={<AddLayoutPage userRole={user?.userRole} />}
+          />
+
+          {/* to display all layouts */}
+          <Route path="/layout/list-view" element={<ViewLayoutPage />} />
+
+          {/* to display workstations */}
+          <Route
+            path="/workstation/list-view"
+            element={<ViewWorkstationPage userRole={user?.userRole} />}
+          />
+
+          {/* to edit workstation */}
+          <Route path="/workstation/edit" element={<EditWorkstation />} />
+
+          {/* to upload medias */}
+          <Route path="/sub-Operation/add-media" element={<AddMediaPage />} />
+
+          {/* for display reports */}
+          <Route path="/reports" element={<Reports />} />
+        </Routes>
+      </BrowserRouter>
+    </UserProvider>
+  );
+};
 
 export default App;

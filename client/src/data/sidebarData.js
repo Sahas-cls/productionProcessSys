@@ -151,7 +151,7 @@ export const adminSidebarData = [
     id: 8,
     title: "Report",
     icon: TbReport,
-    navigateTo: "/report",
+    navigateTo: "/reports",
   },
 ];
 

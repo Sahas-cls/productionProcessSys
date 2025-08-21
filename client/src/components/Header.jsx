@@ -3,8 +3,10 @@ import { FiUser } from "react-icons/fi";
 import { useUser } from "../contexts/userContext";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
 const Header = ({ toggleSidebar, setToggleSidebar }) => {
+  const { user: loggedUser, loading } = useAuth();
   const { user, logout } = useUser(); // assuming logout() is defined in context
   console.log("user name from factory page: ", user);
   const [showOptions, setShowOptions] = useState(false);
@@ -37,7 +39,10 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
         <button className="md:hidden" onClick={handleSidebar}>
           <GiHamburgerMenu size={24} />
         </button>
-        <h1 className="text-xl font-bold text-gray-500">Admin Panel</h1>
+        <h1 className="text-xl font-bold text-gray-500 font-sans italic">
+          {loggedUser?.userRole === "Admin" ? "Admin " : "User "}
+          Panel
+        </h1>
       </div>
 
       {/* Right section */}

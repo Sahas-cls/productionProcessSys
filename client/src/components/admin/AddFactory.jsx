@@ -10,21 +10,24 @@ import swal from "sweetalert2";
 import axios from "axios";
 import useFactory from "../../hooks/useFactories";
 import { useUser } from "../../contexts/userContext.jsx";
+import { useNavigate } from "react-router-dom";
 
-const AddFactory = () => {
+const AddFactory = ({ userRole }) => {
+  // alert("user role ", userRole);
   const [isAddFactory, setIsAddFactory] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL;
   const [serverMessages, setServerMessages] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentFactoryId, setCurrentFactoryId] = useState(null);
   const { user } = useUser();
-  console.log("current user: ", user);
+  // console.log("current user: ", user);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (user) {
-      console.log("useEffect : ", user.userId);
+      // console.log("useEffect : ", user.userId);
       formik.setFieldValue("userId", user.userId);
     }
   }, [user]);
@@ -187,13 +190,24 @@ const AddFactory = () => {
         refreshFactories();
       }
     } catch (error) {
-      console.log(error);
+      const res = error?.response;
+      console.error("Factory operation error:", error);
+      if (res?.status === 401) {
+        await swal.fire({
+          title: "Unauthorized - (401)",
+          text: "You don't have a enough permission to perform this action or maybe your session is expired please login to the system again",
+          icon: "error",
+        });
+
+        navigate("/");
+      }
+      // console.log(error);
     }
   };
 
   // handle submit function for both create and update
   const handleSubmit = async (values) => {
-    console.log(formik.values.userId);
+    // console.log(formik.values.userId);
     try {
       let result;
 
@@ -250,6 +264,14 @@ const AddFactory = () => {
         formik.setErrors({
           factoryCode: res.data?.message || "Factory code already exists",
         });
+      } else if (res?.status === 401) {
+        await swal.fire({
+          title: "Unauthorized - (401)",
+          text: "You don't have a enough permission to perform this action or maybe your session is expired please login to the system again",
+          icon: "error",
+        });
+
+        navigate("/");
       } else {
         setServerMessages({
           status: "error",
@@ -318,27 +340,31 @@ const AddFactory = () => {
         </motion.div>
 
         {/* Add Factory Button */}
-        <motion.button
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
-          onClick={() => {
-            if (isAddFactory) {
-              handleCancel();
-            } else {
-              setIsAddFactory(true);
-              setIsEditing(false);
-              setCurrentFactoryId(null);
-            }
-          }}
-          variants={buttonVariants}
-          whileHover="hover"
-          whileTap="tap"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          <IoMdAdd className="text-xl" />
-          {isAddFactory ? "Close Form" : "Add Factory"}
-        </motion.button>
+        {userRole === "Admin" ? (
+          <motion.button
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
+            onClick={() => {
+              if (isAddFactory) {
+                handleCancel();
+              } else {
+                setIsAddFactory(true);
+                setIsEditing(false);
+                setCurrentFactoryId(null);
+              }
+            }}
+            variants={buttonVariants}
+            whileHover="hover"
+            whileTap="tap"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <IoMdAdd className="text-xl" />
+            {isAddFactory ? "Close Form" : "Add Factory"}
+          </motion.button>
+        ) : (
+          <div></div>
+        )}
       </div>
 
       {/* Form Section */}
@@ -504,9 +530,13 @@ const AddFactory = () => {
                 <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Factory Name
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
-                  Actions
-                </th>
+                {userRole === "Admin" ? (
+                  <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
+                    Actions
+                  </th>
+                ) : (
+                  ""
+                )}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -529,26 +559,30 @@ const AddFactory = () => {
                         {factory.factory_name}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex justify-center space-x-4">
-                        <motion.button
-                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleEditFactory(factory)}
-                        >
-                          <MdModeEditOutline className="text-2xl" />
-                        </motion.button>
-                        <motion.button
-                          className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleDelete(factory.factory_id)}
-                        >
-                          <MdDeleteForever className="text-2xl" />
-                        </motion.button>
-                      </div>
-                    </td>
+                    {userRole === "Admin" ? (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex justify-center space-x-4">
+                          <motion.button
+                            className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleEditFactory(factory)}
+                          >
+                            <MdModeEditOutline className="text-2xl" />
+                          </motion.button>
+                          <motion.button
+                            className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleDelete(factory.factory_id)}
+                          >
+                            <MdDeleteForever className="text-2xl" />
+                          </motion.button>
+                        </div>
+                      </td>
+                    ) : (
+                      ""
+                    )}
                   </motion.tr>
                 ))
               ) : (

@@ -64,8 +64,6 @@ exports.getBOList = async (req, res, next) => {
 // to get operations and suboperations for specific style
 exports.getSBO = async (req, res, next) => {
   const { styleId } = req.params;
-  console.log("get sbo called =========================================== ");
-  console.log(req.params);
   try {
     console.log(req.body);
 
@@ -257,7 +255,11 @@ exports.createOperation = async (req, res, next) => {
 // to create one main operation based on style
 exports.createMainOperation = async (req, res, next) => {
   //
-  console.log("request body", req.body);
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const { style_no, operation_type, operation_name } = req.body;
 
   try {
@@ -278,8 +280,11 @@ exports.createMainOperation = async (req, res, next) => {
 
 // to create sub operation based on main opeartion
 exports.createSubOp = async (req, res, next) => {
-  console.log("creating sub operation", req.body);
-
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const {
     subOperationNo,
     smv,
@@ -389,7 +394,12 @@ exports.createSubOp = async (req, res, next) => {
 
 // edit main operation data
 exports.editMainOperation = async (req, res, next) => {
-  console.log(req.body);
+  // console.log(req.body);
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const { style_no, operation_name, operationId } = req.body;
   console.log("Operation name ", operation_name);
   console.log("parameter :", req.params);
@@ -435,6 +445,11 @@ exports.createBulkOperations = async (req, res, next) => {
   // console.log(req.body);
   // return;
   // console.log("request body: ", req.body);
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   try {
     const {
       styleNumber,
@@ -707,6 +722,11 @@ exports.updateSubOperation = async (req, res, next) => {
 
 // to delete operation
 exports.deleteOperation = async (req, res, next) => {
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   try {
     const { id } = req.params;
 
@@ -780,7 +800,11 @@ exports.deleteOperation = async (req, res, next) => {
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
   const t = await sequelize.transaction();
-
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   try {
     await NeedleLooper.destroy({
       where: { sub_operation_id: subOpId },
@@ -821,7 +845,13 @@ exports.deleteSubOperation = async (req, res, next) => {
 // create helper operations
 // ====================================
 exports.createHelperOps = async (req, res, next) => {
-  console.log(req.body);
+  // console.log(req.body);
+
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
 
   const {
     styleNumber,

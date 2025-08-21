@@ -86,9 +86,15 @@ exports.userLogin = async (req, res, next) => {
     } = isUser;
 
     // Fetch related info
-    const category = await UserCategory.findOne({ where: { category_id: user_category } });
-    const factory = await Factory.findOne({ where: { factory_id: user_factory } });
-    const department = await Department.findOne({ where: { department_id: user_department } });
+    const category = await UserCategory.findOne({
+      where: { category_id: user_category },
+    });
+    const factory = await Factory.findOne({
+      where: { factory_id: user_factory },
+    });
+    const department = await Department.findOne({
+      where: { department_id: user_department },
+    });
 
     // Safety checks (optional but good for clean code)
     if (!category || !factory || !department) {
@@ -129,5 +135,36 @@ exports.userLogin = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// check user have access to client side routes
+exports.authCheck = async (req, res, next) => {
+  console.log("Authenticating user ========= *************** ===============");
+  const token = req.cookies.jwt;
+
+  if (!token) {
+    const error = new Error("No token, authorization denied");
+    error.status = 401;
+    return next(error); // ✅ added return
+  }
+
+  try {
+    const decode = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("decode ========== ", decode);
+
+    const user = {
+      userId: decode.userId,
+      userRole: decode.userCategoryN, // ✅ keep consistent naming
+    };
+
+    return res.status(200).json({
+      status: "success",
+      user,
+    });
+  } catch (error) {
+    console.error("Auth Error:", error.message);
+    error.status = 403;
+    return next(error); // ✅ let global handler handle it
   }
 };

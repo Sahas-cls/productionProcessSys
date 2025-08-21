@@ -6,9 +6,33 @@ import AddCustomer from "../components/admin/AddCustomer";
 import AddSeason from "../components/admin/AddSeason";
 import AddStyle from "../components/admin/AddStyle";
 import OperationBulleting from "../components/OperationBulleting";
+import { useAuth } from "../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 const AddOperationBulletingPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
+  const navigate = useNavigate();
+  const { user, loading, error } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      Swal.fire({
+        title: "Unauthorized",
+        text: "Please login to continue",
+        icon: "error",
+      }).then(() => navigate("/"));
+    } else if (!loading && user && user.userRole !== "Admin") {
+      navigate(-1);
+    }
+  }, [user, loading, navigate]);
+
+  if (loading) {
+    return <div className="">Loading...</div>;
+  }
+
+  if (!user) {
+    return null;
+  }
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
       <Sidebar
@@ -34,6 +58,6 @@ const AddOperationBulletingPage = () => {
       </div>
     </div>
   );
-};  
+};
 
 export default AddOperationBulletingPage;

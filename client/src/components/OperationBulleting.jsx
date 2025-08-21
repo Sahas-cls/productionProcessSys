@@ -425,12 +425,13 @@ const OperationBulleting = () => {
         </div>
 
         <div className="md:col-span-4 grid grid-cols-2 gap-3 md:gap-4 w-full">
-          <button
+          {/* <button
             type="button"
             className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition-colors"
           >
             Download
-          </button>
+          </button> */}
+          <div className=""></div>
           <button
             type="button"
             onClick={() => {

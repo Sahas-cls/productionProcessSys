@@ -11,8 +11,9 @@ import useMachine from "../../hooks/useMachine";
 import Barcode from "react-barcode";
 import { useReactToPrint } from "react-to-print";
 import PrintableBarcode from "../PrintableBarcode";
+import Swal from "sweetalert2";
 
-const AddMachine = ({ onViewMachine }) => {
+const AddMachine = ({ onViewMachine, userRole }) => {
   const [isAddStyle, setIsAddStyle] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingMachine, setEditingMachine] = useState(null);
@@ -22,6 +23,40 @@ const AddMachine = ({ onViewMachine }) => {
   // to fetch machine dataset
   const { machineList, isLoading, refresh } = useMachine();
   console.log("machine list; ", machineList);
+
+  const handleExcelDownload = async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/api/machine/getExcel`, {
+        withCredentials: true,
+        responseType: "blob", // 👈 important for file download
+      });
+
+      // Create file URL
+      const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
+
+      // Create hidden download link
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.setAttribute("download", "machines.xlsx"); // 👈 filename
+      document.body.appendChild(link);
+
+      // Trigger click → download starts immediately
+      link.click();
+
+      // Cleanup
+      link.remove();
+      window.URL.revokeObjectURL(fileUrl);
+    } catch (error) {
+      if (error.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "Your don't have permission to perform this action, please login again",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
+      console.error("Excel download failed:", error);
+    }
+  };
 
   // Get distinct style names for a machine
   const getStyleNames = (machine) => {
@@ -143,6 +178,13 @@ const AddMachine = ({ onViewMachine }) => {
       setIsAddStyle(false);
     } catch (error) {
       console.error(error);
+      if (error.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "Your don't have permission to perform this action, please login again",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
       if (error.response && error.response.status === 400) {
         const serverMsg = error.response.data.message;
         const field = error.response.data.field || "machine_no";
@@ -187,7 +229,14 @@ const AddMachine = ({ onViewMachine }) => {
         }
       } catch (error) {
         console.error(error);
-        alert("Failed to delete machine");
+        if (error.status === 401) {
+          Swal.fire({
+            title: "Unauthorized",
+            text: "Your don't have permission to perform this action, please login again",
+            icon: "error",
+          }).then(() => navigate("/"));
+        }
+        // alert("Failed to delete machine");
       }
     }
   };
@@ -239,25 +288,30 @@ const AddMachine = ({ onViewMachine }) => {
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
+            onClick={() => handleExcelDownload()}
           >
             <div className="flex items-center gap-2">
               <IoCloudUploadOutline className="text-lg" />
               Download
             </div>
           </motion.button>
-          <motion.button
-            type="button"
-            className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
-            variants={buttonVariants}
-            whileHover="hover"
-            whileTap="tap"
-            onClick={() => {
-              setEditingMachine(null);
-              setIsAddStyle(!isAddStyle);
-            }}
-          >
-            {isAddStyle ? "Close Form" : "Add Machine"}
-          </motion.button>
+          {userRole === "Admin" ? (
+            <motion.button
+              type="button"
+              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={() => {
+                setEditingMachine(null);
+                setIsAddStyle(!isAddStyle);
+              }}
+            >
+              {isAddStyle ? "Close Form" : "Add Machine"}
+            </motion.button>
+          ) : (
+            ""
+          )}
         </div>
       </motion.div>
 
@@ -541,9 +595,13 @@ const AddMachine = ({ onViewMachine }) => {
               <th className="whitespace-nowrap border-r border px-2 py-3">
                 Existing Style
               </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Actions
-              </th>
+              {userRole === "Admin" ? (
+                <th className="whitespace-nowrap border-r border px-2 py-3">
+                  Actions
+                </th>
+              ) : (
+                ""
+              )}
             </tr>
           </thead>
           <tbody>
@@ -570,24 +628,28 @@ const AddMachine = ({ onViewMachine }) => {
                 <td className="py-2 text-center whitespace-nowrap border">
                   {getStyleNames(machine)}
                 </td>
-                <td className="py-2 text-center whitespace-nowrap">
-                  <div className="flex justify-center gap-3">
-                    <TbEyeSpark
-                      onClick={() =>
-                        navigate("/view-machine", { state: machine })
-                      }
-                      className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
-                    />
-                    <MdModeEditOutline
-                      onClick={() => handleEdit(machine)}
-                      className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
-                    />
-                    <MdDeleteForever
-                      onClick={() => handleDelete(machine.machine_id)}
-                      className="text-2xl text-black hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
-                    />
-                  </div>
-                </td>
+                {userRole === "Admin" ? (
+                  <td className="py-2 text-center whitespace-nowrap">
+                    <div className="flex justify-center gap-3">
+                      <TbEyeSpark
+                        onClick={() =>
+                          navigate("/view-machine", { state: machine })
+                        }
+                        className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
+                      />
+                      <MdModeEditOutline
+                        onClick={() => handleEdit(machine)}
+                        className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
+                      />
+                      <MdDeleteForever
+                        onClick={() => handleDelete(machine.machine_id)}
+                        className="text-2xl text-black hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
+                      />
+                    </div>
+                  </td>
+                ) : (
+                  ""
+                )}
               </tr>
             ))}
           </tbody>

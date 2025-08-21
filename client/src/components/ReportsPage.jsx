@@ -1,12 +1,11 @@
 import React, { useState } from "react";
-import Header from "../components/Header";
-import AddFactory from "../components/admin/AddFactory";
-import Sidebar from "../components/Sidebar";
+import Sidebar from "./Sidebar";
+import Header from "./Header";
+import AddFactory from "./admin/AddFactory";
 import { motion, AnimatePresence } from "framer-motion";
-import ViewWorkstations from "../components/ViewWorkstations";
+import Report from "./Report";
 
-const ViewWorkstationPage = () => {
-  // alert("author role: ", userRole);
+const ReportsPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
@@ -27,7 +26,7 @@ const ViewWorkstationPage = () => {
             exit="exit"
             className="bg-gray-200 w-full min-h-screen"
           >
-            <ViewWorkstations/>
+            <Report />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -35,4 +34,4 @@ const ViewWorkstationPage = () => {
   );
 };
 
-export default ViewWorkstationPage;
+export default ReportsPage;

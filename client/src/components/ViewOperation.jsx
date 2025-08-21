@@ -6,13 +6,14 @@ import AddOperationOB from "./AddOperationOB";
 import AddSubOperationOB from "./AddSubOperationOB";
 import { IoCloseOutline } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "../hooks/useAuth";
 
 const ViewStyleDetails = () => {
   const navigate = useNavigate();
   const { style_id } = useParams();
   const apiUrl = import.meta.env.VITE_API_URL;
   const location = useLocation();
-
+  // alert(location.state);
   const [style, setStyle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -20,6 +21,7 @@ const ViewStyleDetails = () => {
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
   const [mainOperationId, setMainOperationId] = useState(""); //this will send to the add sub opeartion child as a prop
+  const { user, loading: userLoading, error } = useAuth();
 
   const fetchStyleData = async () => {
     try {
@@ -182,6 +184,7 @@ const ViewStyleDetails = () => {
       </div>
     );
   }
+  const userRole = user?.userRole || null;
 
   return (
     <div className="container mx-auto p-4 md:p-6 max-w-6xl">
@@ -318,12 +321,16 @@ const ViewStyleDetails = () => {
             <h2 className="text-xl font-semibold text-gray-800">
               Operations ({style.operations?.length || 0})
             </h2>
-            <button
-              onClick={() => setIsAddingMO(true)}
-              className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
-            >
-              Add Operation
-            </button>
+            {userRole === "Admin" ? (
+              <button
+                onClick={() => setIsAddingMO(true)}
+                className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+              >
+                Add Operation
+              </button>
+            ) : (
+              ""
+            )}
           </div>
 
           {style.operations?.length > 0 ? (
@@ -387,16 +394,20 @@ const ViewStyleDetails = () => {
                           Sub-Operations ({operation.subOperations?.length || 0}
                           )
                         </h4>
-                        <button
-                          onClick={() => {
-                            setMainOperationId(operation);
-                            setIsAddingSubOP(true);
-                            // alert(mainOperationId);
-                          }}
-                          className="px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs"
-                        >
-                          Add Sub-Operation
-                        </button>
+                        {userRole === "Admin" ? (
+                          <button
+                            onClick={() => {
+                              setMainOperationId(operation);
+                              setIsAddingSubOP(true);
+                              // alert(mainOperationId);
+                            }}
+                            className="px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs"
+                          >
+                            Add Sub-Operation
+                          </button>
+                        ) : (
+                          ""
+                        )}
                       </div>
 
                       {operation.subOperations?.length > 0 ? (
@@ -435,35 +446,40 @@ const ViewStyleDetails = () => {
                                     </p>
                                   </div>
                                 </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() =>
-                                      navigate(
-                                        `/operations/edit-sub-operation`,
-                                        {
-                                          state: {
-                                            subOperation: subOp,
-                                            operationId: operation.operation_id,
-                                          },
-                                        }
-                                      )
-                                    }
-                                    className="px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      handleDeleteSubOperation(
-                                        subOp.sub_operation_id,
-                                        operation.operation_id
-                                      )
-                                    }
-                                    className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
+                                {userRole === "Admin" ? (
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() =>
+                                        navigate(
+                                          `/operations/edit-sub-operation`,
+                                          {
+                                            state: {
+                                              subOperation: subOp,
+                                              operationId:
+                                                operation.operation_id,
+                                            },
+                                          }
+                                        )
+                                      }
+                                      className="px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteSubOperation(
+                                          subOp.sub_operation_id,
+                                          operation.operation_id
+                                        )
+                                      }
+                                      className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                ) : (
+                                  ""
+                                )}
                               </div>
 
                               {/* Machines and their configurations */}

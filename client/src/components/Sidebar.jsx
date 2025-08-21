@@ -48,6 +48,35 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
     hover: { x: 15, scale: 1.05 },
   };
 
+  const logoVariant = {
+    hidden: { y: -200, opacity: 0.2 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: {
+        duration: 0.8,
+        type: "spring",
+        stiffness: 200,
+        staggerChildren: 0.3,
+      },
+    },
+  };
+
+  const ulVariant = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { duration: 0.4, staggerChildren: 0.4 },
+    },
+    exit: { opacity: 0 },
+  };
+
+  const liVariant = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: 0.4 } },
+    exit: { opacity: 0 },
+  };
+
   return (
     <aside
       ref={sidebarRef}
@@ -56,14 +85,21 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
       } md:block w-[70%] absolute md:relative z-30 bg-white shadow-sm overflow-y-auto overflow-clip`}
     >
       {/* Logo */}
-      <div className="flex flex-col items-center justify-center mt-10 ml-1">
-        <img src={concordLogo} alt="Logo" className="w-20" />
-        <h1 className="text-xl uppercase font-semibold">Concord Group</h1>
-      </div>
+      <motion.div
+        variants={logoVariant}
+        initial="hidden"
+        animate="visible"
+        className="flex flex-col items-center justify-center mt-10 ml-1"
+      >
+        <motion.img src={concordLogo} alt="Logo" className="w-20" />
+        <motion.h1 className="text-xl uppercase font-semibold">
+          Concord Group
+        </motion.h1>
+      </motion.div>
 
       {/* Navigation */}
       <nav className="mt-10 px-2">
-        <ul className="space-y-2 cursor-pointer">
+        <motion.ul variants={ulVariant} initial="hidden" animate="visible"  className="space-y-2 cursor-pointer">
           {adminSidebarData.map((item) => (
             <div key={item.id}>
               <motion.li
@@ -72,7 +108,9 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
                 animate="visible"
                 whileHover="hover"
                 className={`flex items-center justify-between px-3 py-2 rounded ${
-                  isActive(item.navigateTo || "") ? "bg-gray-200 font-bold" : "hover:bg-gray-100"
+                  isActive(item.navigateTo || "")
+                    ? "bg-gray-200 font-bold"
+                    : "hover:bg-gray-100"
                 }`}
                 onClick={() =>
                   item.submenu
@@ -116,7 +154,7 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
               )}
             </div>
           ))}
-        </ul>
+        </motion.ul>
       </nav>
     </aside>
   );

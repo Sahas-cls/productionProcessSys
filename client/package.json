@@ -18,6 +18,8 @@
     "formik": "^2.4.6",
     "framer-motion": "^12.19.1",
     "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.1",
     "multer": "^2.0.2",
     "print-js": "^1.6.0",
     "react": "^19.1.0",

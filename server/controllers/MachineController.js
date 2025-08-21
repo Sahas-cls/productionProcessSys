@@ -1,4 +1,5 @@
 const { Machine, SubOperation, MainOperation, Style } = require("../models");
+const ExcelJS = require("exceljs");
 
 // to get all machine details
 exports.getMachineData = async (req, res, next) => {
@@ -31,8 +32,12 @@ exports.getMachineData = async (req, res, next) => {
 };
 // to create new machine
 exports.createMachine = async (req, res, next) => {
-  console.log("Creating new machine...");
-
+  // console.log("Creating new machine...");
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const {
     machine_type,
     machine_no,
@@ -98,6 +103,11 @@ exports.createMachine = async (req, res, next) => {
 // to edit new machine
 exports.editMachine = async (req, res, next) => {
   //
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const { mId } = req.params;
   console.log(req.params);
   console.log(req.body);
@@ -138,6 +148,11 @@ exports.editMachine = async (req, res, next) => {
 // to delete new machine
 exports.deleteMachine = async (req, res, next) => {
   //
+  if (req?.user?.userRole !== "Admin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    throw error;
+  }
   const { mId } = req.params;
   try {
     const deleteMachine = await Machine.destroy({ where: { machine_id: mId } });
@@ -145,4 +160,63 @@ exports.deleteMachine = async (req, res, next) => {
       .status(200)
       .json({ status: "success", message: "Machine delete success" });
   } catch (error) {}
+};
+
+// to generate excel file that includes machine details
+exports.getExcelFile = async (req, res, next) => {
+  console.log("generating excel");
+  try {
+    const machines = await Machine.findAll({
+      attributes: {
+        exclude: ["updatedAt"], // exclude updatedAt if you don’t want it
+      },
+    });
+
+    // Create workbook & worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Machines");
+
+    // Define columns
+    worksheet.columns = [
+      { header: "Machine ID", key: "machine_id", width: 12 },
+      { header: "Machine No", key: "machine_no", width: 15 },
+      { header: "Machine Name", key: "machine_name", width: 20 },
+      { header: "Type", key: "machine_type", width: 10 },
+      { header: "Brand", key: "machine_brand", width: 15 },
+      { header: "Location", key: "machine_location", width: 20 },
+      { header: "Purchase Date", key: "purchase_date", width: 20 },
+      { header: "Supplier", key: "supplier", width: 15 },
+      { header: "Service Date", key: "service_date", width: 20 },
+      { header: "Status", key: "machine_status", width: 12 },
+      { header: "Created At", key: "createdAt", width: 20 },
+    ];
+
+    // Style header row
+    worksheet.getRow(1).eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; // white bold text
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "4472C4" }, // blue header background
+      };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+    });
+
+    // Add rows
+    machines.forEach((machine) => {
+      worksheet.addRow(machine.dataValues);
+    });
+
+    // Send file to client
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", "attachment; filename=machines.xlsx");
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    return next(error);
+  }
 };
