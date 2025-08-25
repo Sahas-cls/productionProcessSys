@@ -1,4 +1,10 @@
-const { Machine, SubOperation, MainOperation, Style } = require("../models");
+const {
+  Sequelize,
+  Machine,
+  SubOperation,
+  MainOperation,
+  Style,
+} = require("../models");
 const ExcelJS = require("exceljs");
 
 // to get all machine details
@@ -217,6 +223,31 @@ exports.getExcelFile = async (req, res, next) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
+    return next(error);
+  }
+};
+
+// to get all machine types
+exports.getMachineTypes = async (req, res, next) => {
+  //
+  console.log(req.body);
+  console.log("get machine types =-=-=--=-=-=-=-=-=-=- ");
+  try {
+    const machineTypes = await Machine.findAll({
+      attributes: [
+        [
+          Sequelize.fn("DISTINCT", Sequelize.col("machine_type")),
+          "machine_type",
+        ],
+      ],
+      raw: true,
+    });
+
+    const types = machineTypes.map((row) => row.machine_type);
+    res.status(200).json({ status: 200, data: types });
+    console.log(types); // ["TypeA", "TypeB", ...]
+  } catch (error) {
+    console.log("error while fetching machine types: ", error);
     return next(error);
   }
 };

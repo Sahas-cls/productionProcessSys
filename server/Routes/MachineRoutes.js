@@ -6,6 +6,9 @@ const authMiddleware = require("../middlewares/AuthUser");
 // to get machine details
 router.get("/getMachiens", controlers.getMachineData);
 
+// to get machine types
+router.get("/getMachineTypes", controlers.getMachineTypes);
+
 // to create new mahcine
 router.post("/createMachine", authMiddleware, controlers.createMachine);
 

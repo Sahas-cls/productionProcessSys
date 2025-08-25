@@ -1,6 +1,8 @@
 const { Model } = require("sequelize");
 const {
+  sequelize,
   Style,
+  StyleMedia,
   Customer,
   Factory,
   Season,
@@ -10,8 +12,13 @@ const {
   NeedleLooper,
   NeedleTread,
   NeedleType,
+  SubOperationMedia,
 } = require("../models");
 const ExcelJS = require("exceljs");
+const { v4: uuidv4 } = require("uuid");
+const path = require("path");
+const fs = require("fs");
+// const { sequelize, Style, StyleMedia } = require("../models");
 
 // Helper function to save image to network location
 async function saveImageToNetwork(file, styleNo, imageType, styleId) {
@@ -50,6 +57,10 @@ exports.getStyles = async (req, res, next) => {
     const styles = await Style.findAll({
       include: [
         {
+          model: StyleMedia,
+          as: "style_medias",
+        },
+        {
           model: Customer,
           as: "customer",
           required: true,
@@ -64,6 +75,7 @@ exports.getStyles = async (req, res, next) => {
           as: "season",
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
     // console.log("styles list:- ", styles);
     // console.log(styles);
@@ -145,6 +157,7 @@ exports.getStylesMo = async (req, res, next) => {
                 { model: NeedleType, as: "needle_types" },
                 { model: NeedleTread, as: "needle_treads" },
                 { model: NeedleLooper, as: "needle_loopers" },
+                { model: SubOperationMedia, as: "medias" },
               ],
             },
           ],
@@ -161,12 +174,15 @@ exports.getStylesMo = async (req, res, next) => {
 
 // for add new style
 // for add new style
+
 exports.addStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
-    throw error;
+    return next(error);
   }
+
+  const t = await sequelize.transaction();
 
   try {
     const {
@@ -191,62 +207,49 @@ exports.addStyle = async (req, res, next) => {
       created_by: userId,
     };
 
-    const result = await Style.create(newStyle);
+    // Step 1: Create style
+    const style = await Style.create(newStyle, { transaction: t });
 
-    // Save images to network location and database
     const styleMediaRecords = [];
 
-    // Process front image
-    if (req.files && req.files["frontImage"]) {
-      const frontImage = req.files["frontImage"][0];
-      const frontMediaUrl = await saveImageToNetwork(
-        frontImage,
-        styleNo,
-        "front",
-        result.style_id
-      );
-
-      if (frontMediaUrl) {
+    // Step 2: Process images from multer
+    if (req.files) {
+      if (req.files["frontImage"]) {
+        const file = req.files["frontImage"][0];
         styleMediaRecords.push({
           style_media_id: uuidv4(),
-          style_id: result.style_id,
-          media_url: frontMediaUrl,
+          style_id: style.style_id,
+          media_url: `${file.filename}`, // saved filename (styleNo_front.ext)
           media_type: "front",
         });
       }
-    }
 
-    // Process back image
-    if (req.files && req.files["backImage"]) {
-      const backImage = req.files["backImage"][0];
-      const backMediaUrl = await saveImageToNetwork(
-        backImage,
-        styleNo,
-        "back",
-        result.style_id
-      );
-
-      if (backMediaUrl) {
+      if (req.files["backImage"]) {
+        const file = req.files["backImage"][0];
         styleMediaRecords.push({
           style_media_id: uuidv4(),
-          style_id: result.style_id,
-          media_url: backMediaUrl,
+          style_id: style.style_id,
+          media_url: file.filename, // saved filename (styleNo_back.ext)
           media_type: "back",
         });
       }
     }
 
-    // Save media records to database
+    // Step 3: Save media records
     if (styleMediaRecords.length > 0) {
-      await StyleMedia.bulkCreate(styleMediaRecords);
+      await StyleMedia.bulkCreate(styleMediaRecords, { transaction: t });
     }
+
+    // Step 4: Commit transaction
+    await t.commit();
 
     res.status(201).json({
       status: "success",
-      message: "Style creation success",
-      styleId: result.style_id,
+      message: "Style created successfully",
+      styleId: style.style_id,
     });
   } catch (error) {
+    await t.rollback();
     return next(error);
   }
 };
@@ -258,9 +261,8 @@ exports.editStyle = async (req, res, next) => {
     error.status = 401;
     throw error;
   }
+
   console.log("edit route called");
-  console.log(req.body);
-  console.log("req.params ", req.params);
   const styleId = req.params.id;
   const {
     styleFactory,
@@ -272,14 +274,15 @@ exports.editStyle = async (req, res, next) => {
   } = req.body;
 
   try {
+    // 1️⃣ Find style
     const currentStyle = await Style.findByPk(styleId);
     if (!currentStyle) {
-      console.log("cannot find record to update");
       const error = new Error("Cannot find that style in database");
-      error.status = 401;
+      error.status = 404;
       return next(error);
     }
 
+    // 2️⃣ Update style fields
     const editStyle = {
       factory_id: styleFactory,
       customer_id: styleCustomer,
@@ -288,12 +291,31 @@ exports.editStyle = async (req, res, next) => {
       style_name: styleName,
       style_description: styleDescription,
     };
-
-    console.log("edit style === ", editStyle);
-
     await currentStyle.update(editStyle);
-    console.log("update success");
 
+    // 3️⃣ Handle media files if uploaded
+    const files = req.files;
+    if (files?.frontImage?.[0]) {
+      const frontFile = files.frontImage[0];
+      await StyleMedia.upsert({
+        style_media_id: `${styleId}-front`, // fixed id format
+        style_id: styleId,
+        media_url: frontFile.filename, // multer already renamed
+        media_type: "front",
+      });
+    }
+
+    if (files?.backImage?.[0]) {
+      const backFile = files.backImage[0];
+      await StyleMedia.upsert({
+        style_media_id: `${styleId}-back`,
+        style_id: styleId,
+        media_url: backFile.filename,
+        media_type: "back",
+      });
+    }
+
+    console.log("update success");
     res.status(200).json({ status: "success", message: "Style edit success" });
   } catch (error) {
     console.log(error);
@@ -303,27 +325,52 @@ exports.editStyle = async (req, res, next) => {
 
 // for delete existing style
 exports.deleteStyle = async (req, res, next) => {
-  // console.log(req.body);
-  // console.log(req.params.id);
   if (req?.user?.userRole !== "Admin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
-    throw error;
+    return next(error);
   }
+
   const styleId = req.params.id;
+
   try {
     const style = await Style.findByPk(styleId);
-
     if (!style) {
-      const error = new Error("Cannot find that record on database");
-      error.status = 401;
+      const error = new Error("Cannot find that record in database");
+      error.status = 404;
       return next(error);
     }
 
+    // 1️⃣ fetch all related media
+    const mediaRecords = await StyleMedia.findAll({
+      where: { style_id: styleId },
+    });
+    console.log("media records count =========== ", mediaRecords.length);
+    const networkPath =
+      "\\\\192.168.46.209\\Operation bullatin videos\\StyleImages";
+
+    // 2️⃣ delete files from network share
+    for (const media of mediaRecords) {
+      const filePath = path.join(networkPath, media.media_url);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`Deleted file: ${filePath}`);
+        } catch (err) {
+          console.error(`Failed to delete file: ${filePath}`, err);
+        }
+      }
+    }
+
+    // 3️⃣ delete media records
+    await StyleMedia.destroy({ where: { style_id: styleId } });
+
+    // 4️⃣ delete style record
     await style.destroy();
+
     res
       .status(200)
-      .json({ status: "success", message: "Style delete success" });
+      .json({ status: "success", message: "Style deleted successfully" });
   } catch (error) {
     return next(error);
   }

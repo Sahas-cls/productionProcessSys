@@ -26,12 +26,20 @@ const ViewWorkstations = () => {
   const navigate = useNavigate();
   const { state } = location; //layout id
   // alert(state);
+  console.log("state:-- ", state);
   const [workstationList, setWorkstationList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddingSubM, setIsAddingSubM] = useState(false);
   const [selectedWorkstation, setSelectedWorkstation] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadingData, setUploadingData] = useState({
+    style_id: "",
+    styleNo: "",
+    moId: "",
+    sopId: "",
+    sopName: "",
+  });
 
   const isUploadRef = useRef(null);
 
@@ -82,7 +90,7 @@ const ViewWorkstations = () => {
     try {
       setIsLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/workstations/getWorkstations/${state}`
+        `${apiUrl}/api/workstations/getWorkstations/${state.layout}`
       );
       setWorkstationList(response.data.data);
     } catch (error) {
@@ -91,6 +99,19 @@ const ViewWorkstations = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleUploadData = (moId, sopId, soName) => {
+    // alert("handling upload data");
+    setUploadingData((prev) => ({
+      ...prev,
+      style_id: state.style.style.style_id,
+      styleNo: state.style.style.style_no,
+      moId: moId,
+      sopId: sopId,
+      sopName: soName,
+    }));
+    console.log(`moid: ${moId} sopId: ${sopId} soName: ${soName}`);
   };
 
   const handleGoBack = () => {
@@ -114,7 +135,7 @@ const ViewWorkstations = () => {
 
     try {
       const response = await axios.post(
-        `${apiUrl}/api/workstations/addEmptyWorkstation/${state}`,
+        `${apiUrl}/api/workstations/addEmptyWorkstation/${state.layout}`,
         { workstation_no: workstationNo },
         { withCredentials: true }
       );
@@ -199,7 +220,7 @@ const ViewWorkstations = () => {
 
   useEffect(() => {
     getWorkstations();
-  }, [state]);
+  }, [state.layout]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -275,7 +296,10 @@ const ViewWorkstations = () => {
             className="fixed left-0 backdrop-brightness-50 right-0 bottom-0 w-full z-50 lg:w-full lg:h-screen lg:flex lg:justify-center lg:items-center"
           >
             <div className="lg:w-[40%]">
-              <CameraOrBrowse setIsUploading={setIsUploading} />
+              <CameraOrBrowse
+                setIsUploading={setIsUploading}
+                uploadingData={uploadingData}
+              />
             </div>
           </motion.div>
         )}
@@ -298,7 +322,7 @@ const ViewWorkstations = () => {
             </div>
             <div className="p-4">
               <AddSubOperation
-                style_id={state}
+                style_id={state.layout}
                 workstation_id={selectedWorkstation?.workstation_id}
                 onSuccess={() => {
                   closeAddSubOperationModal();
@@ -318,7 +342,7 @@ const ViewWorkstations = () => {
             </h1>
             <p className="mt-2 text-gray-600">
               <span className="hidden md:inline">Viewing workstation</span>{" "}
-              information for layout #{state}
+              information for layout #{state.layout}
             </p>
           </div>
 
@@ -468,7 +492,9 @@ const ViewWorkstations = () => {
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                               {workstation.subOperations.map((subOp) => (
-                                <tr key={subOp.sub_operation_id}>
+                                <tr
+                                  key={`${workstation.workstation_id}-${subOp.sub_operation_id}`}
+                                >
                                   <td className="px-4 py-3 text-sm font-medium text-gray-900 w-16">
                                     {subOp.sub_operation_id}
                                   </td>
@@ -499,7 +525,16 @@ const ViewWorkstations = () => {
                                         <button
                                           type="button"
                                           className="bg-blue-300/40 p-1 text-blue-700 rounded"
-                                          onClick={() => setIsUploading(true)}
+                                          onClick={() => {
+                                            handleUploadData(
+                                              subOp.suboperatoin
+                                                .main_operation_id,
+                                              subOp.sub_operation_id,
+                                              subOp.suboperatoin
+                                                .sub_operation_name
+                                            );
+                                            setIsUploading(true);
+                                          }}
                                         >
                                           <BsFillCloudUploadFill className="text-xl hover:scale-125" />
                                         </button>

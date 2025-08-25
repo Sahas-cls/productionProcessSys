@@ -9,6 +9,7 @@ import Swal from "sweetalert2";
 import { VscSaveAll } from "react-icons/vsc";
 import { IoIosArrowDropdown } from "react-icons/io";
 import useMachine from "../hooks/useMachine";
+import useStyles from "../hooks/useStyles";
 
 const OperationBulleting = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -17,6 +18,8 @@ const OperationBulleting = () => {
   const [pendingOperations, setPendingOperations] = useState([]);
   const [editingOperation, setEditingOperation] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
+  const { stylesList, isLoading: styleLoading } = useStyles();
+  console.log("style list --- ", stylesList);
   const [persistentValues, setPersistentValues] = useState({
     styleNumber: "",
     mainOperation: "",
@@ -544,16 +547,24 @@ const OperationBulleting = () => {
                     <div>
                       <label className="block mb-1">Style Number *</label>
                       <Field
+                        as="select"
                         name="styleNumber"
-                        type="text"
                         className={`form-input-base ${
                           errors.styleNumber && touched.styleNumber
                             ? "border-red-500"
                             : ""
                         }`}
-                        placeholder="Style Number"
                         onBlur={handleBlur}
-                      />
+                      >
+                        <option value="">Select a style</option>
+                        {Array.isArray(stylesList) &&
+                          stylesList.length > 0 &&
+                          stylesList.map((sty) => (
+                            <option key={sty.style_no} value={sty.style_no}>
+                              {sty.style_no} ({sty.po_number})
+                            </option>
+                          ))}
+                      </Field>
                       <ErrorMessage
                         name="styleNumber"
                         component="div"

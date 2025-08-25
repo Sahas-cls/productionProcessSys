@@ -8,6 +8,7 @@ import AddStyle from "../components/admin/AddStyle";
 import AddMachine from "../components/admin/AddMachine";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import Swal from "sweetalert2";
 
 const MachinePage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);

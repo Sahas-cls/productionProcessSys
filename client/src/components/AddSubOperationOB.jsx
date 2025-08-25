@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Formik, Form, Field, ErrorMessage, FieldArray, swap } from "formik";
 import * as Yup from "yup";
-import { FaPlus, FaEdit } from "react-icons/fa";
+import { FaPlus, FaEdit, FaCheckCircle, FaTimesCircle } from "react-icons/fa";
 import { MdDeleteForever } from "react-icons/md";
 import axios from "axios";
 import Swal from "sweetalert2";
+import useMachine from "../hooks/useMachine";
+import useMachineTypes from "../hooks/useMachineTypes";
 
 // Validation Schema
 const SubOperationSchema = Yup.object().shape({
@@ -34,9 +36,12 @@ const SubOperationSchema = Yup.object().shape({
 });
 const apiUrl = import.meta.env.VITE_API_URL;
 const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
+  const { machineList, refresh } = useMachine();
+  const { machineTList } = useMachineTypes();
+  console.log(machineList);
+  console.log("machine", machineList);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
-
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     try {
       setSubmitting(true);
@@ -271,14 +276,33 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                 <div className="grid grid-cols-1">
                   <label htmlFor="machineNo">Machine No</label>
                   <Field
+                    as="select"
                     name="machineNo"
                     className={`border-2 px-2 py-2 rounded-md shadow-sm ${
                       errors.machineNo && touched.machineNo
                         ? "border-red-500"
                         : ""
                     }`}
-                    placeholder="Machine no"
-                  />
+                  >
+                    <option>Select a machine</option>
+                    {Array.isArray(machineList) &&
+                      machineList.map((mch) => (
+                        <option
+                          className={`${
+                            mch.machine_status === "active"
+                              ? "text-green-600 bg-green-300"
+                              : "text-red-600 bg-red-300"
+                          } font-semibold`}
+                          key={mch.machine_id}
+                          value={mch.machine_no}
+                        >
+                          <span>
+                            {mch.machine_status === "active" ? "✅" : "❌"}{" "}
+                            {mch.machine_no}
+                          </span>
+                        </option>
+                      ))}
+                  </Field>
                   <ErrorMessage
                     name="machineNo"
                     component="div"

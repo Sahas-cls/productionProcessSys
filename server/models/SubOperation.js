@@ -65,6 +65,11 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "sub_operation_id",
       as: "needle_loopers",
     });
+
+    SubOperation.hasMany(models.SubOperationMedia, {
+      foreignKey: "sub_operation_id",
+      as: "medias",
+    });
   };
 
   return SubOperation;

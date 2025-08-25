@@ -306,7 +306,7 @@ const ViewLayout = () => {
                         type="button"
                         onClick={() =>
                           navigate("/workstation/list-view", {
-                            state: layout.layout_id,
+                            state: { layout: layout.layout_id, style: layout },
                           })
                         }
                       >

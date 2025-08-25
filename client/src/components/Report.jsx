@@ -11,6 +11,7 @@ const Report = () => {
   const [poList, setPoList] = useState([]);
   const [operations, setOperations] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [expandedOperations, setExpandedOperations] = useState({});
 
   const fetchStyles = async () => {
     try {
@@ -27,7 +28,7 @@ const Report = () => {
 
   const fetchPOs = async () => {
     if (!selectedStyle) return;
-    
+
     try {
       const response = await axios.get(
         `${apiUrl}/api/styles/getPOList/${selectedStyle}`
@@ -42,35 +43,50 @@ const Report = () => {
   };
 
   const downloadPDF = () => {
-    const input = document.getElementById('summary-report');
+    const input = document.getElementById("summary-report");
     setLoading(true);
-    
+
     html2canvas(input, {
       scale: 2,
       useCORS: true,
-      logging: false
+      logging: false,
     }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
       const imgWidth = 210; // A4 width in mm
       const pageHeight = 295; // A4 height in mm
-      const imgHeight = canvas.height * imgWidth / canvas.width;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
 
       while (heightLeft >= 0) {
         position = heightLeft - imgHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
 
       pdf.save(`${operations.style_no}_${operations.po_number}_summary.pdf`);
       setLoading(false);
     });
+  };
+
+  const toggleOperation = (opIndex) => {
+    setExpandedOperations((prev) => ({
+      ...prev,
+      [opIndex]: !prev[opIndex],
+    }));
+  };
+
+  const toggleSubOperation = (opIndex, subIndex) => {
+    const key = `${opIndex}-${subIndex}`;
+    setExpandedOperations((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
   useEffect(() => {
@@ -84,11 +100,9 @@ const Report = () => {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold italic">
-          Generate a Report
-        </h1>
+        <h1 className="text-xl font-semibold italic">Generate a Report</h1>
       </div>
-      
+
       <Formik
         initialValues={{
           styleNo: "",
@@ -104,7 +118,10 @@ const Report = () => {
             );
 
             if (response.status === 200) {
+              console.log(response);
               setOperations(response.data.data);
+              // Reset expanded state when new data loads
+              setExpandedOperations({});
             }
           } catch (error) {
             console.error(error);
@@ -117,7 +134,9 @@ const Report = () => {
           <Form className="grid grid-cols-3 items-end gap-6 bg-white p-6 rounded-lg shadow-md mb-6">
             {/* Style dropdown */}
             <div className="flex flex-col">
-              <label htmlFor="styleNo" className="mb-2 font-medium">Style</label>
+              <label htmlFor="styleNo" className="mb-2 font-medium">
+                Style
+              </label>
               <Field
                 as="select"
                 name="styleNo"
@@ -142,7 +161,9 @@ const Report = () => {
 
             {/* PO Number dropdown */}
             <div className="flex flex-col">
-              <label htmlFor="poNo" className="mb-2 font-medium">PO Number</label>
+              <label htmlFor="poNo" className="mb-2 font-medium">
+                PO Number
+              </label>
               <Field
                 as="select"
                 name="poNo"
@@ -191,113 +212,265 @@ const Report = () => {
               className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-green-700 transition-colors"
               disabled={loading}
             >
-              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                ></path>
               </svg>
               Download PDF
             </button>
           </div>
 
-          <div id="summary-report" className="p-6 border border-gray-200 rounded-lg">
+          <div
+            id="summary-report"
+            className="p-6 border border-gray-200 rounded-lg"
+          >
             {/* Header Information */}
             <div className="grid grid-cols-2 gap-6 mb-8">
               <div>
-                <h3 className="text-lg font-semibold mb-2">Style Information</h3>
-                <p><span className="font-medium">Style No:</span> {operations.style_no}</p>
-                <p><span className="font-medium">Style Name:</span> {operations.style_name}</p>
-                <p><span className="font-medium">Description:</span> {operations.style_description}</p>
+                <h3 className="text-lg font-semibold mb-2">
+                  Style Information
+                </h3>
+                <p>
+                  <span className="font-medium">Style No:</span>{" "}
+                  {operations.style_no}
+                </p>
+                <p>
+                  <span className="font-medium">Style Name:</span>{" "}
+                  {operations.style_name}
+                </p>
+                <p>
+                  <span className="font-medium">Description:</span>{" "}
+                  {operations.style_description}
+                </p>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-2">Order Information</h3>
-                <p><span className="font-medium">PO Number:</span> {operations.po_number}</p>
-                {/* <p><span className="font-medium">Season ID:</span> {operations.season_id}</p>
-                <p><span className="font-medium">Customer ID:</span> {operations.customer_id}</p> */}
+                <h3 className="text-lg font-semibold mb-2">
+                  Order Information
+                </h3>
+                <p>
+                  <span className="font-medium">PO Number:</span>{" "}
+                  {operations.po_number}
+                </p>
               </div>
             </div>
 
             {/* Operations Table */}
-            <h3 className="text-xl font-semibold mb-4 border-b pb-2">Operations</h3>
-            
+            <h3 className="text-xl font-semibold mb-4 border-b pb-2">
+              Operations
+            </h3>
+
             {operations.operations && operations.operations.length > 0 ? (
               operations.operations.map((operation, opIndex) => (
-                <div key={opIndex} className="mb-8 border rounded-lg p-4 bg-gray-50">
-                  <h4 className="text-lg font-medium mb-3">
-                    {opIndex + 1}. {operation.operation_name}
-                  </h4>
-                  
-                  {operation.subOperations && operation.subOperations.length > 0 ? (
-                    operation.subOperations.map((subOp, subIndex) => (
-                      <div key={subIndex} className="mb-6 ml-4 p-4 border rounded bg-white">
-                        <h5 className="font-medium mb-2">
-                          Sub-operation: {subOp.sub_operation_name} ({subOp.sub_operation_number})
-                        </h5>
-                        <p className="text-sm text-gray-600 mb-3">SMV: {subOp.smv} | Needle Count: {subOp.needle_count}</p>
-                        
-                        {/* Machines */}
-                        {subOp.machines && subOp.machines.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="font-medium mb-1">Machines:</h6>
-                            <ul className="list-disc list-inside ml-4">
-                              {subOp.machines.map((machine, machineIndex) => (
-                                <li key={machineIndex}>{machine.machine_name} ({machine.machine_type})</li>
-                              ))}
-                            </ul>
+                <div
+                  key={opIndex}
+                  className="mb-4 border rounded-lg p-4 bg-gray-50"
+                >
+                  <div
+                    className="flex justify-between items-center cursor-pointer"
+                    onClick={() => toggleOperation(opIndex)}
+                  >
+                    <h4 className="text-lg font-medium">
+                      {opIndex + 1}. {operation.operation_name}
+                    </h4>
+                    <svg
+                      className={`w-5 h-5 transform transition-transform ${
+                        expandedOperations[opIndex] ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M19 9l-7 7-7-7"
+                      ></path>
+                    </svg>
+                  </div>
+
+                  {expandedOperations[opIndex] && (
+                    <div className="mt-4">
+                      {operation.subOperations &&
+                      operation.subOperations.length > 0 ? (
+                        operation.subOperations.map((subOp, subIndex) => (
+                          <div
+                            key={subIndex}
+                            className="mb-4 ml-4 p-4 border rounded bg-white"
+                          >
+                            <div
+                              className="flex justify-between items-center cursor-pointer"
+                              onClick={() =>
+                                toggleSubOperation(opIndex, subIndex)
+                              }
+                            >
+                              <h5 className="font-medium">
+                                Sub-operation: {subOp.sub_operation_name} (
+                                {subOp.sub_operation_number})
+                              </h5>
+                              <svg
+                                className={`w-4 h-4 transform transition-transform ${
+                                  expandedOperations[`${opIndex}-${subIndex}`]
+                                    ? "rotate-180"
+                                    : ""
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M19 9l-7 7-7-7"
+                                ></path>
+                              </svg>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-3">
+                              SMV: {subOp.smv} | Needle Count:{" "}
+                              {subOp.needle_count}
+                            </p>
+
+                            {expandedOperations[`${opIndex}-${subIndex}`] && (
+                              <div>
+                                {/* Machines */}
+                                {subOp.machines &&
+                                  subOp.machines.length > 0 && (
+                                    <div className="mb-3">
+                                      <h6 className="font-medium mb-1">
+                                        Machines:
+                                      </h6>
+                                      <ul className="list-disc list-inside ml-4">
+                                        {subOp.machines.map(
+                                          (machine, machineIndex) => (
+                                            <li key={machineIndex}>
+                                              {machine.machine_name} (
+                                              {machine.machine_type})
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                {/* Needle Types */}
+                                {subOp.needle_types &&
+                                  subOp.needle_types.length > 0 && (
+                                    <div className="mb-3">
+                                      <h6 className="font-medium mb-1">
+                                        Needle Types:
+                                      </h6>
+                                      <ul className="list-disc list-inside ml-4">
+                                        {subOp.needle_types.map(
+                                          (needleType, typeIndex) => (
+                                            <li key={typeIndex}>
+                                              {needleType.type}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                {/* Needle Threads */}
+                                {subOp.needle_treads &&
+                                  subOp.needle_treads.length > 0 && (
+                                    <div className="mb-3">
+                                      <h6 className="font-medium mb-1">
+                                        Needle Threads:
+                                      </h6>
+                                      <ul className="list-disc list-inside ml-4">
+                                        {subOp.needle_treads.map(
+                                          (tread, treadIndex) => (
+                                            <li key={treadIndex}>
+                                              {tread.tread}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                {/* Needle Loopers */}
+                                {subOp.needle_loopers &&
+                                  subOp.needle_loopers.length > 0 && (
+                                    <div className="mb-3">
+                                      <h6 className="font-medium mb-1">
+                                        Needle Loopers:
+                                      </h6>
+                                      <ul className="list-disc list-inside ml-4">
+                                        {subOp.needle_loopers.map(
+                                          (looper, looperIndex) => (
+                                            <li key={looperIndex}>
+                                              {looper.looper_type}
+                                            </li>
+                                          )
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                {subOp.remark && (
+                                  <p className="text-sm italic mt-2">
+                                    Remark: {subOp.remark}
+                                  </p>
+                                )}
+
+                                <div
+                                  key={subOp.sub_operation_id}
+                                  className="space-y-2 grid grid-cols-2 mt-4"
+                                >
+                                  {subOp.medias &&
+                                    subOp.medias.map((md) => (
+                                      <video
+                                        key={md.media_id || md.media_url}
+                                        src={`${
+                                          import.meta.env.VITE_API_URL
+                                        }/videos/${md.media_url}`}
+                                        controls
+                                        preload="metadata"
+                                        className="w-full max-w-md rounded-lg shadow-md"
+                                        width={20}
+                                        height={20}
+                                      >
+                                        Your browser does not support the video
+                                        tag.
+                                      </video>
+                                    ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        
-                        {/* Needle Types */}
-                        {subOp.needle_types && subOp.needle_types.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="font-medium mb-1">Needle Types:</h6>
-                            <ul className="list-disc list-inside ml-4">
-                              {subOp.needle_types.map((needleType, typeIndex) => (
-                                <li key={typeIndex}>{needleType.type}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {/* Needle Threads */}
-                        {subOp.needle_treads && subOp.needle_treads.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="font-medium mb-1">Needle Threads:</h6>
-                            <ul className="list-disc list-inside ml-4">
-                              {subOp.needle_treads.map((tread, treadIndex) => (
-                                <li key={treadIndex}>{tread.tread}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {/* Needle Loopers */}
-                        {subOp.needle_loopers && subOp.needle_loopers.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="font-medium mb-1">Needle Loopers:</h6>
-                            <ul className="list-disc list-inside ml-4">
-                              {subOp.needle_loopers.map((looper, looperIndex) => (
-                                <li key={looperIndex}>{looper.looper_type}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        
-                        {subOp.remark && (
-                          <p className="text-sm italic mt-2">Remark: {subOp.remark}</p>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 ml-4">No sub-operations found</p>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 ml-4">
+                          No sub-operations found
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               ))
             ) : (
               <p className="text-gray-500">No operations found</p>
             )}
-            
+
             {/* Footer with generation date */}
             <div className="mt-8 pt-4 border-t text-sm text-gray-500 text-center">
-              Report generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+              Report generated on {new Date().toLocaleDateString()} at{" "}
+              {new Date().toLocaleTimeString()}
             </div>
           </div>
         </div>

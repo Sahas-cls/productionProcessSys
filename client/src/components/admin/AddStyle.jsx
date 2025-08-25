@@ -968,7 +968,15 @@ const AddStyle = ({ userRole }) => {
                   transition={{ duration: 0.3 }}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-sm font-medium text-gray-900 flex items-center gap-x-6">
+                      <img
+                        src={`${import.meta.env.VITE_API_URL}/media/${
+                          style?.style_medias[0]?.media_url
+                        }`}
+                        alt="this is a style image"
+                        width={60}
+                        loading="lazy"
+                      />
                       {style.factory?.factory_name || "N/A"}
                     </div>
                   </td>
@@ -1035,6 +1043,13 @@ const AddStyle = ({ userRole }) => {
           </tbody>
         </table>
       </motion.div>
+      {/* <div className="">
+        <h1 className="text-3xl">img</h1>
+        <img
+          src={`${import.meta.env.VITE_API_URL}/media/STY-001-20_front.jpg`}
+          alt="this is a style image"
+        />
+      </div> */}
     </motion.div>
   );
 };

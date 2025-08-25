@@ -7,6 +7,7 @@ import AddSeason from "../components/admin/AddSeason";
 import AddStyle from "../components/admin/AddStyle";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import Swal from "sweetalert2";
 
 const StylePage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);

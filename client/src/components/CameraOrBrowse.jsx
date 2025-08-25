@@ -1,3 +1,4 @@
+import axios from "axios";
 import React, { useState, useRef, useEffect } from "react";
 import {
   FaCamera,
@@ -9,13 +10,18 @@ import {
   FaExpand,
 } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
-const CameraOrBrowse = ({ setIsUploading }) => {
+import { ClipLoader } from "react-spinners";
+
+const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
   const [mediaStream, setMediaStream] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordedVideo, setRecordedVideo] = useState(null);
+  const [recordedBlob, setRecordedBlob] = useState(null);
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [status, setStatus] = useState("idle");
   const [isMobile, setIsMobile] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const mediaRecorderRef = useRef(null);
   const videoRef = useRef(null);
   const previewVideoRef = useRef(null);
@@ -72,6 +78,104 @@ const CameraOrBrowse = ({ setIsUploading }) => {
     }
   };
 
+  // Handle file upload to backend
+  const handleUpload = async (
+    videoBlob = null,
+    fileName = "recorded-video.webm"
+  ) => {
+    setUploading(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+
+      // Append the metadata
+      formData.append("styleId", uploadingData.style_id || 1);
+      formData.append("styleNo", uploadingData.styleNo);
+      formData.append("moId", uploadingData.moId);
+      formData.append("sopId", uploadingData.sopId);
+      formData.append("sopName", uploadingData.sopName);
+
+      // Append the video file
+      if (videoBlob) {
+        formData.append("video", videoBlob, fileName);
+      } else if (recordedBlob) {
+        formData.append("video", recordedBlob, "recorded-video.webm");
+      } else {
+        alert("No video to upload");
+        setUploading(false);
+        return;
+      }
+
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+      // Use Axios with progress tracking
+      const response = await axios.post(
+        `${apiUrl}/api/subOperationMedia/uploadVideos`,
+        formData,
+        {
+          withCredentials: true,
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round(
+                (progressEvent.loaded * 100) / progressEvent.total
+              );
+              setUploadProgress(percentCompleted);
+            }
+          },
+          timeout: 300000, // 5 minutes timeout for large files
+        }
+      );
+
+      if (response.status === 201) {
+        alert("Upload successful!");
+        console.log("Upload result:", response.data);
+        // Reset states after successful upload
+        setRecordedBlob(null);
+        setUploading(false);
+        setUploadProgress(0);
+      } else {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+
+      let errorMessage = "Upload failed";
+      if (error.response) {
+        // Server responded with error status
+        errorMessage = error.response.data.message || error.response.statusText;
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = "Network error - no response from server";
+      } else {
+        // Something else happened
+        errorMessage = error.message;
+      }
+
+      alert(`Upload failed: ${errorMessage}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Handle file selection for upload
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type.includes("video")) {
+      const videoUrl = URL.createObjectURL(file);
+      setRecordedVideo(videoUrl);
+      setRecordedBlob(file);
+      setStatus("preview");
+
+      if (previewVideoRef.current) {
+        previewVideoRef.current.load();
+      }
+    }
+  };
+
   // Stop camera
   const stopCamera = () => {
     if (mediaStream) {
@@ -107,6 +211,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
         });
         const videoUrl = URL.createObjectURL(blob);
         setRecordedVideo(videoUrl);
+        setRecordedBlob(blob);
         setStatus("preview");
 
         // Auto-play the preview on mobile
@@ -134,20 +239,6 @@ const CameraOrBrowse = ({ setIsUploading }) => {
       setRecording(false);
     }
     stopCamera();
-  };
-
-  // Handle file upload
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file && file.type.includes("video")) {
-      const videoUrl = URL.createObjectURL(file);
-      setRecordedVideo(videoUrl);
-      setStatus("preview");
-
-      if (previewVideoRef.current) {
-        previewVideoRef.current.load();
-      }
-    }
   };
 
   // Switch camera
@@ -180,6 +271,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
   // Reset flow
   const reset = () => {
     setRecordedVideo(null);
+    setRecordedBlob(null);
     setStatus("idle");
     stopCamera();
   };
@@ -187,15 +279,33 @@ const CameraOrBrowse = ({ setIsUploading }) => {
   return (
     <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-4 lg:p-6 w-full mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
       <div className="text-right relative">
-        <button className="hover:bg-red-600 px-4 py-2" onClick={() => setIsUploading(false)}>
-          <h1 className="text-2xl">
-            <RxCross2 />
-          </h1>
+        <button
+          className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
+          onClick={() => setIsUploading(false)}
+          disabled={uploading}
+        >
+          <RxCross2 className="text-2xl" />
         </button>
       </div>
       <h2 className="text-2xl font-bold mb-6 text-center">
         {status === "preview" ? "Video Preview" : "Record or Upload a Video"}
       </h2>
+
+      {/* Upload progress */}
+      {uploading && (
+        <div className="mb-4">
+          <div className="flex justify-between text-sm mb-1">
+            <span>Uploading...</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2">
+            <div
+              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${uploadProgress}%` }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       {/* Status indicators */}
       {status === "error" && (
@@ -268,6 +378,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
             <button
               onClick={startCamera}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center"
+              disabled={uploading}
             >
               <FaCamera /> Open Camera
             </button>
@@ -279,6 +390,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
                 accept="video/*"
                 onChange={handleFileUpload}
                 className="hidden"
+                disabled={uploading}
               />
             </label>
           </>
@@ -290,18 +402,21 @@ const CameraOrBrowse = ({ setIsUploading }) => {
             <button
               onClick={startRecording}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center"
+              disabled={uploading}
             >
               🎥 Start Recording
             </button>
             <button
               onClick={switchCamera}
               className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-3 rounded-lg font-medium transition"
+              disabled={uploading}
             >
               <FaSyncAlt /> Switch Camera
             </button>
             <button
               onClick={reset}
               className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-3 rounded-lg font-medium transition"
+              disabled={uploading}
             >
               Cancel
             </button>
@@ -313,6 +428,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
           <button
             onClick={stopRecording}
             className="flex items-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-3 rounded-lg font-medium transition w-full justify-center"
+            disabled={uploading}
           >
             <FaStop /> Stop Recording
           </button>
@@ -324,14 +440,17 @@ const CameraOrBrowse = ({ setIsUploading }) => {
             <button
               onClick={reset}
               className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 px-4 py-3 rounded-lg font-medium transition flex-1"
+              disabled={uploading}
             >
               <FaRedo /> Re-record
             </button>
             <button
-              onClick={() => alert("Upload logic here")}
+              onClick={() => handleUpload()}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-medium transition flex-1"
+              disabled={uploading}
             >
-              <FaCheck /> Confirm
+              {uploading ? <ClipLoader size={16} color="white" /> : <FaCheck />}
+              {uploading ? "Uploading..." : "Confirm"}
             </button>
           </div>
         )}
@@ -342,7 +461,7 @@ const CameraOrBrowse = ({ setIsUploading }) => {
             className="flex items-center gap-2 bg-gray-700 px-4 py-3 rounded-lg font-medium w-full justify-center"
             disabled
           >
-            Loading...
+            <ClipLoader size={16} color="white" /> Loading...
           </button>
         )}
       </div>
