@@ -16,6 +16,10 @@ import { FaArrowLeft } from "react-icons/fa6";
 import { BsFillCloudUploadFill } from "react-icons/bs"; //upload icon
 import CameraOrBrowse from "./CameraOrBrowse";
 import { useAuth } from "../hooks/useAuth";
+import { FaPhotoVideo } from "react-icons/fa";
+import { MdOutlineDriveFileRenameOutline } from "react-icons/md";
+import { FaCheck } from "react-icons/fa";
+import { RxCross2 } from "react-icons/rx";
 
 const ViewWorkstations = () => {
   // alert("user role: ", userRole);
@@ -40,8 +44,18 @@ const ViewWorkstations = () => {
     sopId: "",
     sopName: "",
   });
+  const [editingWorkstationId, setEditingWorkstationId] = useState(null);
+  const [newWorkstationNo, setNewWorkstationNo] = useState("");
 
   const isUploadRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Focus input when editing starts
+    if (editingWorkstationId && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [editingWorkstationId]);
 
   useEffect(() => {
     // alert("is uploading ", isUploading);
@@ -216,6 +230,66 @@ const ViewWorkstations = () => {
   const closeAddSubOperationModal = () => {
     setIsAddingSubM(false);
     setSelectedWorkstation(null);
+  };
+
+  // Function to start editing workstation number
+  const startEditingWorkstation = (workstation) => {
+    setEditingWorkstationId(workstation.workstation_id);
+    setNewWorkstationNo(workstation.workstation_no || "");
+  };
+
+  // Function to cancel editing
+  const cancelEditing = () => {
+    setEditingWorkstationId(null);
+    setNewWorkstationNo("");
+  };
+
+  // Function to save workstation number
+  const saveWorkstationNo = async (workstationId) => {
+    if (!newWorkstationNo.trim()) {
+      Swal.fire({
+        title: "Error",
+        text: "Workstation number cannot be empty",
+        icon: "error",
+      });
+      return;
+    }
+
+    try {
+      const response = await axios.put(
+        `${apiUrl}/api/workstations/renameWorkstation/${workstationId}`,
+        { workstation_no: newWorkstationNo.trim() },
+        { withCredentials: true }
+      );
+
+      if (response.status === 200) {
+        // Update the workstation list with the new name
+        setWorkstationList((prevList) =>
+          prevList.map((ws) =>
+            ws.workstation_id === workstationId
+              ? { ...ws, workstation_no: newWorkstationNo.trim() }
+              : ws
+          )
+        );
+        setEditingWorkstationId(null);
+        setNewWorkstationNo("");
+
+        Swal.fire({
+          title: "Success",
+          text: "Workstation number updated successfully",
+          icon: "success",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      Swal.fire({
+        title: "Error",
+        text: "Failed to update workstation number",
+        icon: "error",
+      });
+    }
   };
 
   useEffect(() => {
@@ -423,11 +497,55 @@ const ViewWorkstations = () => {
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg leading-6 font-medium text-gray-900">
                           {/* Workstation #{workstation.workstation_id} */}
-                          <h5 className="mt-4 text-xs text-gray-400">
+                          <h5 className="mt-4 text-lg flex items-center gap-x-4 text-blue-900 ">
                             Workstation No #
-                            {workstation.workstation_no
-                              ? workstation.workstation_no
-                              : "Not assigned yet"}
+                            {editingWorkstationId ===
+                            workstation.workstation_id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  ref={inputRef}
+                                  type="text"
+                                  value={newWorkstationNo}
+                                  onChange={(e) =>
+                                    setNewWorkstationNo(e.target.value)
+                                  }
+                                  className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
+                                  placeholder="Enter workstation no"
+                                />
+                                <button
+                                  onClick={() =>
+                                    saveWorkstationNo(
+                                      workstation.workstation_id
+                                    )
+                                  }
+                                  className="hover:bg-green-300/40 p-1 rounded-md duration-150"
+                                >
+                                  <FaCheck className="text-lg text-green-600" />
+                                </button>
+                                <button
+                                  onClick={cancelEditing}
+                                  className="hover:bg-red-300/40 p-1 rounded-md duration-150"
+                                >
+                                  <RxCross2 className="text-lg text-red-600" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                {workstation.workstation_no
+                                  ? workstation.workstation_no
+                                  : "Not assigned yet"}
+                                {userRole === "Admin" && (
+                                  <button
+                                    onClick={() =>
+                                      startEditingWorkstation(workstation)
+                                    }
+                                    className="hover:bg-gradient-to-br from-blue-300/40  to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                                  >
+                                    <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </h5>
                         </h3>
                         <div className="flex items-center space-x-2">
@@ -537,6 +655,19 @@ const ViewWorkstations = () => {
                                           }}
                                         >
                                           <BsFillCloudUploadFill className="text-xl hover:scale-125" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate("/sub-operation/videos", {
+                                              state: {
+                                                subOpId: subOp.sub_operation_id,
+                                              },
+                                            })
+                                          }
+                                        >
+                                          <FaPhotoVideo className="text-xl hover:scale-125" />
                                         </button>
                                       </div>
                                     ) : (

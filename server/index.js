@@ -49,31 +49,26 @@ app.use(
 // Expose shared network folder as static video files
 app.use(
   "/videos",
-  express.static(
-    "\\\\192.168.46.209\\Operation bullatin videos\\SubOpVideos",
-    {
-      setHeaders: (res, filePath) => {
-        // Allow cross-origin embedding
-        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  express.static("\\\\192.168.46.209\\Operation bullatin videos\\SubOpVideos", {
+    setHeaders: (res, filePath) => {
+      res.setHeader("Access-Control-Allow-Origin", "*"); // <--- important
+      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
 
-        // Set proper content-type for videos
-        const ext = path.extname(filePath).toLowerCase();
-        if (ext === ".mp4") {
-          res.setHeader("Content-Type", "video/mp4");
-        } else if (ext === ".avi") {
-          res.setHeader("Content-Type", "video/x-msvideo");
-        } else if (ext === ".mov") {
-          res.setHeader("Content-Type", "video/quicktime");
-        } else if (ext === ".mkv") {
-          res.setHeader("Content-Type", "video/x-matroska");
-        } else if (ext === ".webm") {
-          res.setHeader("Content-Type", "video/webm");
-        }
-      },
-    }
-  )
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === ".mp4") {
+        res.setHeader("Content-Type", "video/mp4");
+      } else if (ext === ".avi") {
+        res.setHeader("Content-Type", "video/x-msvideo");
+      } else if (ext === ".mov") {
+        res.setHeader("Content-Type", "video/quicktime");
+      } else if (ext === ".mkv") {
+        res.setHeader("Content-Type", "video/x-matroska");
+      } else if (ext === ".webm") {
+        res.setHeader("Content-Type", "video/webm");
+      }
+    },
+  })
 );
-
 
 // Routes
 app.get("/api/csrf-token", (req, res) => {

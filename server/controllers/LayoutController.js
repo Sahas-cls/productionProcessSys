@@ -5,6 +5,7 @@ const {
   MainOperation,
   SubOperation,
   Style,
+  Machine,
 } = require("../models");
 
 // to retrive data from layout tbl
@@ -24,6 +25,7 @@ exports.getLayouts = async (req, res, next) => {
           ],
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
     res.status(200).json({ status: "Success", data: layoutList });
   } catch (error) {
@@ -113,6 +115,7 @@ exports.createLayout = async (req, res, next) => {
             {
               model: SubOperation,
               as: "subOperations", // must match the alias in your association
+              include: { model: Machine, as: "machines" },
             },
           ],
           transaction: t,
@@ -134,6 +137,29 @@ exports.createLayout = async (req, res, next) => {
         subOperations: subOperations,
       },
     });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to delete layout
+exports.deleteLayout = async (req, res, next) => {
+  //
+  const { layoutId } = req.params;
+  try {
+    const deleteLayout = await Layout.findByPk(layoutId);
+
+    if (!deleteLayout) {
+      const error = new Error("Cannot find layout on the database");
+      error.status = 404;
+      throw error;
+    }
+
+    await deleteLayout.destroy();
+
+    res
+      .status(200)
+      .json({ status: "success", message: "Layout delete success" });
   } catch (error) {
     return next(error);
   }

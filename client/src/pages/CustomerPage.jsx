@@ -32,7 +32,7 @@ const CustomerPage = () => {
   }
 
   return (
-    <div className="flex overflow-x-hidden min-h-screen h-full">
+    <div className="flex overflow-x-hidden">
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}

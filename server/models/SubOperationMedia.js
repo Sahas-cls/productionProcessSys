@@ -45,13 +45,13 @@ module.exports = (sequelize, DataTypes) => {
     { tableName: "suboperation_media", timestamps: true }
   );
 
-  SubOperationMedia.associated = (models) => {
+  SubOperationMedia.associate = (models) => {
     SubOperationMedia.belongsTo(models.Style, {
       foreignKey: "style_id",
       as: "style",
     });
 
-    SubOperationMedia.belongsTo(models.Style, {
+    SubOperationMedia.belongsTo(models.MainOperation, {
       foreignKey: "operation_id",
       as: "main_operation",
     });

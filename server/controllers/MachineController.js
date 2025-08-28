@@ -53,6 +53,7 @@ exports.createMachine = async (req, res, next) => {
     purchase_date,
     supplier,
     service_date,
+    breakdown_date,
     status,
   } = req.body;
 
@@ -91,6 +92,7 @@ exports.createMachine = async (req, res, next) => {
       purchase_date: purchase_date,
       supplier: supplier,
       service_date: service_date,
+      breakdown_date: breakdown_date,
       machine_status: status,
     });
 
@@ -137,6 +139,7 @@ exports.editMachine = async (req, res, next) => {
         machine_brand,
         machine_location,
         machine_status: status,
+        breakdown_date,
       },
       {
         where: { machine_id },

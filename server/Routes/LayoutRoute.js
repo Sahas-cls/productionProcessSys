@@ -15,5 +15,10 @@ routes.post("/create-layout", authMiddleware, controllers.createLayout);
 // to edit specific layout
 
 // to delete specific layout
+routes.delete(
+  "/deleteLayout/:layoutId",
+  authMiddleware,
+  controllers.deleteLayout
+);
 
 module.exports = routes;

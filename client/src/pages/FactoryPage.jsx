@@ -47,7 +47,7 @@ const FactoryPage = () => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="bg-gray-200 w-full min-h-screen"
+            className="bg-accent w-full h-[90vh]"
           >
             <AddFactory userRole={user.userRole} />
           </motion.div>

@@ -12,6 +12,8 @@ import Barcode from "react-barcode";
 import { useReactToPrint } from "react-to-print";
 import PrintableBarcode from "../PrintableBarcode";
 import Swal from "sweetalert2";
+import { FaCheckCircle } from "react-icons/fa";
+import { IoCloseCircle } from "react-icons/io5";
 
 const AddMachine = ({ onViewMachine, userRole }) => {
   const [isAddStyle, setIsAddStyle] = useState(false);
@@ -61,7 +63,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
   // Get distinct style names for a machine
   const getStyleNames = (machine) => {
     if (!machine.sub_operations || machine.sub_operations.length === 0) {
-      return "N/A";
+      return "Empty";
     }
 
     const styleNames = new Set();
@@ -157,7 +159,21 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         );
 
         if (response.status === 200 || response.status === 201) {
-          alert("Machine updated successfully");
+          Swal.fire({
+            title: "Success!",
+            text: "Machine updated successfully.",
+            icon: "success",
+            confirmButtonText: "OK",
+            confirmButtonColor: "#3085d6",
+            background: "#f5f8fa",
+            iconColor: "#28a745",
+            showClass: {
+              popup: "animate__animated animate__fadeInDown",
+            },
+            hideClass: {
+              popup: "animate__animated animate__fadeOutUp",
+            },
+          });
           refresh();
         }
       } else {
@@ -168,7 +184,16 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         );
 
         if (response.status === 201) {
-          alert("Machine added successfully");
+          Swal.fire({
+            position: "center", // Top right corner
+            icon: "success", // Success icon
+            title: "Machine added successfully!",
+            showConfirmButton: true, //show ok btn
+            timer: 3000, // Auto close after 3 seconds
+            timerProgressBar: true, // Show progress bar
+            background: "#f5f8fa",
+            iconColor: "#28a745", // Green icon
+          });
           refresh();
         }
       }
@@ -206,9 +231,16 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       machine_brand: machine.machine_brand,
       machine_location: machine.machine_location,
       status: machine.machine_status,
-      service_date: machine.service_date,
+      service_date: machine.service_date
+        ? new Date(machine.service_date).toISOString().split("T")[0]
+        : "",
       supplier: machine.supplier,
-      purchase_date: machine.purchase_date,
+      purchase_date: machine.purchase_date
+        ? new Date(machine.purchase_date).toISOString().split("T")[0]
+        : "",
+      breakdown_date: machine.breakdown_date
+        ? new Date(machine.purchase_date).toISOString().split("T")[0]
+        : "",
     };
 
     setEditingMachine(machineToEdit);
@@ -216,28 +248,60 @@ const AddMachine = ({ onViewMachine, userRole }) => {
   };
 
   const handleDelete = async (machineId) => {
-    if (window.confirm("Are you sure you want to delete this machine?")) {
-      try {
-        const response = await axios.delete(
-          `${apiUrl}/api/machine/deleteMachine/${machineId}`,
-          { withCredentials: true }
-        );
+    const isConfirmed = await Swal.fire({
+      title: "Are you sure?",
+      text: "Deleting this machine is permanent and cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete it",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#d33", // red for destructive action
+      cancelButtonColor: "#3085d6", // blue for safe action
+      reverseButtons: true, // places cancel button on the left
+      background: "#f5f8fa",
+      showClass: {
+        popup: "animate__animated animate__fadeInDown",
+      },
+      hideClass: {
+        popup: "animate__animated animate__fadeOutUp",
+      },
+    });
 
-        if (response.status === 200) {
-          alert("Machine deleted successfully");
-          refresh();
-        }
-      } catch (error) {
-        console.error(error);
-        if (error.status === 401) {
-          Swal.fire({
-            title: "Unauthorized",
-            text: "Your don't have permission to perform this action, please login again",
-            icon: "error",
-          }).then(() => navigate("/"));
-        }
-        // alert("Failed to delete machine");
+    if (!isConfirmed.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(
+        `${apiUrl}/api/machine/deleteMachine/${machineId}`,
+        { withCredentials: true }
+      );
+
+      if (response.status === 200) {
+        Swal.fire({
+          title: "Operation Successful!",
+          text: "The machine has been added successfully.",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "#3085d6",
+          background: "#f5f8fa",
+          iconColor: "#28a745",
+          timer: 3000,
+          timerProgressBar: true,
+        });
+
+        refresh();
       }
+    } catch (error) {
+      console.error(error);
+      if (error.status === 401) {
+        Swal.fire({
+          title: "Unauthorized",
+          text: "Your don't have permission to perform this action, please login again",
+          icon: "error",
+        }).then(() => navigate("/"));
+      }
+      // alert("Failed to delete machine");
     }
   };
 
@@ -251,6 +315,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
     supplier: "",
     service_date: "",
     status: "active",
+    breakdown_date: "",
     machine_id: "", // For editing
   };
 
@@ -605,53 +670,69 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredMachines.map((machine) => (
-              <tr
-                key={machine.machine_id}
-                className="bg-white border hover:bg-gray-50"
-              >
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {machine.machine_type}
-                </td>
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {machine.machine_no}
-                </td>
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {machine.machine_name}
-                </td>
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {machine.machine_brand}
-                </td>
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {machine.machine_location}
-                </td>
-                <td className="py-2 text-center whitespace-nowrap border">
-                  {getStyleNames(machine)}
-                </td>
-                {userRole === "Admin" ? (
-                  <td className="py-2 text-center whitespace-nowrap">
-                    <div className="flex justify-center gap-3">
-                      <TbEyeSpark
-                        onClick={() =>
-                          navigate("/view-machine", { state: machine })
-                        }
-                        className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
-                      />
-                      <MdModeEditOutline
-                        onClick={() => handleEdit(machine)}
-                        className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
-                      />
-                      <MdDeleteForever
-                        onClick={() => handleDelete(machine.machine_id)}
-                        className="text-2xl text-black hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
-                      />
-                    </div>
+            {Array.isArray(filteredMachines) && filteredMachines.length > 0 ? (
+              filteredMachines.map((machine) => (
+                <tr
+                  key={machine.machine_id}
+                  className="bg-white border hover:bg-gray-50"
+                >
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    <span className="flex items-center justify-center gap-x-2">
+                      {machine.machine_status === "active" ? (
+                        <FaCheckCircle className="text-green-600" />
+                      ) : (
+                        <IoCloseCircle className="text-red-600" />
+                      )}
+                      {machine.machine_type}
+                    </span>
                   </td>
-                ) : (
-                  ""
-                )}
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    {machine.machine_no}
+                  </td>
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    {machine.machine_name}
+                  </td>
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    {machine.machine_brand}
+                  </td>
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    {machine.machine_location}
+                  </td>
+                  <td className="py-2 text-center whitespace-nowrap border">
+                    {getStyleNames(machine)}
+                  </td>
+                  {userRole === "Admin" && (
+                    <td className="py-2 text-center whitespace-nowrap">
+                      <div className="flex justify-center gap-3">
+                        <TbEyeSpark
+                          onClick={() =>
+                            navigate("/view-machine", { state: machine })
+                          }
+                          className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
+                        />
+                        <MdModeEditOutline
+                          onClick={() => handleEdit(machine)}
+                          className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
+                        />
+                        <MdDeleteForever
+                          onClick={() => handleDelete(machine.machine_id)}
+                          className="text-2xl text-black hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
+                        />
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan={userRole === "Admin" ? 7 : 6}
+                  className="text-center py-4"
+                >
+                  There are no machines yet
+                </td>
               </tr>
-            ))}
+            )}
           </tbody>
         </table>
       </div>

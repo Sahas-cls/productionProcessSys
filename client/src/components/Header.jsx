@@ -33,13 +33,13 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
   }, []);
 
   return (
-    <header className="flex h-14 w-full items-center justify-between bg-white px-4 py-3 border-b border-l relative">
+    <header className="flex h-14 w-full items-center justify-between bg-gradient-to-r from-white to-white  px-4 py-3 relative">
       {/* Left section */}
       <div className="flex items-center gap-4">
         <button className="md:hidden" onClick={handleSidebar}>
           <GiHamburgerMenu size={24} />
         </button>
-        <h1 className="text-xl font-bold text-gray-500 font-sans italic">
+        <h1 className="text-xl font-bold text-black/70 font-sans italic">
           {loggedUser?.userRole === "Admin" ? "Admin " : "User "}
           Panel
         </h1>
@@ -48,7 +48,7 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
       {/* Right section */}
       <div className="flex items-center gap-4 relative" ref={dropdownRef}>
         <button
-          className="text-gray-500 hover:text-teal-600 transition-colors flex items-center gap-2"
+          className="text-black hover:bg-gray-200 rounded-xl px-2 py-1 transition-colors flex items-center gap-2"
           onClick={() => setShowOptions(!showOptions)}
         >
           Hi {firstName || "Guest"}

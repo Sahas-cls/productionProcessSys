@@ -2,7 +2,9 @@ import React, { useState, useEffect } from "react";
 import { Formik, Form, Field } from "formik";
 import axios from "axios";
 import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
+import "jspdf-autotable";
+import Plyr from "plyr-react";
+import "plyr-react/plyr.css";
 
 const Report = () => {
   const [selectedStyle, setSelectedStyle] = useState(null);
@@ -43,35 +45,193 @@ const Report = () => {
   };
 
   const downloadPDF = () => {
-    const input = document.getElementById("summary-report");
     setLoading(true);
 
-    html2canvas(input, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 295; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
+    // Create new PDF document
+    const doc = new jsPDF();
 
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+    // Add header
+    doc.setFontSize(20);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Style Summary Report", 105, 15, { align: "center" });
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
+    // underline it
+    const text = "Style Summary Report";
+    const textWidth = doc.getTextWidth(text);
+    const textX = 105 - textWidth / 2; // center alignment adjust
+    const textY = 15;
 
-      pdf.save(`${operations.style_no}_${operations.po_number}_summary.pdf`);
-      setLoading(false);
-    });
+    // Add style information
+    doc.setFontSize(12);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`Style No: ${operations.style_no}`, 20, 25);
+    doc.text(`Style Name: ${operations.style_name}`, 20, 30);
+    doc.text(`Description: ${operations.style_description}`, 20, 35);
+
+    // Add PO information
+    doc.text(`PO Number: ${operations.po_number}`, 20, 45);
+
+    // Add generation date
+    doc.setFontSize(10);
+    doc.setTextColor(150, 150, 150);
+    doc.text(
+      `Report generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
+      105,
+      280,
+      { align: "center" }
+    );
+
+    let yPosition = 60;
+
+    // Add operations
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text("Operations", 20, yPosition);
+    yPosition += 10;
+
+    if (operations.operations && operations.operations.length > 0) {
+      operations.operations.forEach((operation, opIndex) => {
+        // Check if we need a new page
+        if (yPosition > 250) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        // Add operation name
+        doc.setFontSize(12);
+        doc.setTextColor(60, 60, 60);
+        doc.text(`${opIndex + 1}. ${operation.operation_name}`, 20, yPosition);
+        yPosition += 7;
+
+        if (operation.subOperations && operation.subOperations.length > 0) {
+          operation.subOperations.forEach((subOp, subIndex) => {
+            // Check if we need a new page
+            if (yPosition > 250) {
+              doc.addPage();
+              yPosition = 20;
+            }
+
+            // Add sub-operation details
+            doc.setFontSize(12);
+            doc.setTextColor(80, 80, 80);
+            doc.text(
+              `   Sub-operation: ${subOp.sub_operation_name} (${subOp.sub_operation_number})`,
+              25,
+              yPosition
+            );
+            yPosition += 5;
+            doc.text(
+              `   SMV: ${subOp.smv} | Needle Count: ${subOp.needle_count}`,
+              25,
+              yPosition
+            );
+            yPosition += 5;
+
+            // Add machines if available
+            if (subOp.machines && subOp.machines.length > 0) {
+              doc.text(`   Machines:`, 25, yPosition);
+              yPosition += 5;
+
+              subOp.machines.forEach((machine) => {
+                if (yPosition > 250) {
+                  doc.addPage();
+                  yPosition = 20;
+                }
+                doc.text(
+                  `     - ${machine.machine_name} (${machine.machine_type})`,
+                  30,
+                  yPosition
+                );
+                yPosition += 5;
+              });
+            }
+
+            // Add needle types if available
+            if (subOp.needle_types && subOp.needle_types.length > 0) {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.text(`   Needle Types:`, 25, yPosition);
+              yPosition += 5;
+
+              subOp.needle_types.forEach((needleType) => {
+                if (yPosition > 250) {
+                  doc.addPage();
+                  yPosition = 20;
+                }
+                doc.text(`     - ${needleType.type}`, 30, yPosition);
+                yPosition += 5;
+              });
+            }
+
+            // Add needle threads if available
+            if (subOp.needle_treads && subOp.needle_treads.length > 0) {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.text(`   Needle Threads:`, 25, yPosition);
+              yPosition += 5;
+
+              subOp.needle_treads.forEach((tread) => {
+                if (yPosition > 250) {
+                  doc.addPage();
+                  yPosition = 20;
+                }
+                doc.text(`     - ${tread.tread}`, 30, yPosition);
+                yPosition += 5;
+              });
+            }
+
+            // Add needle loopers if available
+            if (subOp.needle_loopers && subOp.needle_loopers.length > 0) {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.text(`   Needle Loopers:`, 25, yPosition);
+              yPosition += 5;
+
+              subOp.needle_loopers.forEach((looper) => {
+                if (yPosition > 250) {
+                  doc.addPage();
+                  yPosition = 20;
+                }
+                doc.text(`     - ${looper.looper_type}`, 30, yPosition);
+                yPosition += 5;
+              });
+            }
+
+            // Add remark if available
+            if (subOp.remark) {
+              if (yPosition > 250) {
+                doc.addPage();
+                yPosition = 20;
+              }
+              doc.setTextColor(100, 100, 100);
+              doc.setFont("helvetica", "bold");
+              doc.text(`   Remark: ${subOp.remark}`, 25, yPosition);
+              doc.setFont("helvetica", "normal");
+              yPosition += 7;
+            }
+
+            yPosition += 3;
+          });
+        } else {
+          doc.text("   No sub-operations found", 25, yPosition);
+          yPosition += 7;
+        }
+
+        yPosition += 5;
+      });
+    } else {
+      doc.text("No operations found", 20, yPosition);
+    }
+
+    // Save the PDF
+    doc.save(`${operations.style_no}_${operations.po_number}_summary.pdf`);
+    setLoading(false);
   };
 
   const toggleOperation = (opIndex) => {
@@ -430,24 +590,50 @@ const Report = () => {
 
                                 <div
                                   key={subOp.sub_operation_id}
-                                  className="space-y-2 grid grid-cols-2 mt-4"
+                                  className="space-y-2 grid grid-cols-2 gap-8 mt-4"
                                 >
                                   {subOp.medias &&
                                     subOp.medias.map((md) => (
-                                      <video
-                                        key={md.media_id || md.media_url}
-                                        src={`${
-                                          import.meta.env.VITE_API_URL
-                                        }/videos/${md.media_url}`}
-                                        controls
-                                        preload="metadata"
-                                        className="w-full max-w-md rounded-lg shadow-md"
-                                        width={20}
-                                        height={20}
-                                      >
-                                        Your browser does not support the video
-                                        tag.
-                                      </video>
+                                      <Plyr
+                                        source={{
+                                          type: "video",
+                                          title:
+                                            md.sub_operation_name || "Video",
+                                          sources: [
+                                            {
+                                              src: `${
+                                                import.meta.env.VITE_API_URL
+                                              }/videos/${md.media_url}`,
+                                              type: "video/webm",
+                                            },
+                                          ],
+                                        }}
+                                        options={{
+                                          controls: [
+                                            "play-large", // Big play button in center
+                                            "play", // Play/pause button
+                                            "progress", // Progress bar (seeking)
+                                            "current-time", // Current time display
+                                            "duration", // Total duration display
+                                            "mute", // Mute/unmute
+                                            "volume", // Volume control
+                                            "settings", // Settings menu (speed, quality)
+                                            "pip", // Picture-in-picture
+                                            "fullscreen", // Fullscreen
+                                            "rewind", // Rewind button
+                                            "fast-forward", // Forward button
+                                          ],
+                                          ratio: "16:9",
+                                          clickToPlay: true,
+                                          tooltips: {
+                                            controls: true,
+                                            seek: true,
+                                          },
+                                          keyboard: { global: true }, // Allow keyboard shortcuts
+                                          seekTime: 10, // Amount of seconds to seek on rewind/forward
+                                          disableContextMenu: true, // Disable right-click menu
+                                        }}
+                                      />
                                     ))}
                                 </div>
                               </div>

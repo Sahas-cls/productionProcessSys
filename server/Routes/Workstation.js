@@ -14,6 +14,9 @@ router.get("/getWorkstations/:id", controllers.getWorkstations);
 // to edit specific workstation
 router.put("/createWorkstation/:id", controllers.createWS);
 
+// to rename workstaion
+router.put("/renameWorkstation/:workstationId", controllers.workstationId);
+
 // to delete specific workstation
 router.delete("/deleteWS/:id", controllers.deleteWorkstation);
 

@@ -82,7 +82,7 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
       ref={sidebarRef}
       className={`md:w-[18%] min-h-full ${
         toggleSidebar ? "block" : "hidden"
-      } md:block w-[70%] absolute md:relative z-30 bg-white shadow-sm overflow-y-auto overflow-clip`}
+      } md:block w-[70%] absolute md:relative z-30 bg-secondary shadow-sm overflow-y-auto overflow-clip `}
     >
       {/* Logo */}
       <motion.div
@@ -92,14 +92,19 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
         className="flex flex-col items-center justify-center mt-10 ml-1"
       >
         <motion.img src={concordLogo} alt="Logo" className="w-20" />
-        <motion.h1 className="text-xl uppercase font-semibold">
+        <motion.h1 className="mt-2 text-xl uppercase font-semibold text-white font-sans">
           Concord Group
         </motion.h1>
       </motion.div>
 
       {/* Navigation */}
       <nav className="mt-10 px-2">
-        <motion.ul variants={ulVariant} initial="hidden" animate="visible"  className="space-y-2 cursor-pointer">
+        <motion.ul
+          variants={ulVariant}
+          initial="hidden"
+          animate="visible"
+          className="space-y-2 cursor-pointer text-white"
+        >
           {adminSidebarData.map((item) => (
             <div key={item.id}>
               <motion.li
@@ -109,8 +114,8 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
                 whileHover="hover"
                 className={`flex items-center justify-between px-3 py-2 rounded ${
                   isActive(item.navigateTo || "")
-                    ? "bg-gray-200 font-bold"
-                    : "hover:bg-gray-100"
+                    ? "bg-[#3A4156] text-white font-bold"
+                    : "hover:bg-[#3A4156]"
                 }`}
                 onClick={() =>
                   item.submenu
@@ -135,14 +140,14 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
 
               {/* Submenu */}
               {item.submenu && expandedMenu === item.id && (
-                <ul className="ml-8 mt-1 space-y-1 text-sm text-gray-700">
+                <ul className="ml-8 mt-1 space-y-1 text-sm text-white">
                   {item.submenu.map((subItem) => (
                     <li
                       key={subItem.id}
                       className={`flex items-center gap-2 py-2 pl-2 rounded-md transition hover:scale-[1.03] duration-200 ${
                         isActive(subItem.navigateTo)
                           ? "bg-gray-300 font-semibold"
-                          : "hover:bg-gray-200"
+                          : "hover:bg-[#3A4156]"
                       }`}
                       onClick={() => handleNavigations(subItem.navigateTo)}
                     >

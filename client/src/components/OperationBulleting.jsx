@@ -10,6 +10,8 @@ import { VscSaveAll } from "react-icons/vsc";
 import { IoIosArrowDropdown } from "react-icons/io";
 import useMachine from "../hooks/useMachine";
 import useStyles from "../hooks/useStyles";
+import useMachineTypes from "../hooks/useMachineTypes";
+import { useMemo } from "react";
 
 const OperationBulleting = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -699,9 +701,20 @@ const OperationBulleting = () => {
 // Full Form Component
 const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
   const { machineList } = useMachine();
+  const { machineTList } = useMachineTypes();
   const [needleTypes, setNeedleTypes] = useState(
     values.needleType || [{ type: "" }]
   );
+  const [selectedMachineT, setSelectedMachineT] = useState(null);
+
+  // to filter machien list according to selected machien list
+  const filteredMachineList = useMemo(() => {
+    if (selectedMachineT === null || selectedMachineT === "") {
+      return [];
+    }
+
+    return machineList.filter((mch) => mch.machine_type === selectedMachineT);
+  }, [selectedMachineT, machineList]);
 
   // Handle machine selection and autofill
   const handleMachineSelect = (machineNo, machineStatus) => {
@@ -878,6 +891,38 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               Machine Details
             </legend>
             <div className="mt-4">
+              <label htmlFor="">Machine Type *</label>
+              <Field
+                name="machineType"
+                as="select"
+                className={`form-input-base ${
+                  errors.machineType && touched.machineType
+                    ? "border-red-500"
+                    : ""
+                }`}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFieldValue("machineType", value);
+                  setSelectedMachineT(value);
+                }}
+                // onBlur={handleBlur}
+                // readOnly
+              >
+                <option>Select a machine type</option>
+                {Array.isArray(machineTList) &&
+                  machineTList.map((mcht, index) => (
+                    <option key={index} value={mcht}>
+                      {mcht}
+                    </option>
+                  ))}
+              </Field>
+              <ErrorMessage
+                name="machineType"
+                component="div"
+                className="text-red-500 text-sm mt-1"
+              />
+            </div>
+            <div className="mt-4">
               <label htmlFor="">Machine No *</label>
               <Field
                 name="machineNo"
@@ -889,42 +934,26 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                 onBlur={handleBlur}
               >
                 <option value="">Select Machine</option>
-                {machineList?.map((mch) => (
+                {filteredMachineList?.map((mch) => (
                   <option
                     className={`${
                       mch.machine_status == "active"
-                        ? "text-green-600 font-semibold"
-                        : "text-red-600 font-semibold"
+                        ? "text-green-600 font-semibold bg-green-200"
+                        : "text-red-600 font-semibold bg-red-400"
                     }`}
                     key={mch.machine_id}
                     // mch.machine_no
                     value={mch.machine_no}
                   >
-                    {mch.machine_no}
+                    <span>
+                      {mch.machine_status === "active" ? "✅" : "❌"}
+                      {mch.machine_no}
+                    </span>
                   </option>
                 ))}
               </Field>
               <ErrorMessage
                 name="machineNo"
-                component="div"
-                className="text-red-500 text-sm mt-1"
-              />
-            </div>
-            <div className="mt-4">
-              <label htmlFor="">Machine Type *</label>
-              <Field
-                name="machineType"
-                type="text"
-                className={`form-input-base ${
-                  errors.machineType && touched.machineType
-                    ? "border-red-500"
-                    : ""
-                }`}
-                onBlur={handleBlur}
-                readOnly
-              />
-              <ErrorMessage
-                name="machineType"
                 component="div"
                 className="text-red-500 text-sm mt-1"
               />

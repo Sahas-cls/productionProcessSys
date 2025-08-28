@@ -34,7 +34,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
       },
       machine_status: {
-        type: DataTypes.STRING, 
+        type: DataTypes.STRING,
+      },
+      breakdown_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
       },
     },
     {

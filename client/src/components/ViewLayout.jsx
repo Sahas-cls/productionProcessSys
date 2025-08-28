@@ -4,8 +4,10 @@ import useFetchLayout from "../hooks/useLineLayout";
 import { FaArrowCircleRight } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { HiOutlineDotsVertical } from "react-icons/hi";
-import { MdDeleteForever, MdModeEdit } from "react-icons/md";
+import { MdDeleteForever, MdModeEdit, MdSwipeUpAlt } from "react-icons/md";
 import ReactPaginate from "react-paginate";
+import axios from "axios";
+import Swal from "sweetalert2";
 
 const ViewLayout = () => {
   const { layoutList, isLoading, refresh, deleteLayout } = useFetchLayout();
@@ -15,6 +17,7 @@ const ViewLayout = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
+  const apiUrl = import.meta.env.VITE_API_URL;
 
   console.log("layout list: ", layoutList);
 
@@ -35,9 +38,50 @@ const ViewLayout = () => {
   }, []);
 
   const handleDelete = async (layoutId) => {
-    if (window.confirm("Are you sure you want to delete this layout?")) {
-      await deleteLayout(layoutId);
-      refresh();
+    const isConfirmed = await Swal.fire({
+      title: "Are you sure?",
+      text: "Deleting this machine is permanent and cannot be undone.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Yes, delete it",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#d33", // red for destructive action
+      cancelButtonColor: "#3085d6", // blue for safe action
+      reverseButtons: true, // places cancel button on the left
+      background: "#f5f8fa",
+      showClass: {
+        popup: "animate__animated animate__fadeInDown",
+      },
+      hideClass: {
+        popup: "animate__animated animate__fadeOutUp",
+      },
+    });
+
+    if (!isConfirmed.isConfirmed) {
+      return;
+    }
+
+    try {
+      const respose = await axios.delete(
+        `${apiUrl}/api/layout/deleteLayout/${layoutId}`,
+        { withCredentials: true }
+      );
+
+      if (respose.status === 200) {
+        Swal.fire({
+          title: "Operation Successful!",
+          text: "The Layout has been deleted successfully.",
+          icon: "success",
+          confirmButtonText: "OK",
+          confirmButtonColor: "red",
+          background: "#f5f8fa",
+          iconColor: "#28a745",
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      }
+    } catch (error) {
+      console.log("Error while tyring to delete layout: ", error);
     }
   };
 
@@ -208,13 +252,13 @@ const ViewLayout = () => {
                       >
                         <ul className="py-1">
                           <li>
-                            <button
+                            {/* <button
                               onClick={() => handleEdit(layout.layout_id)}
                               className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                             >
                               <MdModeEdit className="mr-2" />
                               Edit Layout
-                            </button>
+                            </button> */}
                           </li>
                           <li>
                             <button

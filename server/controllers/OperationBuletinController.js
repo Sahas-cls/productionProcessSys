@@ -800,6 +800,8 @@ exports.deleteOperation = async (req, res, next) => {
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
   const t = await sequelize.transaction();
+  // console.log(req.user.userRole);
+  // return;
   if (req?.user?.userRole !== "Admin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;

@@ -60,7 +60,7 @@ const EditSubOperationPage = () => {
               );
               console.log(response);
               if (response.status === 200) {
-                navigate(-1); // Go back after successful update
+                navigate(-1);
               }
             } catch (error) {
               console.error("Error updating sub-operation:", error);

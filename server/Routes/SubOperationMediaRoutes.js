@@ -26,6 +26,12 @@ const upload = multer({
   },
 });
 
+routes.get("/getVideos/:subOpId", controller.getVideos);
+
+// to upload videos
 routes.post("/uploadVideos", upload.single("video"), controller.uploadVideo);
+
+// to delete videos
+routes.delete("/deleteVideo/:so_media_id", controller.deleteVideo);
 
 module.exports = routes;

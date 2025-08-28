@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import Sidebar from "../../components/Sidebar";
-import Header from "../../components/Header";
-import AddFactory from "../../components/admin/AddFactory";
+import Sidebar from "../../components/Sidebar.jsx";
+import Header from "../../components/Header.jsx";
+import AddFactory from "../../components/admin/AddFactory.jsx";
 import useScreenWidth from "../../hooks/useScreenWidth.js";
 import AddCustomer from "../../components/admin/AddCustomer.jsx";
 import AddSeason from "../../components/admin/AddSeason.jsx";

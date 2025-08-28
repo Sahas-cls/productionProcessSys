@@ -3,6 +3,8 @@ import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as yup from "yup";
 import useStyles from "./../hooks/useStyles.js";
 import axios from "axios";
+import Swal from "sweetalert2";
+import ReactPaginate from "react-paginate";
 
 const AddLineLayout = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -12,6 +14,10 @@ const AddLineLayout = () => {
   const [workstationData, setWorkstationData] = useState([]);
   const [editingWorkstation, setEditingWorkstation] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const itemsPerPage = 4;
 
   const validationSchema = yup.object({
     styleNo: yup.string().required("Style number required"),
@@ -25,9 +31,9 @@ const AddLineLayout = () => {
     workstations: yup.array().of(
       yup.object().shape({
         workstation_id: yup.string().required("Workstation ID required"),
+        workstation_no: yup.string().required("Workstation Number required"),
         operations: yup.array().of(
           yup.object().shape({
-            workstation_no: yup.string().required("Workstation No required"),
             sub_operation_id: yup
               .string()
               .required("Sub Operation ID required"),
@@ -65,14 +71,24 @@ const AddLineLayout = () => {
   }, [selectedStyle, formHelpers]);
 
   useEffect(() => {
-    if (workstations.length > 0) {
+    if (Array.isArray(workstations) && workstations.length > 0) {
       const initialData = workstations.map((ws) => ({
         workstation_id: ws.workstation_id,
+        workstation_no: ws.workstation_no || "",
         operations: [],
       }));
       setWorkstationData(initialData);
     }
   }, [workstations]);
+
+  // Pagination calculations
+  const pageCount = Math.ceil(workstations.length / itemsPerPage);
+  const offset = currentPage * itemsPerPage;
+  const currentWorkstations = workstations.slice(offset, offset + itemsPerPage);
+
+  const handlePageClick = ({ selected }) => {
+    setCurrentPage(selected);
+  };
 
   const handleEditWorkstation = (workstationId) => {
     setEditingWorkstation(workstationId);
@@ -85,23 +101,37 @@ const AddLineLayout = () => {
   };
 
   const handleUpdateWorkstation = async (workstationId, values) => {
-    console.log(values);
     try {
       const response = await axios.put(
         `${apiUrl}/api/workstations/createWorkstation/${workstationId}`,
         values,
         { withCredentials: true }
       );
-      if (response.status === 201) {
-        alert("Workstation updated successfully!");
-        setEditingWorkstation(null);
+      if (response.status === 200) {
+        Swal.fire({
+          title: "Operation Success",
+          text: "New operation was added to your workstation successfully",
+          icon: "success",
+          timer: 3000,
+          showConfirmButton: true,
+          background: "#fff",
+          timerProgressBar: true,
+          didOpen: (toast) => {
+            toast.classList.add("swal2-show");
+            toast.addEventListener("mouseenter", Swal.stopTimer);
+            toast.addEventListener("mouseleave", Swal.resumeTimer);
+          },
+        });
         setIsEditing(false);
-        setWorkstations(response.data.data.workStations);
-        setSubOperations(response.data.data.subOperations);
       }
     } catch (error) {
       console.error(error);
-      alert("Error updating workstation");
+      Swal.fire({
+        title: "Operation failed",
+        text: `${error}`,
+        showConfirmButton: true,
+        icon: "error",
+      });
     }
   };
 
@@ -113,7 +143,21 @@ const AddLineLayout = () => {
           { withCredentials: true }
         );
         if (response.status === 200) {
-          alert("Workstation deleted successfully!");
+          Swal.fire({
+            title: "Operation Success",
+            text: "Workstation deleted successfully",
+            icon: "success",
+            timer: 3000,
+            background: "#fff",
+            showConfirmButton: true,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+              toast.classList.add("swal2-show");
+              toast.addEventListener("mouseenter", Swal.stopTimer);
+              toast.addEventListener("mouseleave", Swal.resumeTimer);
+            },
+          });
+
           setWorkstations(
             workstations.filter((ws) => ws.workstation_id !== workstationId)
           );
@@ -123,9 +167,26 @@ const AddLineLayout = () => {
         }
       } catch (error) {
         console.error(error);
-        alert("Error deleting workstation");
+        Swal.fire({
+          title: "Operation failed",
+          text: `${error}`,
+          showConfirmButton: true,
+          icon: "error",
+        });
       }
     }
+  };
+
+  // Helper function to get machine type from sub operation
+  const getMachineTypeFromSubOperation = (subOperationId) => {
+    const subOp = subOperations.find(
+      (op) => op.sub_operation_id.toString() === subOperationId.toString()
+    );
+
+    if (subOp && subOp.machines && subOp.machines.length > 0) {
+      return subOp.machines[0].machine_type || "";
+    }
+    return "";
   };
 
   return (
@@ -152,13 +213,26 @@ const AddLineLayout = () => {
                 { withCredentials: true }
               );
               if (response.status === 200 || response.status === 201) {
-                alert("Layout created successfully!");
+                Swal.fire({
+                  title: "Operation Successful!",
+                  text: "Your layout is created successfully",
+                  icon: "success",
+                  confirmButtonText: "OK",
+                  timer: 3000,
+                  timerProgressBar: true,
+                });
                 setWorkstations(response.data.data.workStations);
                 setSubOperations(response.data.data.subOperations);
+                setCurrentPage(0); // Reset to first page when new data is loaded
               }
             } catch (error) {
               console.error(error);
-              alert("Error creating layout");
+              Swal.fire({
+                title: "Operation failed",
+                text: `${error}`,
+                showConfirmButton: true,
+                icon: "error",
+              });
             }
           }}
         >
@@ -290,25 +364,55 @@ const AddLineLayout = () => {
         </Formik>
       </div>
 
-      {workstations.length > 0 && (
+      {Array.isArray(workstations) && workstations.length > 0 && (
         <div className="bg-white rounded-lg overflow-hidden shadow-xl">
           <h1 className="text-center font-semibold text-2xl p-4">
             Your Layout
           </h1>
+
+          {/* Pagination Controls */}
+          {workstations.length > itemsPerPage && (
+            <div className="flex justify-center mb-4">
+              <ReactPaginate
+                previousLabel={"← Previous"}
+                nextLabel={"Next →"}
+                pageCount={pageCount}
+                onPageChange={handlePageClick}
+                containerClassName={"pagination flex space-x-2"}
+                pageClassName={"page-item"}
+                pageLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                previousClassName={"page-item"}
+                previousLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                nextClassName={"page-item"}
+                nextLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                activeClassName={"active"}
+                activeLinkClassName={"bg-blue-500 text-white border-blue-500"}
+                disabledClassName={"disabled"}
+                disabledLinkClassName={
+                  "opacity-50 cursor-not-allowed hover:bg-transparent"
+                }
+              />
+            </div>
+          )}
+
           <div className="p-4">
             <Formik
               initialValues={{
                 workstations: workstationData.map((ws) => ({
                   ...ws,
-                  operations: ws.operations.map(op => ({
+                  operations: ws.operations.map((op) => ({
                     ...op,
-                    workstation_no: op.workstation_no || ""
-                  }))
+                  })),
                 })),
               }}
               validationSchema={operationSchema}
               onSubmit={async (values) => {
-                console.log("values: ", values);
                 try {
                   const response = await axios.post(
                     `${apiUrl}/api/layout/save-operations`,
@@ -316,11 +420,30 @@ const AddLineLayout = () => {
                     { withCredentials: true }
                   );
                   if (response.status === 200) {
-                    alert("Operations saved successfully!");
+                    Swal.fire({
+                      title: "Operation Success",
+                      text: "New operation was added to your workstation successfully",
+                      icon: "success",
+                      timer: 5000,
+                      background: "#fff",
+                      showConfirmButton: true,
+                      timerProgressBar: true,
+                      showCloseButton: false,
+                      didOpen: (toast) => {
+                        toast.classList.add("swal2-show");
+                        toast.addEventListener("mouseenter", Swal.stopTimer);
+                        toast.addEventListener("mouseleave", Swal.resumeTimer);
+                      },
+                    });
                   }
                 } catch (error) {
                   console.error(error);
-                  alert("Error saving operations");
+                  Swal.fire({
+                    title: "Operation failed",
+                    text: `${error}`,
+                    showConfirmButton: true,
+                    icon: "error",
+                  });
                 }
               }}
               enableReinitialize
@@ -330,311 +453,330 @@ const AddLineLayout = () => {
                   <FieldArray name="workstations">
                     {() => (
                       <div className="space-y-8">
-                        {values.workstations.map((workstation, wsIndex) => (
-                          <div key={wsIndex} className="border rounded-lg p-4">
-                            <div className="flex justify-between items-center mb-4">
-                              <h2 className="font-semibold text-lg">
-                                Workstation ID: {workstation.workstation_id}
-                              </h2>
-                              <div className="flex space-x-2">
-                                {isEditing &&
-                                editingWorkstation ===
-                                  workstation.workstation_id ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleUpdateWorkstation(
-                                          workstation.workstation_id,
-                                          values.workstations[wsIndex]
-                                        )
-                                      }
-                                      className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                                    >
-                                      Update
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleCancelEdit}
-                                      className="px-4 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleEditWorkstation(
-                                          workstation.workstation_id
-                                        )
-                                      }
-                                      className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handleDeleteWorkstation(
-                                          workstation.workstation_id
-                                        )
-                                      }
-                                      className="px-4 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                    >
-                                      Delete
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <table className="table-auto border-collapse border border-gray-300 w-full">
-                              <thead className="bg-gradient-to-r from-blue-600 to-blue-400">
-                                <tr>
-                                  <th className="py-2 border border-white">
-                                    Workstation No
-                                  </th>
-                                  <th className="py-2 border border-white">
-                                    Operation No
-                                  </th>
-                                  <th className="py-2 border border-white">
-                                    Operation
-                                  </th>
-                                  <th className="py-2 border border-white">
-                                    M/C Type
-                                  </th>
-                                  <th className="py-2 border border-white">
-                                    SMV
-                                  </th>
-                                  <th className="py-2 border border-white">
-                                    Actions
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <FieldArray
-                                  name={`workstations.${wsIndex}.operations`}
-                                >
-                                  {({ push: pushOp, remove: removeOp }) => (
-                                    <>
-                                      {workstation.operations.length === 0 ? (
-                                        <tr>
-                                          <td
-                                            colSpan={6}
-                                            className="text-center py-4"
-                                          >
-                                            No operations added yet
-                                          </td>
-                                        </tr>
-                                      ) : (
-                                        workstation.operations.map(
-                                          (operation, opIndex) => (
-                                            <tr key={opIndex}>
-                                              <td className="border px-2 py-1">
-                                                <Field
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.workstation_no`}
-                                                  className={`border px-2 py-1 w-full ${
-                                                    editingWorkstation ===
-                                                    workstation.workstation_id
-                                                      ? ""
-                                                      : "bg-gray-100"
-                                                  }`}
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                />
-                                                <ErrorMessage
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.workstation_no`}
-                                                  component="div"
-                                                  className="text-red-600 text-sm"
-                                                />
-                                              </td>
+                        {currentWorkstations.map((workstation, wsIndex) => {
+                          const globalWsIndex = workstations.findIndex(
+                            (ws) =>
+                              ws.workstation_id === workstation.workstation_id
+                          );
 
-                                              <td className="border px-2 py-1">
-                                                <Field
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.operation_no`}
-                                                  className={`border px-2 py-1 w-full ${
-                                                    editingWorkstation ===
-                                                    workstation.workstation_id
-                                                      ? ""
-                                                      : "bg-gray-100"
-                                                  }`}
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                />
-                                                <ErrorMessage
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.operation_no`}
-                                                  component="div"
-                                                  className="text-red-600 text-sm"
-                                                />
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                <Field
-                                                  as="select"
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.sub_operation_id`}
-                                                  className={`border px-2 py-1 w-full ${
-                                                    editingWorkstation ===
-                                                    workstation.workstation_id
-                                                      ? ""
-                                                      : "bg-gray-100"
-                                                  }`}
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                  onChange={(e) => {
-                                                    const selectedSubOpId =
-                                                      e.target.value;
-                                                    const selectedSubOp =
-                                                      subOperations.find(
-                                                        (subOp) =>
-                                                          subOp.sub_operation_id.toString() ===
-                                                          selectedSubOpId
-                                                      );
-                                                    if (selectedSubOp) {
-                                                      setFieldValue(
-                                                        `workstations.${wsIndex}.operations.${opIndex}.sub_operation_id`,
-                                                        selectedSubOpId
-                                                      );
-                                                      setFieldValue(
-                                                        `workstations.${wsIndex}.operations.${opIndex}.operation_no`,
-                                                        selectedSubOp.sub_operation_number
-                                                      );
-                                                      setFieldValue(
-                                                        `workstations.${wsIndex}.operations.${opIndex}.operation_name`,
-                                                        selectedSubOp.sub_operation_name
-                                                      );
-                                                      setFieldValue(
-                                                        `workstations.${wsIndex}.operations.${opIndex}.smv`,
-                                                        selectedSubOp.smv
-                                                      );
-                                                    }
-                                                  }}
-                                                >
-                                                  <option value="">
-                                                    Select Operation
-                                                  </option>
-                                                  {subOperations.map(
-                                                    (subOp) => (
-                                                      <option
-                                                        key={
-                                                          subOp.sub_operation_id
-                                                        }
-                                                        value={subOp.sub_operation_id.toString()}
-                                                      >
-                                                        {
-                                                          subOp.sub_operation_name
-                                                        }
-                                                      </option>
-                                                    )
-                                                  )}
-                                                </Field>
-                                                <ErrorMessage
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.sub_operation_id`}
-                                                  component="div"
-                                                  className="text-red-600 text-sm"
-                                                />
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                <Field
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.machine_type`}
-                                                  className={`border px-2 py-1 w-full ${
-                                                    editingWorkstation ===
-                                                    workstation.workstation_id
-                                                      ? ""
-                                                      : "bg-gray-100"
-                                                  }`}
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                />
-                                                <ErrorMessage
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.machine_type`}
-                                                  component="div"
-                                                  className="text-red-600 text-sm"
-                                                />
-                                              </td>
-                                              <td className="border px-2 py-1">
-                                                <Field
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.smv`}
-                                                  type="number"
-                                                  step="0.01"
-                                                  min="0"
-                                                  className={`border px-2 py-1 w-full ${
-                                                    editingWorkstation ===
-                                                    workstation.workstation_id
-                                                      ? ""
-                                                      : "bg-gray-100"
-                                                  }`}
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                />
-                                                <ErrorMessage
-                                                  name={`workstations.${wsIndex}.operations.${opIndex}.smv`}
-                                                  component="div"
-                                                  className="text-red-600 text-sm"
-                                                />
-                                              </td>
-                                              <td className="border px-2 py-1 text-center">
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    removeOp(opIndex)
-                                                  }
-                                                  className="text-red-500 hover:text-red-700"
-                                                  disabled={
-                                                    editingWorkstation !==
-                                                    workstation.workstation_id
-                                                  }
-                                                >
-                                                  Remove
-                                                </button>
-                                              </td>
-                                            </tr>
+                          return (
+                            <div
+                              key={wsIndex}
+                              className="border rounded-lg p-4"
+                            >
+                              <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center space-x-4">
+                                  <h2 className="font-semibold text-lg">
+                                    Workstation ID: {workstation.workstation_id}
+                                  </h2>
+                                  <div className="flex items-center">
+                                    <label className="mr-2">
+                                      Workstation No:
+                                    </label>
+                                    <Field
+                                      name={`workstations.${globalWsIndex}.workstation_no`}
+                                      className={`border px-2 py-1 w-20 ${
+                                        editingWorkstation ===
+                                        workstation.workstation_id
+                                          ? ""
+                                          : "bg-gray-100"
+                                      }`}
+                                      disabled={
+                                        editingWorkstation !==
+                                        workstation.workstation_id
+                                      }
+                                    />
+                                    <ErrorMessage
+                                      name={`workstations.${globalWsIndex}.workstation_no`}
+                                      component="div"
+                                      className="text-red-600 text-sm ml-2"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex space-x-2">
+                                  {isEditing &&
+                                  editingWorkstation ===
+                                    workstation.workstation_id ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleUpdateWorkstation(
+                                            workstation.workstation_id,
+                                            values.workstations[globalWsIndex]
                                           )
-                                        )
-                                      )}
-                                      <tr>
-                                        <td
-                                          colSpan={6}
-                                          className="text-center py-2"
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              pushOp({
-                                                workstation_no: "",
-                                                sub_operation_id: "",
-                                                operation_no: "",
-                                                operation_name: "",
-                                                machine_type: "",
-                                                smv: 0,
-                                              })
-                                            }
-                                            className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                                            disabled={
-                                              editingWorkstation !==
-                                              workstation.workstation_id
-                                            }
-                                          >
-                                            + Add Operation
-                                          </button>
-                                        </td>
-                                      </tr>
+                                        }
+                                        className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                                      >
+                                        Update
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelEdit}
+                                        className="px-4 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleEditWorkstation(
+                                            workstation.workstation_id
+                                          )
+                                        }
+                                        className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteWorkstation(
+                                            workstation.workstation_id
+                                          )
+                                        }
+                                        className="px-4 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                                      >
+                                        Delete
+                                      </button>
                                     </>
                                   )}
-                                </FieldArray>
-                              </tbody>
-                            </table>
-                          </div>
-                        ))}
+                                </div>
+                              </div>
+                              <table className="table-auto border-collapse border border-gray-300 w-full">
+                                <thead className="bg-gradient-to-r from-blue-600 to-blue-400">
+                                  <tr>
+                                    <th className="py-2 border border-white">
+                                      Operation No
+                                    </th>
+                                    <th className="py-2 border border-white">
+                                      Operation
+                                    </th>
+                                    <th className="py-2 border border-white">
+                                      M/C Type
+                                    </th>
+                                    <th className="py-2 border border-white">
+                                      SMV
+                                    </th>
+                                    <th className="py-2 border border-white">
+                                      Actions
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <FieldArray
+                                    name={`workstations.${globalWsIndex}.operations`}
+                                  >
+                                    {({ push: pushOp, remove: removeOp }) => (
+                                      <>
+                                        {values.workstations[globalWsIndex]
+                                          ?.operations?.length === 0 ? (
+                                          <tr>
+                                            <td
+                                              colSpan={5}
+                                              className="text-center py-4"
+                                            >
+                                              No operations added yet
+                                            </td>
+                                          </tr>
+                                        ) : (
+                                          values.workstations[
+                                            globalWsIndex
+                                          ]?.operations?.map(
+                                            (operation, opIndex) => (
+                                              <tr key={opIndex}>
+                                                <td className="border px-2 py-1">
+                                                  <Field
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.operation_no`}
+                                                    className={`border px-2 py-1 w-full ${
+                                                      editingWorkstation ===
+                                                      workstation.workstation_id
+                                                        ? ""
+                                                        : "bg-gray-100"
+                                                    }`}
+                                                    disabled={
+                                                      editingWorkstation !==
+                                                      workstation.workstation_id
+                                                    }
+                                                  />
+                                                  <ErrorMessage
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.operation_no`}
+                                                    component="div"
+                                                    className="text-red-600 text-sm"
+                                                  />
+                                                </td>
+                                                <td className="border px-2 py-1">
+                                                  <Field
+                                                    as="select"
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.sub_operation_id`}
+                                                    className={`border px-2 py-1 w-full ${
+                                                      editingWorkstation ===
+                                                      workstation.workstation_id
+                                                        ? ""
+                                                        : "bg-gray-100"
+                                                    }`}
+                                                    disabled={
+                                                      editingWorkstation !==
+                                                      workstation.workstation_id
+                                                    }
+                                                    onChange={(e) => {
+                                                      const selectedSubOpId =
+                                                        e.target.value;
+                                                      const selectedSubOp =
+                                                        subOperations.find(
+                                                          (subOp) =>
+                                                            subOp.sub_operation_id.toString() ===
+                                                            selectedSubOpId
+                                                        );
+                                                      if (selectedSubOp) {
+                                                        setFieldValue(
+                                                          `workstations.${globalWsIndex}.operations.${opIndex}.sub_operation_id`,
+                                                          selectedSubOpId
+                                                        );
+                                                        setFieldValue(
+                                                          `workstations.${globalWsIndex}.operations.${opIndex}.operation_no`,
+                                                          selectedSubOp.sub_operation_number
+                                                        );
+                                                        setFieldValue(
+                                                          `workstations.${globalWsIndex}.operations.${opIndex}.operation_name`,
+                                                          selectedSubOp.sub_operation_name
+                                                        );
+                                                        setFieldValue(
+                                                          `workstations.${globalWsIndex}.operations.${opIndex}.machine_type`,
+                                                          getMachineTypeFromSubOperation(
+                                                            selectedSubOpId
+                                                          )
+                                                        );
+                                                        setFieldValue(
+                                                          `workstations.${globalWsIndex}.operations.${opIndex}.smv`,
+                                                          selectedSubOp.smv
+                                                        );
+                                                      }
+                                                    }}
+                                                  >
+                                                    <option value="">
+                                                      Select Operation
+                                                    </option>
+                                                    {subOperations.map(
+                                                      (subOp) => (
+                                                        <option
+                                                          key={
+                                                            subOp.sub_operation_id
+                                                          }
+                                                          value={subOp.sub_operation_id.toString()}
+                                                        >
+                                                          {
+                                                            subOp.sub_operation_name
+                                                          }
+                                                        </option>
+                                                      )
+                                                    )}
+                                                  </Field>
+                                                  <ErrorMessage
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.sub_operation_id`}
+                                                    component="div"
+                                                    className="text-red-600 text-sm"
+                                                  />
+                                                </td>
+                                                <td className="border px-2 py-1">
+                                                  <Field
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.machine_type`}
+                                                    className={`border px-2 py-1 w-full ${
+                                                      editingWorkstation ===
+                                                      workstation.workstation_id
+                                                        ? ""
+                                                        : "bg-gray-100"
+                                                    }`}
+                                                    disabled={
+                                                      editingWorkstation !==
+                                                      workstation.workstation_id
+                                                    }
+                                                  />
+                                                  <ErrorMessage
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.machine_type`}
+                                                    component="div"
+                                                    className="text-red-600 text-sm"
+                                                  />
+                                                </td>
+                                                <td className="border px-2 py-1">
+                                                  <Field
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.smv`}
+                                                    type="number"
+                                                    step="0.01"
+                                                    min="0"
+                                                    className={`border px-2 py-1 w-full ${
+                                                      editingWorkstation ===
+                                                      workstation.workstation_id
+                                                        ? ""
+                                                        : "bg-gray-100"
+                                                    }`}
+                                                    disabled={
+                                                      editingWorkstation !==
+                                                      workstation.workstation_id
+                                                    }
+                                                  />
+                                                  <ErrorMessage
+                                                    name={`workstations.${globalWsIndex}.operations.${opIndex}.smv`}
+                                                    component="div"
+                                                    className="text-red-600 text-sm"
+                                                  />
+                                                </td>
+                                                <td className="border px-2 py-1 text-center">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      removeOp(opIndex)
+                                                    }
+                                                    className="text-red-500 hover:text-red-700"
+                                                    disabled={
+                                                      editingWorkstation !==
+                                                      workstation.workstation_id
+                                                    }
+                                                  >
+                                                    Remove
+                                                  </button>
+                                                </td>
+                                              </tr>
+                                            )
+                                          )
+                                        )}
+                                        <tr>
+                                          <td
+                                            colSpan={5}
+                                            className="text-center py-2"
+                                          >
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                pushOp({
+                                                  sub_operation_id: "",
+                                                  operation_no: "",
+                                                  operation_name: "",
+                                                  machine_type: "",
+                                                  smv: 0,
+                                                })
+                                              }
+                                              className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                                              disabled={
+                                                editingWorkstation !==
+                                                workstation.workstation_id
+                                              }
+                                            >
+                                              + Add Operation
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      </>
+                                    )}
+                                  </FieldArray>
+                                </tbody>
+                              </table>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </FieldArray>
@@ -652,6 +794,37 @@ const AddLineLayout = () => {
               )}
             </Formik>
           </div>
+
+          {/* Pagination Controls at bottom */}
+          {workstations.length > itemsPerPage && (
+            <div className="flex justify-center mt-4 pb-4">
+              <ReactPaginate
+                previousLabel={"← Previous"}
+                nextLabel={"Next →"}
+                pageCount={pageCount}
+                onPageChange={handlePageClick}
+                containerClassName={"pagination flex space-x-2"}
+                pageClassName={"page-item"}
+                pageLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                previousClassName={"page-item"}
+                previousLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                nextClassName={"page-item"}
+                nextLinkClassName={
+                  "px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100"
+                }
+                activeClassName={"active"}
+                activeLinkClassName={"bg-blue-500 text-white border-blue-500"}
+                disabledClassName={"disabled"}
+                disabledLinkClassName={
+                  "opacity-50 cursor-not-allowed hover:bg-transparent"
+                }
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

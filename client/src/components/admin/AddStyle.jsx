@@ -120,8 +120,16 @@ const AddStyle = ({ userRole }) => {
     }
   };
 
+  // use state to store editing images
+  const [eiditingImgs, setEditingImgs] = useState({
+    frontImage: "",
+    backImage: "",
+  });
+
+  // Handle style edit
   // Handle style edit
   const handleEditStyle = (style) => {
+    console.log("editing style: ", style);
     setEditingStyle(style);
     setIsAddStyle(true);
     setIsSubmitting(false);
@@ -137,13 +145,17 @@ const AddStyle = ({ userRole }) => {
     });
     setCurrentCustomer(style.customer_id);
 
-    // If editing, set the existing images as previews
-    if (style.StyleMedia && style.StyleMedia.length > 0) {
-      style.StyleMedia.forEach((media) => {
+    // Use the helper function here
+    const mediaArray = style.style_medias || style.StyleMedia || [];
+
+    if (mediaArray.length > 0) {
+      mediaArray.forEach((media) => {
+        const fullImageUrl = getImageUrl(media.media_url); // Using helper function
+
         if (media.media_type === "front") {
-          setFrontPreview(media.media_url);
+          setFrontPreview(fullImageUrl);
         } else if (media.media_type === "back") {
-          setBackPreview(media.media_url);
+          setBackPreview(fullImageUrl);
         }
       });
     }
@@ -468,6 +480,12 @@ const AddStyle = ({ userRole }) => {
     };
   }, [frontPreview, backPreview]);
 
+  const getImageUrl = (mediaUrl) => {
+    if (!mediaUrl) return null;
+    if (mediaUrl.startsWith("http")) return mediaUrl;
+    return `${apiUrl}/media/${mediaUrl}`;
+  };
+
   return (
     <motion.div
       initial="hidden"
@@ -771,6 +789,7 @@ const AddStyle = ({ userRole }) => {
                   </motion.label>
 
                   {/* Front Image Preview */}
+                  {/* Front Image Preview */}
                   <AnimatePresence>
                     {frontPreview && (
                       <motion.div
@@ -785,6 +804,10 @@ const AddStyle = ({ userRole }) => {
                             src={frontPreview}
                             alt="Front preview"
                             className="w-full h-40 object-contain rounded-md shadow"
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                              // You could show a placeholder image here
+                            }}
                           />
                           <motion.button
                             type="button"
@@ -969,14 +992,19 @@ const AddStyle = ({ userRole }) => {
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 flex items-center gap-x-6">
-                      <img
-                        src={`${import.meta.env.VITE_API_URL}/media/${
-                          style?.style_medias[0]?.media_url
-                        }`}
-                        alt="this is a style image"
-                        width={60}
-                        loading="lazy"
-                      />
+                      {style.style_medias?.[0]?.media_url && (
+                        <img
+                          src={getImageUrl(style.style_medias[0].media_url)} // Using helper function
+                          alt="Style preview"
+                          width={60}
+                          height={60}
+                          loading="lazy"
+                          className="object-cover rounded"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      )}
                       {style.factory?.factory_name || "N/A"}
                     </div>
                   </td>

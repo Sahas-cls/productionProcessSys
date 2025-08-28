@@ -150,8 +150,8 @@ const StyleCard = ({ style, onViewDetails }) => {
   return (
     <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
       {/* Card Header */}
-      <div className="bg-gray-300 px-4 py-3">
-        <h3 className="text-black font-semibold text-center truncate">
+      <div className="bg-gradient-to-br from-blue-700 to-blue-500 px-4 py-3 text-white">
+        <h3 className="text-white font-semibold text-center truncate">
           Style No: {style.style_no || "N/A"}
         </h3>
         <h5 className="text-center">PO No: {style.po_number || "N/A"}</h5>

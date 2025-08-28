@@ -178,7 +178,8 @@ const AddFactory = ({ userRole }) => {
     }
     try {
       const response = await axios.delete(
-        `${apiUrl}/api/factories/deleteFactory/${index}`
+        `${apiUrl}/api/factories/deleteFactory/${index}`,
+        { withCredentials: true }
       );
       if (response.status === 200 || response.status === 201) {
         swal.fire({
@@ -320,7 +321,7 @@ const AddFactory = ({ userRole }) => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gray-100 p-4 md:p-8">
+    <div className="w-full h-full p-4 md:p-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         {/* Search Bar */}

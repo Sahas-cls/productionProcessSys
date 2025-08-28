@@ -96,7 +96,15 @@ exports.createWS = async (req, res, next) => {
   console.log("Request body:", req.body);
 
   try {
-    const { workstation_id, operations } = req.body;
+    const { workstation_id, operations, workstation_no } = req.body;
+
+    // Validate required fields
+    if (!workstation_id) {
+      return res.status(400).json({
+        status: "error",
+        message: "Workstation ID is required",
+      });
+    }
 
     await WorkstationSubmenu.sequelize.transaction(async (t) => {
       // 1. First find the existing workstation to get its layout_id
@@ -115,46 +123,51 @@ exports.createWS = async (req, res, next) => {
         );
       }
 
-      // 2. Clear existing operations for this workstation
+      // 2. Update workstation number if provided
+      if (workstation_no !== undefined && workstation_no !== null) {
+        await existingWorkstation.update(
+          {
+            workstation_no: workstation_no,
+          },
+          { transaction: t }
+        );
+      }
+
+      // 3. Clear existing operations for this workstation
       await WorkstationSubmenu.destroy({
         where: { workstation_id },
         transaction: t,
       });
 
-      // 3. Create new operations
-      const submenuEntries = operations.map((op) => {
-        if (!op.sub_operation_id) {
-          throw new Error(
-            `Operation missing sub_operation_id: ${JSON.stringify(op)}`
-          );
-        }
-        return {
-          workstation_id,
-          sub_operation_id: op.sub_operation_id,
-          // Add other fields if your model supports them
-        };
-      });
+      // 4. Create new operations
+      if (operations && operations.length > 0) {
+        const submenuEntries = operations.map((op) => {
+          if (!op.sub_operation_id) {
+            throw new Error(
+              `Operation missing sub_operation_id: ${JSON.stringify(op)}`
+            );
+          }
+          return {
+            workstation_id,
+            sub_operation_id: op.sub_operation_id,
+            operation_no: op.operation_no || null,
+            operation_name: op.operation_name || null,
+            machine_type: op.machine_type || null,
+            smv: op.smv || 0,
+            // Add other fields if your model supports them
+          };
+        });
 
-      await WorkstationSubmenu.bulkCreate(submenuEntries, { transaction: t });
-
-      // 4. Update workstation numbers if needed
-      // (Assuming you want to keep the first operation's workstation_no)
-      if (operations.length > 0) {
-        await existingWorkstation.update(
-          {
-            workstation_no: operations[0].workstation_no,
-          },
-          { transaction: t }
-        );
+        await WorkstationSubmenu.bulkCreate(submenuEntries, { transaction: t });
       }
     });
 
     res.status(200).json({
       status: "success",
-      message: "Operations saved successfully",
+      message: "Workstation and operations saved successfully",
     });
   } catch (error) {
-    console.error("Error saving operations:", error);
+    console.error("Error saving workstation operations:", error);
     res.status(500).json({
       status: "error",
       message: error.message,
@@ -258,6 +271,34 @@ exports.deleteSubOperation = async (req, res, next) => {
     res
       .status(200)
       .json({ status: "succes", message: "Operation delete success" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to rename workstaion
+exports.workstationId = async (req, res, next) => {
+  //
+  const { workstationId } = req.params;
+  const { workstation_no } = req.body;
+  // console.log(workstationId);
+  // console.log(req.body);
+  // return;
+  try {
+    if (!workstationId || workstationId === null) {
+      const error = new Error("Workstation number is required");
+      error.status = 400;
+      throw error;
+    }
+
+    const rename = await Workstation.update(
+      { workstation_no: workstation_no },
+      { where: { workstation_id: workstationId } }
+    );
+
+    res
+      .status(200)
+      .json({ status: "success", message: "Workstation update success" });
   } catch (error) {
     return next(error);
   }

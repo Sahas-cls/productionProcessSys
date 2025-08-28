@@ -7,6 +7,7 @@ import axios from "axios";
 import Swal from "sweetalert2";
 import useMachine from "../hooks/useMachine";
 import useMachineTypes from "../hooks/useMachineTypes";
+import { useMemo } from "react";
 
 // Validation Schema
 const SubOperationSchema = Yup.object().shape({
@@ -38,8 +39,8 @@ const apiUrl = import.meta.env.VITE_API_URL;
 const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
   const { machineList, refresh } = useMachine();
   const { machineTList } = useMachineTypes();
-  console.log(machineList);
-  console.log("machine", machineList);
+  // console.log(machineList);
+  // console.log("machine", machineList);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editValue, setEditValue] = useState("");
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
@@ -130,6 +131,22 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
   const handleEditCancel = () => {
     setEditingIndex(null);
     setEditValue("");
+  };
+
+  const [selectedMachineT, setSelectedMachineT] = useState(null);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+
+  // to filter machien list according to selected machien list
+  const filteredMachineList = useMemo(() => {
+    if (selectedMachineT === null || selectedMachineT === "") {
+      return [];
+    }
+
+    return machineList.filter((mch) => mch.machine_type === selectedMachineT);
+  }, [selectedMachineT, machineList]);
+
+  const handleSelectedMachine = (mch) => {
+    // to auto fill selected machine name
   };
 
   return (
@@ -258,14 +275,27 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                 <div className="grid grid-cols-1">
                   <label htmlFor="machineType">Machine Type</label>
                   <Field
+                    as="select"
                     name="machineType"
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFieldValue("machineType", value);
+                      setSelectedMachineT(value);
+                    }}
                     className={`border-2 px-2 py-2 rounded-md shadow-sm ${
                       errors.machineType && touched.machineType
                         ? "border-red-500"
                         : ""
                     }`}
-                    placeholder="Machine type"
-                  />
+                  >
+                    <option>Select a machine type</option>
+                    {Array.isArray(machineTList) &&
+                      machineTList.map((mcht, index) => (
+                        <option key={index} value={mcht}>
+                          {mcht}
+                        </option>
+                      ))}
+                  </Field>
                   <ErrorMessage
                     name="machineType"
                     component="div"
@@ -278,6 +308,22 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                   <Field
                     as="select"
                     name="machineNo"
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFieldValue("machineNo", value);
+
+                      const selectedMachine = filteredMachineList.find(
+                        (mch) => mch.machine_no === value
+                      );
+
+                      // If found, set machineName in Formik
+                      if (selectedMachine) {
+                        setFieldValue(
+                          "machineName",
+                          selectedMachine.machine_name
+                        );
+                      }
+                    }}
                     className={`border-2 px-2 py-2 rounded-md shadow-sm ${
                       errors.machineNo && touched.machineNo
                         ? "border-red-500"
@@ -285,14 +331,14 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                     }`}
                   >
                     <option>Select a machine</option>
-                    {Array.isArray(machineList) &&
-                      machineList.map((mch) => (
+                    {Array.isArray(filteredMachineList) &&
+                      filteredMachineList.map((mch) => (
                         <option
                           className={`${
                             mch.machine_status === "active"
                               ? "text-green-600 bg-green-300"
                               : "text-red-600 bg-red-300"
-                          } font-semibold`}
+                          } font-semibold border-b-2 border-white`}
                           key={mch.machine_id}
                           value={mch.machine_no}
                         >

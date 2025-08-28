@@ -125,7 +125,8 @@ const ViewStyleDetails = () => {
 
     try {
       const response = await axios.delete(
-        `${apiUrl}/api/operationBulleting/delete-sub-operation/${subOperationId}`
+        `${apiUrl}/api/operationBulleting/delete-sub-operation/${subOperationId}`,
+        { withCredentials: true }
       );
 
       if (response.status === 200) {
