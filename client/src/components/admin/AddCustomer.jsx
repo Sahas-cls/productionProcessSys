@@ -170,7 +170,7 @@ const AddCustomer = ({ userRole }) => {
     }
 
     setIsSubmitting(true);
-    
+
     try {
       let response;
 
@@ -218,7 +218,7 @@ const AddCustomer = ({ userRole }) => {
       console.error("Error:", {
         message: error.message,
         response: error.response,
-        stack: error.stack
+        stack: error.stack,
       });
 
       if (error.message === "Network Error") {
@@ -236,7 +236,7 @@ const AddCustomer = ({ userRole }) => {
           icon: "error",
         }).then(() => navigate("/"));
       }
-      
+
       setServerMessage({
         status: "error",
         message:
@@ -514,7 +514,7 @@ const AddCustomer = ({ userRole }) => {
                 >
                   <motion.button
                     type="button"
-                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm"
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm text-sm md:text-base"
                     onClick={handleCancel}
                     variants={buttonVariants}
                     whileHover="hover"
@@ -524,14 +524,17 @@ const AddCustomer = ({ userRole }) => {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md text-sm md:text-base"
                     variants={buttonVariants}
                     whileHover="hover"
                     whileTap="tap"
                     disabled={isSubmitting || !formik.isValid}
                   >
-                    {isSubmitting ? "Processing..." : 
-                     isEditMode ? "Update Customer" : "Save Customer"}
+                    {isSubmitting
+                      ? "Processing..."
+                      : isEditMode
+                      ? "Update"
+                      : "Save"}
                   </motion.button>
                 </motion.div>
               </form>

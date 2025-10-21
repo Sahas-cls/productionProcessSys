@@ -91,19 +91,15 @@ const ViewLayout = () => {
 
   // Filter layouts based on search term
   const filteredLayouts = layoutList?.filter((layout) => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      layout.layout_id.toString().includes(searchLower) ||
-      (layout.style_id && layout.style_id.toString().includes(searchLower)) ||
-      (layout.season_id && layout.season_id.toString().includes(searchLower)) ||
-      (layout.workstation_count &&
-        layout.workstation_count.toString().includes(searchLower)) ||
-      (layout.createdAt &&
-        new Date(layout.createdAt)
-          .toLocaleDateString()
-          .toLowerCase()
-          .includes(searchLower))
-    );
+    const searchLower = searchTerm.toLowerCase().trim();
+
+    // Check if search starts with "layout "
+    if (searchLower.startsWith("layout ")) {
+      const idSearch = searchLower.replace("layout ", "").trim();
+      return layout.layout_id.toString().includes(idSearch);
+    }
+
+    return layoutList;
   });
 
   // Pagination logic
@@ -274,9 +270,9 @@ const ViewLayout = () => {
                     )}
                   </div>
 
-                  <div className="p-5">
+                  <div className="p-5 cursor-pointer">
                     <div className="flex justify-center items-center mb-3">
-                      <h2 className="text-lg font-bold text-gray-800 truncate text-center">
+                      <h2 className="text-lg md:text-lg font-bold text-gray-800 truncate text-center">
                         Layout {layout.layout_id}
                       </h2>
                     </div>
@@ -331,7 +327,7 @@ const ViewLayout = () => {
                       </div>
                     </div>
                   </div>
-                  <div className="bg-gray-100/70 px-5 py-3 border-t border-gray-100">
+                  <div className="bg-gray-100/90 px-5 py-3 border-t border-gray-300/50">
                     <div className="flex justify-between items-center">
                       <p className="text-xs text-gray-500">
                         Created:{" "}

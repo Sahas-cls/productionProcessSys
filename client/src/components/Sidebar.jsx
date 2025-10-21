@@ -56,7 +56,7 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
       transition: {
         duration: 0.8,
         type: "spring",
-        stiffness: 200,
+        stiffness: 100,
         staggerChildren: 0.3,
       },
     },
@@ -80,9 +80,9 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
   return (
     <aside
       ref={sidebarRef}
-      className={`md:w-[18%] min-h-full ${
+      className={` md:w-[28%] lg:w-[19%] min-h-full ${
         toggleSidebar ? "block" : "hidden"
-      } md:block w-[70%] absolute md:relative z-30 bg-secondary shadow-sm overflow-y-auto overflow-clip `}
+      } md:block w-[70%] fixed md:relative z-30 bg-secondary shadow-sm overflow-y-auto overflow-clip `}
     >
       {/* Logo */}
       <motion.div
@@ -91,8 +91,8 @@ const Sidebar = ({ toggleSidebar, setToggleSidebar }) => {
         animate="visible"
         className="flex flex-col items-center justify-center mt-10 ml-1"
       >
-        <motion.img src={concordLogo} alt="Logo" className="w-20" />
-        <motion.h1 className="mt-2 text-xl uppercase font-semibold text-white font-sans">
+        <motion.img src={concordLogo} alt="Logo" className="w-9 md:w-20" />
+        <motion.h1 className="mt-2 text-lg md:text-xl uppercase font-semibold text-white text-center font-sans">
           Concord Group
         </motion.h1>
       </motion.div>

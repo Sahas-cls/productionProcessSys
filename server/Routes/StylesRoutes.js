@@ -12,15 +12,22 @@ const path = require("path");
 // Multer storage config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "\\\\192.168.46.209\\Operation bullatin videos\\StyleImages"); // save inside /uploads
+    cb(null, "\\\\192.168.46.209\\Operation bullatin videos\\StyleImages"); // UNC path
   },
   filename: function (req, file, cb) {
-    const styleNo = req.body.styleNo || "unknown"; // get styleNo from form
+    const styleNo = req.body.styleNo || "unknown"; // from form
     const poNo = req.body.poNumber || "unknown";
     const fileType = file.fieldname === "frontImage" ? "front" : "back";
     const ext = path.extname(file.originalname);
 
-    cb(null, `${styleNo}_${poNo}_${fileType}${ext}`);
+    // Create timestamp (YYYYMMDD_HHmmss)
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[-:T.Z]/g, "")
+      .slice(0, 14); // e.g. 20251021_104530
+
+    // Final filename: styleNo_poNo_type_timestamp.ext
+    cb(null, `${styleNo}_${poNo}_${fileType}_${timestamp}${ext}`);
   },
 });
 

@@ -349,7 +349,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         <div className="flex gap-4 w-full md:w-auto">
           <motion.button
             type="button"
-            className="bg-green-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+            className="bg-green-600 py-1 md:py-2 px-6 md:px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
@@ -363,7 +363,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
           {userRole === "Admin" ? (
             <motion.button
               type="button"
-              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
@@ -372,7 +372,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                 setIsAddStyle(!isAddStyle);
               }}
             >
-              {isAddStyle ? "Close Form" : "Add Machine"}
+              {isAddStyle ? "Close" : "Add"}
             </motion.button>
           ) : (
             ""
@@ -384,13 +384,13 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       <AnimatePresence>
         {isAddStyle && (
           <motion.div
-            className="bg-white p-6 rounded-lg shadow-md mb-6 duration-200"
+            className="bg-white p-4 sm:p-6 rounded-lg shadow-md mb-6 duration-200 mx-2 sm:mx-0"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.3 }}
           >
-            <h3 className="text-xl font-semibold mb-4">
+            <h3 className="text-lg sm:text-xl font-semibold mb-4">
               {editingMachine ? "Edit Machine" : "Add New Machine"}
             </h3>
             <Formik
@@ -401,143 +401,141 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             >
               {({ isSubmitting, values }) => (
                 <Form>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Machine Type
                       </label>
                       <Field
                         type="text"
                         name="machine_type"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_type"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
-                    <div>
+
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Machine Number
                       </label>
                       <Field
                         type="text"
                         name="machine_no"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                         disabled={!!editingMachine}
                       />
                       <ErrorMessage
                         name="machine_no"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
 
-                    <div>
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Machine Name
                       </label>
                       <Field
                         type="text"
                         name="machine_name"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_name"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
-                    <div>
+
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Machine Brand
                       </label>
                       <Field
                         type="text"
                         name="machine_brand"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_brand"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
-                    <div className="col-span-2">
+
+                    <div className="sm:col-span-2 lg:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Machine Location
                       </label>
                       <Field
                         type="text"
                         name="machine_location"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_location"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
 
-                    {/* <div className="col-span-2">
-                      <h1 className="font-bold text-center tracking-wide uppercase">
-                        Additional Informations
-                      </h1>
-                    </div> */}
-
-                    <div className="">
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Purchase Date
                       </label>
                       <Field
                         type="date"
                         name="purchase_date"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="purchase_date"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
 
-                    <div className="">
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Supplier
                       </label>
                       <Field
                         type="text"
                         name="supplier"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="supplier"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
-                    <div className="">
+
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Last Service Date
                       </label>
                       <Field
                         type="date"
                         name="service_date"
-                        className="w-full p-2 border rounded-md"
+                        className="w-full p-2 border rounded-md text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="service_date"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
-                    <div className="">
+
+                    <div className="sm:col-span-2 lg:col-span-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Status
                       </label>
-                      <div className="flex gap-6">
-                        {/* Active */}
+                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
                         <div className="flex gap-4">
                           <label
                             htmlFor="status_active"
@@ -550,10 +548,9 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                               value="active"
                               className="h-4 w-4"
                             />
-                            <span>Active</span>
+                            <span className="text-sm sm:text-base">Active</span>
                           </label>
 
-                          {/* Inactive */}
                           <label
                             htmlFor="status_inactive"
                             className="flex items-center gap-2 cursor-pointer"
@@ -565,14 +562,16 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                               value="inactive"
                               className="h-4 w-4"
                             />
-                            <span>Inactive</span>
+                            <span className="text-sm sm:text-base">
+                              Inactive
+                            </span>
                           </label>
                         </div>
                       </div>
                       <ErrorMessage
                         name="service_date"
                         component="div"
-                        className="text-red-500 text-sm mt-1"
+                        className="text-red-500 text-xs sm:text-sm mt-1"
                       />
                     </div>
 
@@ -585,36 +584,36 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                           transition={{
                             type: "spring",
                           }}
-                          className="grid grid-cols-1 col-span-2"
+                          className="sm:col-span-2 lg:col-span-3"
                         >
-                          <label htmlFor="">Date of Breakdown</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Date of Breakdown
+                          </label>
                           <Field
                             type="date"
                             name="breakdown_date"
-                            className="w-full p-2 border rounded-md"
+                            className="w-full p-2 border rounded-md text-sm sm:text-base"
                           />
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  <fieldset className="mt-4 border rounded-lg py-2">
-                    <legend>Your barcode will appear here</legend>
-                    {/* <Barcode
-                      value={`${values.machine_no} | ${values.machine_name} | ${values.status}`}
-                      lineColor="#13949A"
-                      width={1}
-                      height={90}
-                    /> */}
-
-                    <PrintableBarcode
-                      value={`${values.machine_no} | ${values.machine_name} | ${values.status}`}
-                    />
+                  <fieldset className="mt-4 border rounded-lg p-3 sm:p-4">
+                    <legend className="text-sm sm:text-base px-2">
+                      Your barcode will appear here
+                    </legend>
+                    <div className="flex justify-center w-[100px]">
+                      <PrintableBarcode
+                        value={`${values.machine_no} | ${values.machine_name} | ${values.status}`}
+                      />
+                    </div>
                   </fieldset>
-                  <div className="mt-6 flex justify-end gap-3">
+
+                  <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
                     <button
                       type="button"
-                      className="px-4 py-2 bg-gray-200 rounded-md"
+                      className="px-4 py-2 bg-gray-200 rounded-md text-sm sm:text-base order-2 sm:order-1"
                       onClick={() => {
                         setIsAddStyle(false);
                         setEditingMachine(null);
@@ -624,7 +623,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md disabled:bg-blue-400"
+                      className="px-4 py-2 bg-blue-600 text-white rounded-md disabled:bg-blue-400 text-sm sm:text-base order-1 sm:order-2"
                       disabled={isSubmitting}
                     >
                       {editingMachine ? "Update Machine" : "Save Machine"}
@@ -638,9 +637,9 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       </AnimatePresence>
 
       {/* machines table */}
-      <div className="rounded-xl overflow-hidden overflow-x-auto">
+      <div className="rounded-xl overflow-hidden overflow-x-auto pb-6">
         <table className="w-full">
-          <thead className="bg-gradient-to-r from-blue-700 to-blue-600/80 text-white">
+          <thead className="bg-gradient-to-r from-blue-700 to-blue-600/80 text-white text-sm md:text-base">
             <tr>
               <th className="whitespace-nowrap border-r border px-2 py-3">
                 Machine Type
@@ -669,7 +668,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
               )}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="text-sm md:text-base">
             {Array.isArray(filteredMachines) && filteredMachines.length > 0 ? (
               filteredMachines.map((machine) => (
                 <tr

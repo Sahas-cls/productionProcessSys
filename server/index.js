@@ -6,6 +6,7 @@ const dotenv = require("dotenv");
 const db = require("./models");
 const multer = require("multer");
 const path = require("path");
+const morgan = require("morgan");
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(morgan("combined"));
 
 // Expose shared network folder as static files
 app.use(

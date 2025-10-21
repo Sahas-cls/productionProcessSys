@@ -280,7 +280,7 @@ const Login = () => {
               variants={itemVariants}
             >
               <div className="flex items-center">
-                <input
+                {/* <input
                   type="checkbox"
                   id="rememberMe"
                   name="rememberMe"
@@ -290,7 +290,7 @@ const Login = () => {
                 />
                 <label htmlFor="rememberMe" className="text-gray-700">
                   Remember me
-                </label>
+                </label> */}
               </div>
 
               <motion.a
@@ -298,7 +298,7 @@ const Login = () => {
                 className="text-teal-600 font-medium hover:text-teal-700 transition-colors"
                 whileHover={{ scale: 1.02 }}
               >
-                Forgot password?
+                {/* Forgot password? */}
               </motion.a>
             </motion.div>
 

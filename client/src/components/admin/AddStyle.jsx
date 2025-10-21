@@ -514,7 +514,7 @@ const AddStyle = ({ userRole }) => {
         <div className="flex gap-4 w-full md:w-auto">
           <motion.button
             type="button"
-            className="bg-green-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+            className="bg-green-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
@@ -525,13 +525,13 @@ const AddStyle = ({ userRole }) => {
           {userRole === "Admin" ? (
             <motion.button
               type="button"
-              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none"
+              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
               onClick={handleIsAddingStyle}
             >
-              {isAddStyle ? "Close Form" : "Add Style"}
+              {isAddStyle ? "Close" : "Add Style"}
             </motion.button>
           ) : (
             ""
@@ -892,7 +892,7 @@ const AddStyle = ({ userRole }) => {
             >
               <motion.button
                 type="button"
-                className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+                className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 text-sm md:text-base"
                 variants={buttonVariants}
                 whileHover="hover"
                 whileTap="tap"
@@ -902,7 +902,7 @@ const AddStyle = ({ userRole }) => {
               </motion.button>
               <motion.button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 rounded-md text-white hover:bg-blue-700 disabled:bg-blue-400"
+                className="px-6 py-2 bg-blue-600 rounded-md text-white hover:bg-blue-700 disabled:bg-blue-400 text-sm md:text-base"
                 variants={buttonVariants}
                 whileHover="hover"
                 whileTap="tap"
@@ -951,28 +951,28 @@ const AddStyle = ({ userRole }) => {
         transition={{ duration: 0.4, delay: 0.2 }}
       >
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0">
+          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 text-xs md:text-base">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Factory
               </th>
-              <th className="px-6极速 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Customer
               </th>
-              <th className="px-6 py-3 text-left text-xs极速 font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Season
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Style No
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Style Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Description
               </th>
               {userRole === "Admin" ? (
-                <th className="px-6 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
+                <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
                   Actions
                 </th>
               ) : (
@@ -980,7 +980,7 @@ const AddStyle = ({ userRole }) => {
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base">
             {Array.isArray(filteredStyles) && filteredStyles.length > 0 ? (
               filteredStyles.map((style) => (
                 <motion.tr
@@ -991,7 +991,7 @@ const AddStyle = ({ userRole }) => {
                   transition={{ duration: 0.3 }}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900 flex items-center gap-x-6">
+                    <div className="font-medium text-gray-900 flex items-center gap-x-6">
                       {style.style_medias?.[0]?.media_url && (
                         <img
                           src={getImageUrl(style.style_medias[0].media_url)} // Using helper function
@@ -1014,7 +1014,7 @@ const AddStyle = ({ userRole }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="极速text-sm text-gray-700">
+                    <div className="text-sm text-gray-700">
                       {style.season?.season || "N/A"}
                     </div>
                   </td>

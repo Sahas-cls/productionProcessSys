@@ -484,7 +484,7 @@ const AddFactory = ({ userRole }) => {
                 >
                   <motion.button
                     type="button"
-                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm"
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm text-sm md:text-base"
                     onClick={handleCancel}
                     variants={buttonVariants}
                     whileHover="hover"
@@ -494,12 +494,12 @@ const AddFactory = ({ userRole }) => {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-sm md:text-md text-white font-medium rounded-lg transition-all duration-200 shadow-md"
                     variants={buttonVariants}
                     whileHover="hover"
                     whileTap="tap"
                   >
-                    {isEditing ? "Update Factory" : "Save Factory"}
+                    {isEditing ? "Update" : "Save"}
                   </motion.button>
                 </motion.div>
               </form>

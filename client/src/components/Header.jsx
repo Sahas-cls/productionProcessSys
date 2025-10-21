@@ -2,8 +2,9 @@ import { GiHamburgerMenu } from "react-icons/gi";
 import { FiUser } from "react-icons/fi";
 import { useUser } from "../contexts/userContext";
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import axios from "axios";
 
 const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const { user: loggedUser, loading } = useAuth();
@@ -13,8 +14,8 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const dropdownRef = useRef(null);
   const userName = localStorage.getItem("userName");
   const firstName = userName ? userName.split(" ")[0] : "Guest";
+  const apiUrl = import.meta.env.VITE_API_URL;
   const navigate = useNavigate();
-
   const handleSidebar = () => {
     setToggleSidebar(!toggleSidebar);
   };
@@ -32,8 +33,19 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
     };
   }, []);
 
+  const handleLogout = async () => {
+    const response = await axios.post(
+      `${apiUrl}/api/user/logout`,
+      {},
+      { withCredentials: true }
+    );
+    if (response.status === 200) {
+      navigate("/", { replace: true });
+    }
+  };
+
   return (
-    <header className="flex h-14 w-full items-center justify-between bg-gradient-to-r from-white to-white  px-4 py-3 relative">
+    <header className="flex h-14 w-full items-center justify-between bg-white  px-4 py-3 relative border-b-2 border-black/20">
       {/* Left section */}
       <div className="flex items-center gap-4">
         <button className="md:hidden" onClick={handleSidebar}>
@@ -59,7 +71,7 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
         {showOptions && (
           <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-md shadow-md z-50">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => handleLogout()}
               className="block w-full text-left px-4 py-2 text-red-600 hover:bg-gray-100"
             >
               Log out

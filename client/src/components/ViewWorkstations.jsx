@@ -409,12 +409,12 @@ const ViewWorkstations = () => {
         </div>
       )}
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between">
           <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+            <h1 className="font-bold text-gray-800 text-lg md:text-3xl">
               Workstation Details
             </h1>
-            <p className="mt-2 text-gray-600">
+            <p className="mt-0 md:mt-2 text-gray-600">
               <span className="hidden md:inline">Viewing workstation</span>{" "}
               information for layout #{state.layout}
             </p>
@@ -424,12 +424,12 @@ const ViewWorkstations = () => {
             {userRole === "Admin" ? (
               <button
                 type="button"
-                className="bg-blue-500 text-white px-2 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150"
+                className="bg-blue-500 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150 group"
                 onClick={() => handleAddNewWorkstation()}
               >
-                <div className="flex items-center font-semibold gap-x-2">
+                <div className="flex items-center justify-center md:space-x-2">
                   <span className="hidden md:inline">Add workstation</span>
-                  <LuConstruction className="text-3xl text-yellow-300" />
+                  <LuConstruction className="text-3xl text-yellow-300 group-hover:scale-110 duration-150" />
                 </div>
               </button>
             ) : (
@@ -493,67 +493,71 @@ const ViewWorkstations = () => {
                     variants={workstationCardVariant} // ✅ this enables staggering
                     className="bg-white shadow overflow-hidden rounded-lg divide-y divide-gray-200"
                   >
-                    <div className="px-4 py-5 sm:px-6 bg-gray-50">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">
-                          {/* Workstation #{workstation.workstation_id} */}
-                          <h5 className="mt-4 text-lg flex items-center gap-x-4 text-blue-900 ">
-                            Workstation No #
-                            {editingWorkstationId ===
-                            workstation.workstation_id ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  ref={inputRef}
-                                  type="text"
-                                  value={newWorkstationNo}
-                                  onChange={(e) =>
-                                    setNewWorkstationNo(e.target.value)
-                                  }
-                                  className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
-                                  placeholder="Enter workstation no"
-                                />
-                                <button
-                                  onClick={() =>
-                                    saveWorkstationNo(
-                                      workstation.workstation_id
-                                    )
-                                  }
-                                  className="hover:bg-green-300/40 p-1 rounded-md duration-150"
-                                >
-                                  <FaCheck className="text-lg text-green-600" />
-                                </button>
-                                <button
-                                  onClick={cancelEditing}
-                                  className="hover:bg-red-300/40 p-1 rounded-md duration-150"
-                                >
-                                  <RxCross2 className="text-lg text-red-600" />
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                {workstation.workstation_no
-                                  ? workstation.workstation_no
-                                  : "Not assigned yet"}
-                                {userRole === "Admin" && (
+                    <div className="px-4 py-1 md:py-4 sm:px-6 bg-gray-50">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between md:gap-4">
+                        {/* Left Side */}
+                        <div>
+                          <h3 className="text-lg leading-6 font-medium text-gray-900">
+                            <h5 className="mt-2 text-sm md:text-lg flex flex-wrap items-center gap-x-2 text-blue-900 ">
+                              Workstation No #
+                              {editingWorkstationId ===
+                              workstation.workstation_id ? (
+                                <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                                  <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={newWorkstationNo}
+                                    onChange={(e) =>
+                                      setNewWorkstationNo(e.target.value)
+                                    }
+                                    className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
+                                    placeholder="Enter workstation no"
+                                  />
                                   <button
                                     onClick={() =>
-                                      startEditingWorkstation(workstation)
+                                      saveWorkstationNo(
+                                        workstation.workstation_id
+                                      )
                                     }
-                                    className="hover:bg-gradient-to-br from-blue-300/40  to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                                    className="hover:bg-green-300/40 p-1 rounded-md duration-150"
                                   >
-                                    <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                                    <FaCheck className="text-lg text-green-600" />
                                   </button>
-                                )}
-                              </div>
-                            )}
-                          </h5>
-                        </h3>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-gray-500">
+                                  <button
+                                    onClick={cancelEditing}
+                                    className="hover:bg-red-300/40 p-1 rounded-md duration-150"
+                                  >
+                                    <RxCross2 className="text-lg text-red-600" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                                  {workstation.workstation_no
+                                    ? workstation.workstation_no
+                                    : "Not assigned yet"}
+                                  {userRole === "Admin" && (
+                                    <button
+                                      onClick={() =>
+                                        startEditingWorkstation(workstation)
+                                      }
+                                      className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                                    >
+                                      <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </h5>
+                          </h3>
+                        </div>
+
+                        {/* Right Side */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 gap-2">
+                          <span className="text-xs text-gray-500">
                             Created: {formatDate(workstation.createdAt)}
                           </span>
-                          {userRole === "Admin" ? (
-                            <div className="gap-x-2 flex">
+                          {userRole === "Admin" && (
+                            <div className="flex gap-x-2">
                               <button
                                 className="bg-green-300/40 p-1 text-green-700 rounded"
                                 onClick={() =>
@@ -573,15 +577,13 @@ const ViewWorkstations = () => {
                                 <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
                               </button>
                             </div>
-                          ) : (
-                            ""
                           )}
                         </div>
                       </div>
                     </div>
 
                     <div className="px-4 py-5 sm:p-6">
-                      <h4 className="text-md font-medium text-gray-900 mb-3">
+                      <h4 className="text-xs md:text-base font-medium text-gray-900 mb-3">
                         Sub-op Count - {workstation.subOperations.length}
                       </h4>
 
@@ -592,43 +594,43 @@ const ViewWorkstations = () => {
                       ) : (
                         <div className="overflow-y-hidden overflow-x-auto md:overflow-x-hidden border border-gray-200 rounded-lg">
                           <table className="min-w-full divide-y divide-gray-200 table-fixed">
-                            <thead className="bg-gray-50">
+                            <thead className="bg-gray-50 text-[10px] md:text-base">
                               <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
+                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-16">
                                   ID
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">
-                                  Operation Name
+                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-64">
+                                  Operation
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-24">
                                   SMV
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-40 text-center">
                                   Actions
                                 </th>
                               </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-white divide-y text-xs md:text-base divide-gray-200">
                               {workstation.subOperations.map((subOp) => (
                                 <tr
                                   key={`${workstation.workstation_id}-${subOp.sub_operation_id}`}
                                 >
-                                  <td className="px-4 py-3 text-sm font-medium text-gray-900 w-16">
+                                  <td className="px-4 py-3 font-medium text-gray-900 w-16">
                                     {subOp.sub_operation_id}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-900 font-medium w-64 truncate">
+                                  <td className="px-4 py-3 text-gray-900 font-medium w-64 truncate">
                                     {subOp.suboperatoin?.sub_operation_name ||
                                       "N/A"}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-500 w-24">
+                                  <td className="px-4 py-3 text-gray-500 w-24">
                                     {subOp.suboperatoin?.smv || "0.00"}
                                   </td>
-                                  <td className="px-4 py-3 text-sm text-gray-500 w-24">
+                                  <td className="px-4 py-3 text-gray-500 w-24">
                                     {userRole === "Admin" ? (
                                       <div className="space-x-2 flex">
-                                        <button className="bg-green-300/40 p-1 text-green-700 rounded">
+                                        {/* <button className="bg-green-300/40 p-1 text-green-700 rounded">
                                           <BsArrowsMove className="text-xl hover:scale-125" />
-                                        </button>
+                                        </button> */}
                                         <button className="bg-red-300/40 p-1 text-red-700 rounded">
                                           <MdOutlineDeleteForever
                                             onClick={() =>
@@ -671,7 +673,21 @@ const ViewWorkstations = () => {
                                         </button>
                                       </div>
                                     ) : (
-                                      ""
+                                      <div className="text-center">
+                                        <button
+                                          type="button"
+                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate("/sub-operation/videos", {
+                                              state: {
+                                                subOpId: subOp.sub_operation_id,
+                                              },
+                                            })
+                                          }
+                                        >
+                                          <FaPhotoVideo className="text-xl hover:scale-125" />
+                                        </button>
+                                      </div>
                                     )}
                                   </td>
                                 </tr>

@@ -22,10 +22,14 @@ const OperationBulleting = () => {
   const [editingIndex, setEditingIndex] = useState(null);
   const { stylesList, isLoading: styleLoading } = useStyles();
   console.log("style list --- ", stylesList);
+
+  // Persistent values for the main fields that should never reset
   const [persistentValues, setPersistentValues] = useState({
     styleNumber: "",
     mainOperation: "",
+    mainOperationName: "",
   });
+
   const { machineList, isLoading, refresh } = useMachine();
   console.log(machineList);
   const [currentOPId, setCurrentOPId] = useState("");
@@ -112,6 +116,31 @@ const OperationBulleting = () => {
     };
   };
 
+  // Get initial form values that preserve persistent values
+  const getInitialFormValues = (editingOp = null) => {
+    if (editingOp) {
+      return transformOperationToFormValues(editingOp);
+    }
+
+    return {
+      ...persistentValues, // Always include persistent values
+      currentOPId: currentOPId,
+      operationName: "",
+      operationNumber: "",
+      smv: "",
+      remarks: "",
+      machineType: "HLP",
+      machineNo: "",
+      machineName: "",
+      machineBrand: "",
+      machineLocation: "",
+      needleType: [{ type: "" }],
+      needleCount: 1,
+      needleTreads: [""],
+      bobbinTreadLoopers: [""],
+    };
+  };
+
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     // Filter out empty values for arrays
     alert(values.mainOperation);
@@ -161,29 +190,16 @@ const OperationBulleting = () => {
       setPendingOperations((prev) => [...prev, operationData]);
     }
 
+    // Update persistent values with current main field values
     setPersistentValues({
       styleNumber: values.styleNumber,
       mainOperation: values.mainOperation,
       mainOperationName: values.mainOperationName,
     });
 
+    // Reset form but preserve the main fields
     resetForm({
-      values: {
-        ...persistentValues,
-        operationName: "",
-        operationNumber: "",
-        smv: "",
-        remarks: "",
-        machineType: "HLP",
-        machineNo: "",
-        machineName: "",
-        machineBrand: "",
-        machineLocation: "",
-        needleType: [{ type: "" }],
-        needleCount: 1,
-        needleTreads: [""],
-        bobbinTreadLoopers: [""],
-      },
+      values: getInitialFormValues(), // This will preserve the persistent values
     });
 
     setEditingOperation(null);
@@ -418,6 +434,14 @@ const OperationBulleting = () => {
     visible: { opacity: 1, transition: { duration: 0.2 } },
   };
 
+  // Update persistent values when main fields change in the form
+  const handleMainFieldChange = (fieldName, value) => {
+    setPersistentValues((prev) => ({
+      ...prev,
+      [fieldName]: value,
+    }));
+  };
+
   return (
     <div className="px-4 py-4">
       <section className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-center">
@@ -453,27 +477,7 @@ const OperationBulleting = () => {
 
       {showForm && (
         <Formik
-          initialValues={
-            transformOperationToFormValues(editingOperation) || {
-              ...persistentValues,
-              currentOPId: currentOPId,
-              mainOperation: "",
-              mainOperationName: "",
-              operationName: "",
-              operationNumber: "",
-              smv: "",
-              remarks: "",
-              machineType: "HLP",
-              machineNo: "",
-              machineName: "",
-              machineBrand: "",
-              machineLocation: "",
-              needleType: [{ type: "" }],
-              needleCount: 1,
-              needleTreads: [""],
-              bobbinTreadLoopers: [""],
-            }
-          }
+          initialValues={getInitialFormValues(editingOperation)}
           validationSchema={validationSchema}
           onSubmit={handleSubmit}
           validateOnBlur={true}
@@ -487,6 +491,7 @@ const OperationBulleting = () => {
             errors,
             touched,
             handleBlur,
+            handleChange,
           }) => (
             <motion.div
               initial="hidden"
@@ -507,7 +512,20 @@ const OperationBulleting = () => {
                             ? "border-red-500"
                             : ""
                         }`}
-                        onBlur={handleBlur}
+                        onBlur={(e) => {
+                          handleBlur(e);
+                          handleMainFieldChange(
+                            "mainOperation",
+                            e.target.value
+                          );
+                        }}
+                        onChange={(e) => {
+                          handleChange(e);
+                          handleMainFieldChange(
+                            "mainOperation",
+                            e.target.value
+                          );
+                        }}
                       >
                         <option value="">Select Operation</option>
                         <option value="1">Machine Operator</option>
@@ -534,10 +552,23 @@ const OperationBulleting = () => {
                               ? "border-red-500"
                               : ""
                           }`}
-                          onBlur={handleBlur}
+                          onBlur={(e) => {
+                            handleBlur(e);
+                            handleMainFieldChange(
+                              "mainOperationName",
+                              e.target.value
+                            );
+                          }}
+                          onChange={(e) => {
+                            handleChange(e);
+                            handleMainFieldChange(
+                              "mainOperationName",
+                              e.target.value
+                            );
+                          }}
                         />
                         <ErrorMessage
-                          name="mainOperation"
+                          name="mainOperationName"
                           component="div"
                           className="text-red-500 text-sm mt-1"
                         />
@@ -556,7 +587,14 @@ const OperationBulleting = () => {
                             ? "border-red-500"
                             : ""
                         }`}
-                        onBlur={handleBlur}
+                        onBlur={(e) => {
+                          handleBlur(e);
+                          handleMainFieldChange("styleNumber", e.target.value);
+                        }}
+                        onChange={(e) => {
+                          handleChange(e);
+                          handleMainFieldChange("styleNumber", e.target.value);
+                        }}
                       >
                         <option value="">Select a style</option>
                         {Array.isArray(stylesList) &&
@@ -881,34 +919,39 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
         </motion.section>
 
         <motion.section
-          className="mt-8"
+          className="mt-4 md:mt-8"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          <fieldset className="border rounded-md shadow-md p-4 grid md:grid-cols-2 md:gap-x-8 gap-x-2">
-            <legend className="italic font-bold text-blue-950">
+          <fieldset className="border rounded-lg md:rounded-md shadow-sm md:shadow-md p-3 md:p-4 lg:p-6 grid grid-cols-1 gap-4 md:gap-6 lg:gap-8">
+            <legend className="italic font-bold text-blue-950 text-sm md:text-base px-2 md:px-3">
               Machine Details
             </legend>
-            <div className="mt-4">
-              <label htmlFor="">Machine Type *</label>
+
+            {/* Machine Type */}
+            <div className="space-y-2 md:space-y-3">
+              <label
+                htmlFor="machineType"
+                className="block text-sm md:text-base font-medium text-gray-700"
+              >
+                Machine Type *
+              </label>
               <Field
                 name="machineType"
                 as="select"
-                className={`form-input-base ${
+                className={`form-input-base w-full text-sm md:text-base ${
                   errors.machineType && touched.machineType
                     ? "border-red-500"
-                    : ""
+                    : "border-gray-300"
                 }`}
                 onChange={(e) => {
                   const value = e.target.value;
                   setFieldValue("machineType", value);
                   setSelectedMachineT(value);
                 }}
-                // onBlur={handleBlur}
-                // readOnly
               >
-                <option>Select a machine type</option>
+                <option className="text-gray-400">Select a machine type</option>
                 {Array.isArray(machineTList) &&
                   machineTList.map((mcht, index) => (
                     <option key={index} value={mcht}>
@@ -919,16 +962,25 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               <ErrorMessage
                 name="machineType"
                 component="div"
-                className="text-red-500 text-sm mt-1"
+                className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
-            <div className="mt-4">
-              <label htmlFor="">Machine No *</label>
+
+            {/* Machine No */}
+            <div className="space-y-2 md:space-y-3">
+              <label
+                htmlFor="machineNo"
+                className="block text-sm md:text-base font-medium text-gray-700"
+              >
+                Machine No *
+              </label>
               <Field
                 name="machineNo"
                 as="select"
-                className={`form-input-base ${
-                  errors.machineNo && touched.machineNo ? "border-red-500" : ""
+                className={`form-input-base w-full text-sm md:text-base ${
+                  errors.machineNo && touched.machineNo
+                    ? "border-red-500"
+                    : "border-gray-300"
                 }`}
                 onChange={(e) => handleMachineSelect(e.target.value)}
                 onBlur={handleBlur}
@@ -936,38 +988,41 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                 <option value="">Select Machine</option>
                 {filteredMachineList?.map((mch) => (
                   <option
-                    className={`${
+                    className={`text-sm ${
                       mch.machine_status == "active"
-                        ? "text-green-600 font-semibold bg-green-200"
-                        : "text-red-600 font-semibold bg-red-400"
+                        ? "text-green-600 font-semibold bg-green-50"
+                        : "text-red-600 font-semibold bg-red-50"
                     }`}
                     key={mch.machine_id}
-                    // mch.machine_no
                     value={mch.machine_no}
                   >
-                    <span>
-                      {mch.machine_status === "active" ? "✅" : "❌"}
-                      {mch.machine_no}
-                    </span>
+                    {mch.machine_status === "active" ? "✅" : "❌"}{" "}
+                    {mch.machine_no}
                   </option>
                 ))}
               </Field>
               <ErrorMessage
                 name="machineNo"
                 component="div"
-                className="text-red-500 text-sm mt-1"
+                className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
 
-            <div className="mt-4">
-              <label htmlFor="">Machine Name *</label>
+            {/* Machine Name */}
+            <div className="space-y-2 md:space-y-3">
+              <label
+                htmlFor="machineName"
+                className="block text-sm md:text-base font-medium text-gray-700"
+              >
+                Machine Name *
+              </label>
               <Field
                 name="machineName"
                 type="text"
-                className={`form-input-base ${
+                className={`form-input-base w-full text-sm md:text-base ${
                   errors.machineName && touched.machineName
                     ? "border-red-500"
-                    : ""
+                    : "border-gray-300"
                 }`}
                 onBlur={handleBlur}
                 readOnly
@@ -975,19 +1030,25 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               <ErrorMessage
                 name="machineName"
                 component="div"
-                className="text-red-500 text-sm mt-1"
+                className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
 
-            <div className="mt-4">
-              <label htmlFor="">Brand *</label>
+            {/* Brand */}
+            <div className="space-y-2 md:space-y-3">
+              <label
+                htmlFor="machineBrand"
+                className="block text-sm md:text-base font-medium text-gray-700"
+              >
+                Brand *
+              </label>
               <Field
                 name="machineBrand"
                 type="text"
-                className={`form-input-base ${
+                className={`form-input-base w-full text-sm md:text-base ${
                   errors.machineBrand && touched.machineBrand
                     ? "border-red-500"
-                    : ""
+                    : "border-gray-300"
                 }`}
                 onBlur={handleBlur}
                 readOnly
@@ -995,18 +1056,25 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               <ErrorMessage
                 name="machineBrand"
                 component="div"
-                className="text-red-500 text-sm mt-1"
+                className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
-            <div className="mt-4 col-span-2">
-              <label htmlFor="">Machine Location *</label>
+
+            {/* Machine Location */}
+            <div className="space-y-2 md:space-y-3 col-span-1">
+              <label
+                htmlFor="machineLocation"
+                className="block text-sm md:text-base font-medium text-gray-700"
+              >
+                Machine Location *
+              </label>
               <Field
                 name="machineLocation"
                 type="text"
-                className={`form-input-base ${
+                className={`form-input-base w-full text-sm md:text-base ${
                   errors.machineLocation && touched.machineLocation
                     ? "border-red-500"
-                    : ""
+                    : "border-gray-300"
                 }`}
                 onBlur={handleBlur}
                 readOnly
@@ -1014,23 +1082,26 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               <ErrorMessage
                 name="machineLocation"
                 component="div"
-                className="text-red-500 text-sm mt-1"
+                className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
 
-            <div className="mt-4 col-span-2">
-              <label className="block mb-2 font-medium">Needle Types *</label>
+            {/* Needle Types */}
+            <div className="space-y-3 md:space-y-4 col-span-1">
+              <label className="block text-sm md:text-base font-medium text-gray-700">
+                Needle Types *
+              </label>
               <div className="space-y-3">
                 {Array.isArray(needleTypes) &&
                   needleTypes.map((item, index) => (
                     <motion.div
                       key={index}
-                      className="grid grid-cols-12 gap-3 items-center"
+                      className="flex flex-col sm:flex-row gap-2 md:gap-3 items-start sm:items-center"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: index * 0.1 }}
                     >
-                      <div className="col-span-10">
+                      <div className="flex-1 w-full sm:w-auto">
                         <input
                           name={`needleType[${index}].type`}
                           type="text"
@@ -1039,30 +1110,31 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                             handleNeedleTypeChange(index, e.target.value)
                           }
                           onBlur={handleBlur}
-                          className={`form-input-base ${
+                          className={`form-input-base w-full text-sm md:text-base ${
                             errors.needleType?.[index]?.type &&
                             touched.needleType
                               ? "border-red-500"
-                              : ""
+                              : "border-gray-300"
                           }`}
                           placeholder={`Needle type #${index + 1}`}
                         />
                       </div>
-                      <div className="col-span-2">
+                      <div className="w-full sm:w-auto">
                         <motion.button
                           type="button"
                           onClick={() => removeNeedleType(index)}
-                          className="w-1/4 py-4 bg-red-500 rounded-md hover:bg-red-700 duration-200 flex items-center justify-center"
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
+                          className="w-full sm:w-auto py-2 px-3 md:px-4 bg-red-500 rounded-md hover:bg-red-600 duration-200 flex items-center justify-center gap-1 text-white text-sm"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                         >
-                          <FaMinus className="text-lg text-white" />
+                          <FaMinus className="text-sm md:text-base" />
+                          <span>Remove</span>
                         </motion.button>
                       </div>
                     </motion.div>
                   ))}
                 {errors.needleType && touched.needleType && (
-                  <div className="text-red-500 text-sm mt-1">
+                  <div className="text-red-500 text-xs md:text-sm mt-1">
                     {typeof errors.needleType === "string"
                       ? errors.needleType
                       : "Please fill all needle types"}
@@ -1072,11 +1144,11 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               <motion.button
                 type="button"
                 onClick={addNeedleType}
-                className="mt-2 w-full md:w-auto py-2 bg-green-500 rounded-md px-4 hover:bg-green-700 duration-200 flex items-center justify-center gap-2 text-white"
+                className="w-full md:w-auto py-2 px-4 md:px-6 bg-green-500 rounded-md hover:bg-green-600 duration-200 flex items-center justify-center gap-2 text-white text-sm md:text-base"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <PiPlusBold className="text-xl" />
+                <PiPlusBold className="text-lg md:text-xl" />
                 <span>Add Needle Type</span>
               </motion.button>
             </div>
@@ -1119,7 +1191,7 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-4">
               <div className="mt-6">
                 <label className="block mb-2 font-medium">
                   Needle Treads *

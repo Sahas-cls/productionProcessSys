@@ -26,6 +26,9 @@ routes.post(
   userController.userLogin
 );
 
+// to logout
+routes.post("/logout", userController.logoutUser);
+
 // auth user
 routes.get("/authCheck", userController.authCheck);
 module.exports = routes;

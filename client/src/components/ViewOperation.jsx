@@ -13,14 +13,13 @@ const ViewStyleDetails = () => {
   const { style_id } = useParams();
   const apiUrl = import.meta.env.VITE_API_URL;
   const location = useLocation();
-  // alert(location.state);
   const [style, setStyle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedOperations, setExpandedOperations] = useState({});
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
-  const [mainOperationId, setMainOperationId] = useState(""); //this will send to the add sub opeartion child as a prop
+  const [mainOperationId, setMainOperationId] = useState("");
   const { user, loading: userLoading, error } = useAuth();
 
   const fetchStyleData = async () => {
@@ -34,7 +33,6 @@ const ViewStyleDetails = () => {
         console.log("Fetched style data:", response.data.data);
         setStyle(response.data.data);
 
-        // Initialize expanded state for all main operations
         const initialExpanded = {};
         response.data.data.operations?.forEach((op) => {
           initialExpanded[op.operation_id] = false;
@@ -54,22 +52,6 @@ const ViewStyleDetails = () => {
   };
 
   const isAddingSubRef = useRef(null);
-
-  // useEffect(() => {
-  //   function handleOutsideClick(e) {
-  //     if (
-  //       isAddingSubRef.current &&
-  //       !isAddingSubRef.current.contains(e.target)
-  //     ) {
-  //       setIsAddingSubOP(true);
-  //     }
-  //   }
-
-  //   document.addEventListener("mousedown", handleOutsideClick);
-  //   return () => {
-  //     document.removeEventListener("mousedown", handleOutsideClick);
-  //   };
-  // }, []);
 
   useEffect(() => {
     fetchStyleData();
@@ -166,7 +148,7 @@ const ViewStyleDetails = () => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center min-h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -174,32 +156,35 @@ const ViewStyleDetails = () => {
 
   if (!style) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-red-500">No style data available</p>
+      <div className="p-4 sm:p-8 text-center">
+        <p className="text-red-500 text-sm sm:text-base">
+          No style data available
+        </p>
         <button
           onClick={handleBack}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm sm:text-base"
         >
           Back to List
         </button>
       </div>
     );
   }
+
   const userRole = user?.userRole || null;
 
   return (
-    <div className="container mx-auto p-4 md:p-6 max-w-6xl">
+    <div className="container mx-auto p-3 sm:p-4 md:p-6 max-w-7xl">
+      {/* Modal for Adding Main Operation */}
       <AnimatePresence>
         {isAddingMO && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-4">
             <motion.div
-              initial={{ scale: 0, opacity: 0, rotate: "90deg", width: 0 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0, width: "100%" }}
-              exit={{ scale: 0, opacity: 0, rotate: "90deg", width: 0 }}
+              initial={{ scale: 0, opacity: 0, rotate: "90deg" }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              exit={{ scale: 0, opacity: 0, rotate: "90deg" }}
               transition={{ duration: 0.4 }}
-              className="bg-white rounded-lg p-6 max-w-2xl w-full min-h-[40vh] overflow-y-auto"
+              className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
             >
-              <div className="text-right"></div>
               <AddOperationOB
                 setIsAddingMO={setIsAddingMO}
                 fetchStyleData={fetchStyleData}
@@ -210,34 +195,37 @@ const ViewStyleDetails = () => {
         )}
       </AnimatePresence>
 
+      {/* Modal for Adding Sub-Operation */}
       <AnimatePresence>
         {isAddingSubOP && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
             <motion.div
-              initial={{ scale: 0, opacity: 0, rotate: "90deg", width: 0 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0, width: "100%" }}
-              exit={{ scale: 0, opacity: 0, rotate: "90deg", width: 0 }}
+              initial={{ scale: 0, opacity: 0, rotate: "90deg" }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              exit={{ scale: 0, opacity: 0, rotate: "90deg" }}
               transition={{ duration: 0.4 }}
-              className="bg-white rounded-xl shadow-xl max-w-3xl w-full mx-4"
+              className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden mx-2 sm:mx-4"
             >
-              {/* Header */}
               <div
                 ref={isAddingSubRef}
-                className="flex justify-end p-3 border-b border-gray-200"
+                className="flex justify-between items-center p-3 sm:p-4 border-b border-gray-200"
               >
+                <h3 className="font-semibold text-gray-800 text-sm sm:text-base">
+                  Add Sub-Operation
+                </h3>
                 <button
-                  className="p-1 hover:bg-red-500 hover:text-white transition-colors"
+                  className="p-1 hover:bg-red-500 hover:text-white rounded-full transition-colors duration-200"
                   onClick={() => setIsAddingSubOP(false)}
                 >
-                  <IoCloseOutline className="text-2xl" />
+                  <IoCloseOutline className="text-xl sm:text-2xl" />
                 </button>
               </div>
 
-              {/* Content */}
-              <div className="p-6 min-h-[40vh] overflow-y-auto">
+              <div className="p-4 sm:p-6 max-h-[60vh] overflow-y-auto">
                 <AddSubOperationOB
                   mainOp={mainOperationId}
                   setIsAddingSubOP={setIsAddingSubOP}
+                  fetchStyleData={fetchStyleData}
                 />
               </div>
             </motion.div>
@@ -245,12 +233,17 @@ const ViewStyleDetails = () => {
         )}
       </AnimatePresence>
 
-      <header className="mb-8">
+      {/* Header Section */}
+      <header className="mb-6 sm:mb-8">
         <button
           onClick={handleBack}
-          className="flex items-center text-blue-600 hover:text-blue-800 mb-4"
+          className="flex items-center text-blue-600 hover:text-blue-800 mb-4 sm:mb-6 text-sm sm:text-base font-medium transition-colors duration-200"
         >
-          <svg className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+          <svg
+            className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
             <path
               fillRule="evenodd"
               d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z"
@@ -261,117 +254,114 @@ const ViewStyleDetails = () => {
         </button>
 
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-2 sm:mb-3">
             {style.style_no || "Unnamed Style"}
           </h1>
-          <div className="flex justify-center gap-4">
-            <span className="text-xl text-teal-600 font-semibold">
+          <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4 items-center">
+            <span className="text-lg sm:text-xl text-teal-600 font-semibold">
               PO: {style.po_number}
             </span>
-            {/* <span className="text-xl text-gray-600">
+            <span className="text-sm sm:text-base text-gray-500 bg-gray-100 px-2 py-1 rounded">
               Style ID: {style.style_id}
-            </span> */}
+            </span>
           </div>
         </div>
       </header>
 
-      <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
-        <section className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+      {/* Main Content Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6 sm:mb-8">
+        {/* Style Details Section */}
+        <section className="p-4 sm:p-6 border-b border-gray-200">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">
             Style Details
           </h2>
-          <div className="flex justify-between">
-            <div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 text-sm sm:text-base">
+            <div className="space-y-2 sm:space-y-3">
               <p className="text-gray-600">
-                <span className="font-medium">Name:</span> {style.style_name}
+                <span className="font-medium text-gray-700">Name:</span>{" "}
+                {style.style_name}
               </p>
               <p className="text-gray-600">
-                <span className="font-medium">Customer ID:</span>{" "}
+                <span className="font-medium text-gray-700">Customer ID:</span>{" "}
                 {style.customer_id}
               </p>
             </div>
-            {/* <div>
+
+            <div className="space-y-2 sm:space-y-3">
               <p className="text-gray-600">
-                <span className="font-medium">Factory ID:</span>{" "}
-                {style.factory_id}
-              </p>
-              <p className="text-gray-600">
-                <span className="font-medium">Season ID:</span>{" "}
-                {style.season_id}
-              </p>
-            </div> */}
-            <div>
-              <p className="text-gray-600">
-                <span className="font-medium">Created:</span>{" "}
+                <span className="font-medium text-gray-700">Created:</span>{" "}
                 {formatDate(style.createdAt)}
               </p>
               <p className="text-gray-600">
-                <span className="font-medium">Updated:</span>{" "}
+                <span className="font-medium text-gray-700">Updated:</span>{" "}
                 {formatDate(style.updatedAt)}
               </p>
             </div>
           </div>
-          <p className="mt-4 text-gray-600">
-            <span className="font-medium">Description:</span>{" "}
-            {style.style_description || "No description"}
-          </p>
+
+          <div className="mt-4 sm:mt-6 pt-4 border-t border-gray-100">
+            <p className="text-gray-600 text-sm sm:text-base">
+              <span className="font-medium text-gray-700">Description:</span>{" "}
+              {style.style_description || "No description provided"}
+            </p>
+          </div>
         </section>
 
-        <section className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-800">
+        {/* Operations Section */}
+        <section className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
               Operations ({style.operations?.length || 0})
             </h2>
-            {userRole === "Admin" ? (
+            {userRole === "Admin" && (
               <button
                 onClick={() => setIsAddingMO(true)}
-                className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm"
+                className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm"
               >
                 Add Operation
               </button>
-            ) : (
-              ""
             )}
           </div>
 
           {style.operations?.length > 0 ? (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {style.operations.map((operation) => (
                 <div
                   key={operation.operation_id}
-                  className="border border-gray-200 rounded-lg overflow-hidden"
+                  className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200"
                 >
+                  {/* Operation Header */}
                   <div
-                    className="bg-gray-100 p-4 flex justify-between items-center cursor-pointer hover:bg-gray-200"
+                    className="bg-gray-50 p-3 sm:p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
                     onClick={() =>
                       toggleOperationExpand(operation.operation_id)
                     }
                   >
-                    <div>
-                      <h3 className="font-medium text-lg text-gray-800">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-800 text-base sm:text-lg mb-1 sm:mb-2">
                         {operation.operation_name}
                       </h3>
-                      <div className="flex gap-4 mt-1">
-                        <span className="text-sm text-gray-600">
+                      <div className="flex flex-wrap gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
                           ID: {operation.operation_id}
                         </span>
-                        <span className="text-sm text-gray-600">
+                        <span className="bg-green-50 text-green-700 px-2 py-1 rounded">
                           Type:{" "}
                           {operation.operation_type_id === 1
                             ? "Main"
                             : "Helper"}
                         </span>
-                        <span className="text-sm text-gray-600">
+                        <span className="bg-gray-50 text-gray-600 px-2 py-1 rounded">
                           Created: {formatDate(operation.createdAt)}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                    <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-auto">
+                      <span className="text-xs sm:text-sm bg-blue-100 text-blue-800 px-2 sm:px-3 py-1 rounded-full font-medium">
                         {operation.subOperations?.length || 0} Sub-Op
                       </span>
                       <svg
-                        className={`h-5 w-5 text-gray-500 transform transition-transform ${
+                        className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-500 transform transition-transform duration-200 ${
                           expandedOperations[operation.operation_id]
                             ? "rotate-180"
                             : ""
@@ -388,26 +378,24 @@ const ViewStyleDetails = () => {
                     </div>
                   </div>
 
+                  {/* Expanded Sub-Operations */}
                   {expandedOperations[operation.operation_id] && (
-                    <div className="p-4 space-y-4">
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-medium text-gray-700">
+                    <div className="p-3 sm:p-4 space-y-4 bg-white">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <h4 className="font-semibold text-gray-700 text-sm sm:text-base">
                           Sub-Operations ({operation.subOperations?.length || 0}
                           )
                         </h4>
-                        {userRole === "Admin" ? (
+                        {userRole === "Admin" && (
                           <button
                             onClick={() => {
                               setMainOperationId(operation);
                               setIsAddingSubOP(true);
-                              // alert(mainOperationId);
                             }}
-                            className="px-2 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs"
+                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs sm:text-sm font-medium transition-colors duration-200"
                           >
                             Add Sub-Operation
                           </button>
-                        ) : (
-                          ""
                         )}
                       </div>
 
@@ -416,30 +404,30 @@ const ViewStyleDetails = () => {
                           {operation.subOperations.map((subOp) => (
                             <div
                               key={subOp.sub_operation_id}
-                              className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
+                              className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-200"
                             >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h5 className="font-medium text-gray-800">
+                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-start gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <h5 className="font-semibold text-gray-800 text-sm sm:text-base mb-2">
                                     {subOp.sub_operation_name} (
                                     {subOp.sub_operation_number})
                                   </h5>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 mt-1 text-sm">
-                                    <p>
+                                  <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
+                                    <p className="text-gray-600">
                                       <span className="font-medium">ID:</span>{" "}
                                       {subOp.sub_operation_id}
                                     </p>
-                                    <p>
+                                    <p className="text-gray-600">
                                       <span className="font-medium">SMV:</span>{" "}
                                       {subOp.smv || "N/A"}
                                     </p>
-                                    <p>
+                                    <p className="text-gray-600">
                                       <span className="font-medium">
                                         Created:
                                       </span>{" "}
                                       {formatDate(subOp.createdAt)}
                                     </p>
-                                    <p>
+                                    <p className="text-gray-600">
                                       <span className="font-medium">
                                         Machines:
                                       </span>{" "}
@@ -447,8 +435,8 @@ const ViewStyleDetails = () => {
                                     </p>
                                   </div>
                                 </div>
-                                {userRole === "Admin" ? (
-                                  <div className="flex gap-2">
+                                {userRole === "Admin" && (
+                                  <div className="flex gap-2 self-end lg:self-auto">
                                     <button
                                       onClick={() =>
                                         navigate(
@@ -462,7 +450,7 @@ const ViewStyleDetails = () => {
                                           }
                                         )
                                       }
-                                      className="px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
+                                      className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium transition-colors duration-200"
                                     >
                                       Edit
                                     </button>
@@ -473,60 +461,58 @@ const ViewStyleDetails = () => {
                                           operation.operation_id
                                         )
                                       }
-                                      className="px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs"
+                                      className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition-colors duration-200"
                                     >
                                       Delete
                                     </button>
                                   </div>
-                                ) : (
-                                  ""
                                 )}
                               </div>
 
-                              {/* Machines and their configurations */}
+                              {/* Machines and Configurations */}
                               {subOp.machines?.length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                  <h6 className="font-medium text-gray-700 mb-2">
+                                <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                                  <h6 className="font-semibold text-gray-700 text-sm sm:text-base mb-2 sm:mb-3">
                                     Machine Configurations
                                   </h6>
-                                  <div className="space-y-3">
+                                  <div className="space-y-3 sm:space-y-4">
                                     {subOp.machines.map((machine) => (
                                       <div
                                         key={machine.machine_id}
-                                        className="pl-4 border-l-2 border-gray-200"
+                                        className="pl-3 sm:pl-4 border-l-2 border-blue-200 bg-blue-50 rounded-r-lg p-2 sm:p-3"
                                       >
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                                          <p>
+                                        <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs sm:text-sm">
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               No:
                                             </span>{" "}
                                             {machine.machine_no}
                                           </p>
-                                          <p>
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               Name:
                                             </span>{" "}
                                             {machine.machine_name}
                                           </p>
-                                          <p>
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               Type:
                                             </span>{" "}
                                             {machine.machine_type}
                                           </p>
-                                          <p>
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               Brand:
                                             </span>{" "}
                                             {machine.machine_brand}
                                           </p>
-                                          <p>
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               Location:
                                             </span>{" "}
                                             {machine.machine_location}
                                           </p>
-                                          <p>
+                                          <p className="text-gray-700">
                                             <span className="font-medium">
                                               Needles:
                                             </span>{" "}
@@ -540,10 +526,10 @@ const ViewStyleDetails = () => {
                                             nt.machine_id === machine.machine_id
                                         ).length > 0 && (
                                           <div className="mt-2">
-                                            <p className="text-sm font-medium">
+                                            <p className="text-xs sm:text-sm font-medium text-gray-700">
                                               Needle Types:
                                             </p>
-                                            <ul className="list-disc list-inside pl-4 text-sm">
+                                            <div className="flex flex-wrap gap-1 mt-1">
                                               {subOp.needle_types
                                                 .filter(
                                                   (nt) =>
@@ -551,9 +537,14 @@ const ViewStyleDetails = () => {
                                                     machine.machine_id
                                                 )
                                                 .map((nt, idx) => (
-                                                  <li key={idx}>{nt.type}</li>
+                                                  <span
+                                                    key={idx}
+                                                    className="bg-white text-gray-600 px-2 py-1 rounded text-xs border"
+                                                  >
+                                                    {nt.type}
+                                                  </span>
                                                 ))}
-                                            </ul>
+                                            </div>
                                           </div>
                                         )}
 
@@ -563,10 +554,10 @@ const ViewStyleDetails = () => {
                                             nt.machine_id === machine.machine_id
                                         ).length > 0 && (
                                           <div className="mt-2">
-                                            <p className="text-sm font-medium">
+                                            <p className="text-xs sm:text-sm font-medium text-gray-700">
                                               Needle Treads:
                                             </p>
-                                            <ul className="list-disc list-inside pl-4 text-sm">
+                                            <div className="flex flex-wrap gap-1 mt-1">
                                               {subOp.needle_treads
                                                 .filter(
                                                   (nt) =>
@@ -574,9 +565,14 @@ const ViewStyleDetails = () => {
                                                     machine.machine_id
                                                 )
                                                 .map((nt, idx) => (
-                                                  <li key={idx}>{nt.tread}</li>
+                                                  <span
+                                                    key={idx}
+                                                    className="bg-white text-gray-600 px-2 py-1 rounded text-xs border"
+                                                  >
+                                                    {nt.tread}
+                                                  </span>
                                                 ))}
-                                            </ul>
+                                            </div>
                                           </div>
                                         )}
 
@@ -586,10 +582,10 @@ const ViewStyleDetails = () => {
                                             nl.machine_id === machine.machine_id
                                         ).length > 0 && (
                                           <div className="mt-2">
-                                            <p className="text-sm font-medium">
+                                            <p className="text-xs sm:text-sm font-medium text-gray-700">
                                               Loopers:
                                             </p>
-                                            <ul className="list-disc list-inside pl-4 text-sm">
+                                            <div className="flex flex-wrap gap-1 mt-1">
                                               {subOp.needle_loopers
                                                 .filter(
                                                   (nl) =>
@@ -597,11 +593,14 @@ const ViewStyleDetails = () => {
                                                     machine.machine_id
                                                 )
                                                 .map((nl, idx) => (
-                                                  <li key={idx}>
+                                                  <span
+                                                    key={idx}
+                                                    className="bg-white text-gray-600 px-2 py-1 rounded text-xs border"
+                                                  >
                                                     {nl.looper_type}
-                                                  </li>
+                                                  </span>
                                                 ))}
-                                            </ul>
+                                            </div>
                                           </div>
                                         )}
                                       </div>
@@ -612,11 +611,11 @@ const ViewStyleDetails = () => {
 
                               {/* Remarks */}
                               {subOp.remark && (
-                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                  <p className="text-sm font-medium">
+                                <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                                  <p className="text-xs sm:text-sm font-medium text-gray-700 mb-1">
                                     Remarks:
                                   </p>
-                                  <p className="text-gray-600 text-sm">
+                                  <p className="text-gray-600 text-xs sm:text-sm">
                                     {subOp.remark}
                                   </p>
                                 </div>
@@ -625,7 +624,7 @@ const ViewStyleDetails = () => {
                           ))}
                         </div>
                       ) : (
-                        <div className="text-center py-4 text-gray-500 text-sm">
+                        <div className="text-center py-4 sm:py-6 text-gray-500 text-sm sm:text-base">
                           No sub-operations found
                         </div>
                       )}
@@ -635,7 +634,7 @@ const ViewStyleDetails = () => {
               ))}
             </div>
           ) : (
-            <div className="text-center py-6 text-gray-500">
+            <div className="text-center py-6 sm:py-8 text-gray-500 text-sm sm:text-base">
               No operations found for this style
             </div>
           )}

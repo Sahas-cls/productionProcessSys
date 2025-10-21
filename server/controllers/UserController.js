@@ -140,7 +140,7 @@ exports.userLogin = async (req, res, next) => {
 
 // check user have access to client side routes
 exports.authCheck = async (req, res, next) => {
-  console.log("Authenticating user ========= *************** ===============");
+  // console.log("Authenticating user ========= *************** ===============");
   const token = req.cookies.jwt;
 
   if (!token) {
@@ -151,7 +151,7 @@ exports.authCheck = async (req, res, next) => {
 
   try {
     const decode = jwt.verify(token, process.env.JWT_SECRET);
-    console.log("decode ========== ", decode);
+    // console.log("decode ========== ", decode);
 
     const user = {
       userId: decode.userId,
@@ -166,5 +166,26 @@ exports.authCheck = async (req, res, next) => {
     console.error("Auth Error:", error.message);
     error.status = 403;
     return next(error); // ✅ let global handler handle it
+  }
+};
+
+// to user logout
+exports.logoutUser = async (req, res, next) => {
+  try {
+    // Clear the JWT cookie by setting it to an empty value and expiring it immediately
+    res.cookie("jwt", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      expires: new Date(0), // Expire the cookie immediately
+    });
+
+    // Optionally, send a response
+    res.status(200).json({
+      success: true,
+      message: "User logged out successfully",
+    });
+  } catch (error) {
+    next(error); // Pass any error to the error handler
   }
 };

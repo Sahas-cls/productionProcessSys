@@ -506,7 +506,7 @@ const AddSeason = ({ userRole }) => {
                     transition={{ delay: 0.4 }}
                   >
                     <table className="rounded-lg shadow-md w-full overflow-hidden">
-                      <thead>
+                      <thead className="text-sm md:text-base">
                         <tr>
                           <th className="px-4 py-2 bg-blue-500 text-white border">
                             Season List
@@ -520,12 +520,12 @@ const AddSeason = ({ userRole }) => {
                           )}
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="text-sm md:text-base">
                         {formik.values.seasons.length === 0 ? (
                           <tr>
                             <td
                               colSpan="2"
-                              className="text-center py-4 text-gray-500"
+                              className="text-center text-sm md:text-base py-4 text-gray-500"
                             >
                               No seasons added yet
                             </td>
@@ -602,7 +602,7 @@ const AddSeason = ({ userRole }) => {
                 >
                   <motion.button
                     type="button"
-                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm"
+                    className="px-4 md:px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm text-sm md:text-base"
                     onClick={handleCancel}
                     variants={buttonVariants}
                     whileHover="hover"
@@ -613,7 +613,7 @@ const AddSeason = ({ userRole }) => {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md"
+                    className="px-4 md:px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 shadow-md"
                     variants={buttonVariants}
                     whileHover="hover"
                     whileTap="tap"
@@ -622,8 +622,8 @@ const AddSeason = ({ userRole }) => {
                     {loading
                       ? "Processing..."
                       : editingSeasonId
-                      ? "Update Season"
-                      : "Save Seasons"}
+                      ? "Update"
+                      : "Save"}
                   </motion.button>
                 </motion.div>
               </form>
@@ -634,18 +634,18 @@ const AddSeason = ({ userRole }) => {
 
       {/* Seasons Table */}
       <motion.div
-        className="bg-white rounded-xl shadow-md overflow-hidden max-h-96 overflow-y-auto"
+        className="bg-white rounded-xl shadow-md max-h-96 overflow-y-auto"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}
       >
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 z-0">
+          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 z-0 text-xs md:text-base">
             <tr className="">
-              <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-4 text-left font-medium text-white uppercase tracking-wider">
                 Customer
               </th>
-              <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
+              <th className="px-6 py-4 text-left font-medium text-white uppercase tracking-wider">
                 Season
               </th>
               {userRole === "Admin" ? (
@@ -657,7 +657,7 @@ const AddSeason = ({ userRole }) => {
               )}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base">
             {Array.isArray(filteredSeasons) && filteredSeasons.length === 0 ? (
               <tr>
                 <td colSpan="3" className="px-6 py-4 text-center text-gray-500">
@@ -678,7 +678,7 @@ const AddSeason = ({ userRole }) => {
                   custom={index}
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
+                    <div className="text-xs md:text-sm font-medium text-gray-900">
                       {season.customer?.customer_name || "N/A"}
                     </div>
                   </td>

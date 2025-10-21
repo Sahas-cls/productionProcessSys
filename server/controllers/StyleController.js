@@ -196,6 +196,20 @@ exports.addStyle = async (req, res, next) => {
       poNumber,
     } = req.body;
 
+    // validate style number
+    const findStyleNo = await Style.findAll({
+      where: { style_no: styleNo, po_number: poNumber },
+      transaction: t,
+    });
+
+    if (findStyleNo.length > 0) {
+      const error = new Error(
+        "The provided style number and po number already exist, please check your data"
+      );
+      error.status = 400;
+      throw error;
+    }
+
     const newStyle = {
       factory_id: styleFactory,
       customer_id: styleCustomer,
@@ -269,11 +283,25 @@ exports.editStyle = async (req, res, next) => {
     styleCustomer,
     styleSeason,
     styleNo,
+    poNumber,
     styleName,
     styleDescription,
   } = req.body;
-
+  console.log(req.body);
+  // return;
   try {
+    // validate style number
+    const findStyleNo = await Style.findAll({
+      where: { style_no: styleNo, po_number: poNumber },
+    });
+
+    if (findStyleNo.length > 0) {
+      const error = new Error(
+        "The provided style number and po number already exist, please check your data"
+      );
+      error.status = 400;
+      throw error;
+    }
     // 1️⃣ Find style
     const currentStyle = await Style.findByPk(styleId);
     if (!currentStyle) {
@@ -289,6 +317,7 @@ exports.editStyle = async (req, res, next) => {
       season_id: styleSeason,
       style_no: styleNo,
       style_name: styleName,
+      po_number: poNumber,
       style_description: styleDescription,
     };
     await currentStyle.update(editStyle);

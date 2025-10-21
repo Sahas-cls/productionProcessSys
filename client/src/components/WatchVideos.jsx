@@ -4,12 +4,15 @@ import useSubOpVideos from "../hooks/useSubOpVideos";
 import { FaArrowLeft, FaTrash, FaPlay } from "react-icons/fa";
 import { BeatLoader } from "react-spinners";
 import axios from "axios";
+import { useAuth } from "../hooks/useAuth";
 // Import React wrapper
 import Plyr from "plyr-react";
 // Import Plyr CSS for proper styling
 import "plyr-react/plyr.css";
 
 const WatchVideos = () => {
+  const { user, loading } = useAuth();
+  const userRole = user?.userRole;
   const location = useLocation();
   const navigate = useNavigate();
   const [deletingId, setDeletingId] = useState(null);
@@ -165,20 +168,22 @@ const WatchVideos = () => {
                         })}
                       </div>
 
-                      <button
-                        onClick={() => handleDelete(video.so_media_id)}
-                        disabled={deletingId === video.so_media_id}
-                        className="flex items-center gap-2 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                      >
-                        {deletingId === video.so_media_id ? (
-                          <BeatLoader color="#dc2626" size={5} />
-                        ) : (
-                          <>
-                            <FaTrash size={14} />
-                            Delete
-                          </>
-                        )}
-                      </button>
+                      {userRole === "Admin" && (
+                        <button
+                          onClick={() => handleDelete(video.so_media_id)}
+                          disabled={deletingId === video.so_media_id}
+                          className="flex items-center gap-2 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          {deletingId === video.so_media_id ? (
+                            <BeatLoader color="#dc2626" size={5} />
+                          ) : (
+                            <>
+                              <FaTrash size={14} />
+                              Delete
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

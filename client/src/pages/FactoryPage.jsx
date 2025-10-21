@@ -31,11 +31,13 @@ const FactoryPage = () => {
   }
 
   return (
-    <div className="flex overflow-x-hidden min-h-screen h-full">
+    <div className="flex overflow-x-hidden">
+      
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
       />
+
       <div className="w-full h-full">
         <Header
           toggleSidebar={toggleSidebar}
@@ -47,7 +49,7 @@ const FactoryPage = () => {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="bg-accent w-full h-[90vh]"
+            className="bg-accent w-full min-h-screen"
           >
             <AddFactory userRole={user.userRole} />
           </motion.div>

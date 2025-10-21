@@ -89,10 +89,10 @@ exports.createMachine = async (req, res, next) => {
       machine_type: machine_type,
       machine_brand: machine_brand,
       machine_location: machine_location,
-      purchase_date: purchase_date,
+      purchase_date: purchase_date || null,
       supplier: supplier,
-      service_date: service_date,
-      breakdown_date: breakdown_date,
+      service_date: service_date || null,
+      breakdown_date: breakdown_date || null,
       machine_status: status,
     });
 

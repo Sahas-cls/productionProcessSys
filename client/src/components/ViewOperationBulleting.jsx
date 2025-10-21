@@ -78,7 +78,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
   return (
     <div className="container mx-auto p-4 md:p-6">
       <header className="mb-8 text-center">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
+        <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-2">
           Operation Bulletin Summary
         </h1>
       </header>
@@ -151,14 +151,16 @@ const StyleCard = ({ style, onViewDetails }) => {
     <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
       {/* Card Header */}
       <div className="bg-gradient-to-br from-blue-700 to-blue-500 px-4 py-3 text-white">
-        <h3 className="text-white font-semibold text-center truncate">
+        <h3 className="text-white font-semibold text-center truncate text-sm md:text-base">
           Style No: {style.style_no || "N/A"}
         </h3>
-        <h5 className="text-center">PO No: {style.po_number || "N/A"}</h5>
+        <h5 className="text-center text-sm md:text-base">
+          PO No: {style.po_number || "N/A"}
+        </h5>
       </div>
 
       {/* Card Body */}
-      <div className="p-4 space-y-3">
+      <div className="p-4 space-y-3 text-sm md:text-base">
         <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
           <span className="font-medium text-gray-700">Style Name:</span>
           <span className="text-right truncate">

@@ -11,6 +11,7 @@ import {
 } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
+import Swal from "sweetalert2";
 
 const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
   const [mediaStream, setMediaStream] = useState(null);
@@ -102,7 +103,15 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
       } else if (recordedBlob) {
         formData.append("video", recordedBlob, "recorded-video.webm");
       } else {
-        alert("No video to upload");
+        // alert("No video to upload");
+        Swal.fire({
+          title: "Error occured",
+          text: "No video to upload",
+          timer: 3000,
+          showTimeProgress: true,
+          showCancelButton: false,
+          icon: "error",
+        });
         setUploading(false);
         return;
       }
