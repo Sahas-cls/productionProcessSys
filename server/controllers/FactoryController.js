@@ -1,5 +1,8 @@
 const { where } = require("sequelize");
 const db = require("../models");
+const Department = require("../models/Department");
+const User = db.User;
+const Style = db.Style;
 const Factory = db.Factory;
 
 // to get all factories
@@ -119,25 +122,68 @@ exports.updateFactory = async (req, res, next) => {
 
 // delete a factory
 exports.deleteFactory = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
-    console.log("delete factory canceled ============= ");
-    const error = new Error("You don't have permission to perform this action");
-    error.status = 401;
-    throw error;
-  }
   try {
+    // 🛡️ Permission check
+    if (req?.user?.userRole !== "Admin") {
+      const error = new Error(
+        "You don't have permission to perform this action"
+      );
+      error.status = 401;
+      throw error;
+    }
+
     const { id } = req.params;
     const factory = await Factory.findByPk(id);
+
     if (!factory) {
-      const error = new Error("Factory cannot found");
+      const error = new Error("Factory not found");
       error.status = 404;
-      next(error);
+      throw error;
     }
+
+    // 🧩 Check related records
+    // const isDep = await db.Department.findOne({
+    //   where: { factory_id: factory.factory_id },
+    // });
+    const isUser = await User.findOne({
+      where: { user_factory: factory.factory_id },
+    });
+    const isStyle = await Style.findOne({
+      where: { factory_id: factory.factory_id },
+    });
+
+    // if (isDep) {
+    //   const error = new Error(
+    //     "Cannot delete this factory because departments are linked to it."
+    //   );
+    //   error.status = 400;
+    //   throw error;
+    // }
+
+    if (isUser) {
+      const error = new Error(
+        "Cannot delete this factory because users are linked to it."
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    if (isStyle) {
+      const error = new Error(
+        "Cannot delete this factory because styles are linked to it."
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    // ✅ Safe to delete
     await factory.destroy();
-    res
-      .status(200)
-      .json({ status: "success", message: "Factory delete success" });
+
+    res.status(200).json({
+      status: "success",
+      message: "Factory deleted successfully",
+    });
   } catch (error) {
-    return next(error);
+    next(error);
   }
 };

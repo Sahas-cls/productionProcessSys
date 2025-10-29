@@ -202,7 +202,13 @@ const AddFactory = ({ userRole }) => {
 
         navigate("/");
       }
-      // console.log(error);
+      await swal.fire({
+        title: "Can't delete this factory",
+        icon: "error",
+        text: error.response.data.message || "Server error",
+        showCancelButton: false,
+      });
+      console.log("error when delete: ", error.response.data.message);
     }
   };
 

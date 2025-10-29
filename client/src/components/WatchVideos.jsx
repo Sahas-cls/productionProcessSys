@@ -9,6 +9,7 @@ import { useAuth } from "../hooks/useAuth";
 import Plyr from "plyr-react";
 // Import Plyr CSS for proper styling
 import "plyr-react/plyr.css";
+import Swal from "sweetalert2";
 
 const WatchVideos = () => {
   const { user, loading } = useAuth();
@@ -45,7 +46,12 @@ const WatchVideos = () => {
       }
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Failed to delete video. Please try again.");
+      // alert("Failed to delete video. Please try again.");
+      Swal.fire({
+        title: "Failed to delete video. Please try again later.",
+        icon: "error",
+        showCancelButton: false,
+      });
       setDeletingId(null);
     }
   };

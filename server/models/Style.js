@@ -71,21 +71,29 @@ module.exports = (sequelize, DataTypes) => {
     Style.belongsTo(models.Factory, {
       foreignKey: "factory_id",
       as: "factory",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Style.belongsTo(models.Customer, {
       foreignKey: "customer_id",
       as: "customer",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Style.belongsTo(models.Season, {
       foreignKey: "season_id",
       as: "season",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Style.hasMany(models.StyleMedia, {
       foreignKey: "style_id",
       as: "style_medias",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Style.hasMany(models.Helper, {

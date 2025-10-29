@@ -64,18 +64,24 @@ module.exports = (sequelize, DataTypes) => {
     User.belongsTo(models.UserCategory, {
       foreignKey: "user_category",
       as: "category",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     // Works at a factory
     User.belongsTo(models.Factory, {
       foreignKey: "user_factory",
       as: "factory",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     // Belongs to a department
     User.belongsTo(models.Department, {
       foreignKey: "user_department",
       as: "department",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     // Has created factories

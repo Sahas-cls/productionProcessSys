@@ -68,7 +68,7 @@ const ViewLayout = () => {
       );
 
       if (respose.status === 200) {
-        Swal.fire({
+        await Swal.fire({
           title: "Operation Successful!",
           text: "The Layout has been deleted successfully.",
           icon: "success",
@@ -79,9 +79,10 @@ const ViewLayout = () => {
           timer: 3000,
           timerProgressBar: true,
         });
+        window.location.reload();
       }
     } catch (error) {
-      console.log("Error while tyring to delete layout: ", error);
+      console.log("Error while trying to delete layout: ", error);
     }
   };
 

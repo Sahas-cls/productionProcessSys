@@ -32,6 +32,8 @@ module.exports = (sequelize, DataTypes) => {
     Department.belongsTo(models.Factory, {
       foreignKey: "factory_id",
       as: "factory",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     // Has many users

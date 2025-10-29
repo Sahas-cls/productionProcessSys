@@ -295,14 +295,14 @@ exports.editStyle = async (req, res, next) => {
       where: { style_no: styleNo, po_number: poNumber },
     });
 
-    if (findStyleNo.length > 0) {
+    if (findStyleNo.length > 1) {
       const error = new Error(
         "The provided style number and po number already exist, please check your data"
       );
       error.status = 400;
       throw error;
     }
-    // 1️⃣ Find style
+    //  Find style
     const currentStyle = await Style.findByPk(styleId);
     if (!currentStyle) {
       const error = new Error("Cannot find that style in database");
@@ -310,7 +310,7 @@ exports.editStyle = async (req, res, next) => {
       return next(error);
     }
 
-    // 2️⃣ Update style fields
+    //  Update style fields
     const editStyle = {
       factory_id: styleFactory,
       customer_id: styleCustomer,
@@ -322,7 +322,7 @@ exports.editStyle = async (req, res, next) => {
     };
     await currentStyle.update(editStyle);
 
-    // 3️⃣ Handle media files if uploaded
+    //  Handle media files if uploaded
     const files = req.files;
     if (files?.frontImage?.[0]) {
       const frontFile = files.frontImage[0];

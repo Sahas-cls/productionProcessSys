@@ -239,7 +239,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         ? new Date(machine.purchase_date).toISOString().split("T")[0]
         : "",
       breakdown_date: machine.breakdown_date
-        ? new Date(machine.purchase_date).toISOString().split("T")[0]
+        ? new Date(machine.breakdown_date).toISOString().split("T")[0]
         : "",
     };
 

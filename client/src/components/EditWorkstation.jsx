@@ -13,7 +13,7 @@ const EditWorkstation = () => {
   const [workstation, setWorkstation] = useState(null);
   const fetchWorkstation = async () => {
     //
-    alert("fetcing data");
+    // alert("fetcing data");
     try {
       const response = await axios.get(
         `${apiUrl}/api/workstations/getWorkstation/${state}`

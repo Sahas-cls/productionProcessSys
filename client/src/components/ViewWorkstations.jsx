@@ -347,7 +347,7 @@ const ViewWorkstations = () => {
   }
 
   const handleNavigatetoMedia = (sub_operation_id) => {
-    alert(sub_operation_id);
+    // alert(sub_operation_id);
     navigate("/sub-Operation/add-media", { state: sub_operation_id });
     // console.log("selected sub op ===== ", sub_operation);
   };

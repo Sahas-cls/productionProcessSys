@@ -176,7 +176,7 @@ app.use((err, req, res, next) => {
 });
 
 // Sync DB and start server
-db.sequelize.sync().then(() => {
+db.sequelize.sync({}).then(() => {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

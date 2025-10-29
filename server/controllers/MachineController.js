@@ -1,3 +1,4 @@
+const { where } = require("sequelize");
 const {
   Sequelize,
   Machine,
@@ -129,6 +130,7 @@ exports.editMachine = async (req, res, next) => {
     machine_location,
     status,
     breakdown_date,
+    purchase_date,
   } = req.body;
   try {
     const updateMachine = await Machine.update(
@@ -139,12 +141,23 @@ exports.editMachine = async (req, res, next) => {
         machine_brand,
         machine_location,
         machine_status: status,
-        breakdown_date,
+        purchase_date,
       },
       {
         where: { machine_id },
       }
     );
+
+    if (breakdown_date) {
+      await Machine.update(
+        {
+          breakdown_date,
+        },
+        {
+          where: { machine_id },
+        }
+      );
+    }
 
     res
       .status(200)

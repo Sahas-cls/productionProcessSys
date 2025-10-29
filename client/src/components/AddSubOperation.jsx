@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Formik, Form, Field, FieldArray } from "formik";
 import * as Yup from "yup";
 import { motion, AnimatePresence } from "framer-motion";
+import Swal from "sweetalert2";
 
 const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -50,7 +51,12 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
 
       if (response.status === 200) {
         resetForm();
-        alert("Sub operation added to the workstation");
+        // alert("Sub operation added to the workstation");
+        Swal.fire({
+          title: "Sub operation added to the workstation",
+          icon: "success",
+          showCancelButton: false,
+        });
         if (onSuccess) onSuccess(response.data);
       }
     } catch (error) {

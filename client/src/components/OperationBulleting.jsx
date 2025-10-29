@@ -143,7 +143,7 @@ const OperationBulleting = () => {
 
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
     // Filter out empty values for arrays
-    alert(values.mainOperation);
+    // alert(values.mainOperation);
     if (values.mainOperation == 2) {
       console.log(values);
       try {
