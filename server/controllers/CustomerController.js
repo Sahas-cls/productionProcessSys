@@ -42,7 +42,7 @@ exports.createCustomer = async (req, res, next) => {
     const newCustomer = await Customer.create({
       customer_type_id: customerType,
       customer_name: customerName,
-      created_by: parseInt(userId),
+      created_by: parseInt(req.user.userId),
     });
 
     return res.status(201).json({

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 import { motion, AnimatePresence } from "framer-motion";
-import AddCustomer from "../components/admin/AddCustomer";
-import AddSeason from "../components/admin/AddSeason";
 import AddStyle from "../components/admin/AddStyle";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -12,7 +10,7 @@ import Swal from "sweetalert2";
 const StylePage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const navigate = useNavigate();
-  const { user, loading, error } = useAuth();
+  const { user, loading } = useAuth();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -24,21 +22,24 @@ const StylePage = () => {
     }
   }, [user, loading, navigate]);
 
-  if (loading) {
-    return <div className="">Loading...</div>;
-  }
-
-  if (!user) {
-    return null;
-  }
+  if (loading)
+    return (
+      <div className="flex justify-center items-center h-screen">
+        Loading...
+      </div>
+    );
+  if (!user) return null;
 
   return (
-    <div className="flex overflow-x-hidden min-h-screen h-full">
+    <div className="flex h-screen bg-gray-200 overflow-hidden">
+      {/* Sidebar */}
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
       />
-      <div className="w-full h-full">
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col overflow-auto">
         <Header
           toggleSidebar={toggleSidebar}
           setToggleSidebar={setToggleSidebar}
@@ -46,10 +47,12 @@ const StylePage = () => {
 
         <AnimatePresence mode="wait">
           <motion.div
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="bg-gray-200 w-full min-h-screen"
+            key="add-style"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            transition={{ duration: 0.3 }}
+            className="p-4 flex-1 min-h-[calc(100vh-64px)]" // 64px if header height
           >
             <AddStyle userRole={user.userRole} />
           </motion.div>

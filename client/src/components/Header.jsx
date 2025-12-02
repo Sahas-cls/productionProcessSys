@@ -48,7 +48,7 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
     <header className="flex h-14 w-full items-center justify-between bg-white  px-4 py-3 relative border-b-2 border-black/20">
       {/* Left section */}
       <div className="flex items-center gap-4">
-        <button className="md:hidden" onClick={handleSidebar}>
+        <button className="lg:hidden" onClick={handleSidebar}>
           <GiHamburgerMenu size={24} />
         </button>
         <h1 className="text-xl font-bold text-black/70 font-sans italic">

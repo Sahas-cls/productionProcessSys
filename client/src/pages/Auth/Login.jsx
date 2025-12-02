@@ -127,9 +127,9 @@ const Login = () => {
           localStorage.setItem("userId", userId);
           // alert(userName);
           if (result.data?.user.userCategoryN === "Admin") {
-            navigate("/factory");
+            navigate("/dashboard");
           } else {
-            navigate("/factory");
+            navigate("/dashboard");
           }
         }
       } catch (error) {

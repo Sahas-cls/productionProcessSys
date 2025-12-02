@@ -35,6 +35,8 @@ module.exports = (sequelize, DataTypes) => {
     StyleMedia.belongsTo(models.Style, {
       foreignKey: "style_id",
       as: "style",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

@@ -36,11 +36,15 @@ module.exports = (sequelize, DataTypes) => {
     Layout.belongsTo(models.Style, {
       foreignKey: "style_id",
       as: "style",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Layout.belongsTo(models.Season, {
       foreignKey: "season_id",
       as: "seasons",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

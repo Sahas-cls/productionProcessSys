@@ -18,6 +18,8 @@ const ExcelJS = require("exceljs");
 const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
+const B2 = require("backblaze-b2");
+require("dotenv").config();
 // const { sequelize, Style, StyleMedia } = require("../models");
 
 // Helper function to save image to network location

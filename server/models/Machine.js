@@ -20,21 +20,27 @@ module.exports = (sequelize, DataTypes) => {
       },
       machine_brand: {
         type: DataTypes.STRING,
+        allowNull: true,
       },
       machine_location: {
         type: DataTypes.STRING,
+        allowNull: true,
       },
       purchase_date: {
         type: DataTypes.DATE,
+        allowNull: true,
       },
       supplier: {
         type: DataTypes.STRING,
+        allowNull: true,
       },
       service_date: {
         type: DataTypes.DATE,
+        allowNull: true,
       },
       machine_status: {
         type: DataTypes.STRING,
+        allowNull: true,
       },
       breakdown_date: {
         type: DataTypes.DATE,

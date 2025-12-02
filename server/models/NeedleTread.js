@@ -37,11 +37,15 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "machine_id",
       targetKey: "machine_id",
       as: "machine",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     NeedleTread.belongsTo(models.SubOperation, {
       foreignKey: "sub_operation_id",
       as: "sub_operation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

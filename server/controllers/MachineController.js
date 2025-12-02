@@ -7,6 +7,118 @@ const {
   Style,
 } = require("../models");
 const ExcelJS = require("exceljs");
+const { extractMachineDataFromExcel } = require("../utils/machineProcessor");
+const fs = require("fs");
+const path = require("path");
+const { Op } = require("sequelize");
+
+// get machines with limit
+exports.getMachineDataLimited = async (req, res, next) => {
+  //
+  try {
+    const machineSet = await Machine.findAll({
+      include: [
+        {
+          model: SubOperation,
+          as: "sub_operations",
+          include: [
+            {
+              model: MainOperation,
+              as: "mainOperation",
+              include: [{ model: Style, as: "style" }],
+            },
+          ],
+        },
+      ],
+      limit: 10,
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Machine select success",
+      data: machineSet,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// filter data - search function
+exports.searchMachines = async (req, res, next) => {
+  console.log("searching machines.....");
+  console.log(req.params); // This should now show { searchKey: 'calfa' }
+
+  try {
+    const { searchKey } = req.params; // Get from params
+
+    if (!searchKey || searchKey.trim() === "") {
+      return res.status(400).json({
+        status: "error",
+        message: "Search term is required",
+      });
+    }
+
+    // Build search condition for multiple fields
+    const whereCondition = {
+      [Op.or]: [
+        { machine_no: { [Op.like]: `%${searchKey}%` } },
+        { machine_name: { [Op.like]: `%${searchKey}%` } },
+        { machine_type: { [Op.like]: `%${searchKey}%` } },
+        { machine_brand: { [Op.like]: `%${searchKey}%` } },
+        { machine_location: { [Op.like]: `%${searchKey}%` } },
+      ],
+    };
+
+    const machines = await Machine.findAll({
+      where: whereCondition,
+      include: [
+        {
+          model: SubOperation,
+          as: "sub_operations",
+          include: [
+            {
+              model: MainOperation,
+              as: "mainOperation",
+              include: [{ model: Style, as: "style" }],
+            },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Search completed successfully",
+      data: machines,
+      count: machines.length,
+    });
+  } catch (error) {
+    console.error("Search error:", error);
+    return next(error);
+  }
+};
+
+// Count all machines
+exports.countMachines = async (req, res, next) => {
+  try {
+    console.log("counting machines");
+
+    const machinesCount = await Machine.count();
+
+    return res.status(200).json({
+      success: true,
+      count: machinesCount,
+    });
+  } catch (error) {
+    console.error("Error counting machines:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to count machines",
+    });
+  }
+};
 
 // to get all machine details
 exports.getMachineData = async (req, res, next) => {
@@ -26,6 +138,7 @@ exports.getMachineData = async (req, res, next) => {
           ],
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
 
     res.status(200).json({
@@ -265,5 +378,163 @@ exports.getMachineTypes = async (req, res, next) => {
   } catch (error) {
     console.log("error while fetching machine types: ", error);
     return next(error);
+  }
+};
+
+// to upload machine
+exports.uploadMachines = async (req, res, next) => {
+  console.log("=== UPLOAD MACHINES CONTROLLER CALLED ===");
+  console.log("File received:", {
+    name: req.file.originalname,
+    size: req.file.size,
+    mimetype: req.file.mimetype,
+  });
+
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: "No Excel file uploaded. Please select a file.",
+      });
+    }
+
+    const excelFile = req.file;
+
+    // Validate file type
+    const validMimeTypes = [
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+    ];
+
+    if (!validMimeTypes.includes(excelFile.mimetype)) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid file type. Please upload .xlsx or .xls files only.",
+      });
+    }
+
+    // Check if buffer exists
+    if (!excelFile.buffer || excelFile.buffer.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "File data is empty or corrupted.",
+      });
+    }
+
+    console.log(
+      `Processing Excel file: ${excelFile.originalname}, Size: ${excelFile.buffer.length} bytes`
+    );
+
+    // Extract data from Excel using the buffer
+    const machinesData = await extractMachineDataFromExcel(excelFile.buffer);
+
+    if (!machinesData || machinesData.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "No valid machine data found in the Excel file. Please check the file format and content.",
+      });
+    }
+
+    console.log(`Found ${machinesData.length} machines in Excel file`);
+
+    // Process and insert into database
+    const results = {
+      total: machinesData.length,
+      successful: [],
+      skipped: [],
+      failed: [],
+    };
+
+    for (const machineData of machinesData) {
+      try {
+        // Check if machine already exists
+        const existingMachine = await Machine.findOne({
+          where: { machine_no: machineData.machine_no },
+        });
+
+        if (existingMachine) {
+          console.log(
+            `Machine ${machineData.machine_no} already exists, skipping...`
+          );
+          results.skipped.push({
+            machine_no: machineData.machine_no,
+            reason: "Already exists",
+          });
+          continue;
+        }
+
+        // Create new machine
+        const machine = await Machine.create(machineData);
+        results.successful.push({
+          machine_id: machine.machine_id,
+          machine_no: machine.machine_no,
+          machine_name: machine.machine_name,
+          machine_type: machine.machine_type,
+          machine_brand: machine.machine_brand,
+        });
+
+        console.log(`✓ Inserted machine: ${machineData.machine_no}`);
+      } catch (error) {
+        console.error(
+          `✗ Failed to insert machine ${machineData.machine_no}:`,
+          error.message
+        );
+        results.failed.push({
+          machine_no: machineData.machine_no,
+          error: error.message,
+        });
+      }
+    }
+
+    // Prepare response
+    const response = {
+      success: true,
+      message: `Excel file processed successfully!`,
+      data: {
+        summary: {
+          total: results.total,
+          successful: results.successful.length,
+          skipped: results.skipped.length,
+          failed: results.failed.length,
+        },
+        details: {
+          successful: results.successful,
+          skipped: results.skipped,
+          failed: results.failed,
+        },
+      },
+    };
+
+    console.log(
+      `Upload completed: ${results.successful.length} successful, ${results.skipped.length} skipped, ${results.failed.length} failed`
+    );
+    res.status(201).json(response);
+  } catch (error) {
+    console.error("Error in uploadMachines controller:", error);
+
+    // Handle specific errors
+    if (error.message.includes('Sheet "Machines" not found')) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "No 'Machines' sheet found in the Excel file. Please check the sheet name.",
+      });
+    } else if (
+      error.message.includes("Unable to read file") ||
+      error.message.includes("file appears to be corrupted")
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Unable to read the Excel file. Please ensure it's a valid Excel file and not corrupted.",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error:
+        "Internal server error while processing Excel file: " + error.message,
+    });
   }
 };

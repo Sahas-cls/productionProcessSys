@@ -13,7 +13,11 @@ import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
 
-const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
+const CameraOrBrowse = ({
+  setIsUploading,
+  uploadingData,
+  setUploadingMaterial,
+}) => {
   const [mediaStream, setMediaStream] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordedVideo, setRecordedVideo] = useState(null);
@@ -79,7 +83,6 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
     }
   };
 
-  // Handle file upload to backend
   const handleUpload = async (
     videoBlob = null,
     fileName = "recorded-video.webm"
@@ -103,9 +106,8 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
       } else if (recordedBlob) {
         formData.append("video", recordedBlob, "recorded-video.webm");
       } else {
-        // alert("No video to upload");
         Swal.fire({
-          title: "Error occured",
+          title: "Error occurred",
           text: "No video to upload",
           timer: 3000,
           showTimeProgress: true,
@@ -118,7 +120,6 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-      // Use Axios with progress tracking
       const response = await axios.post(
         `${apiUrl}/api/subOperationMedia/uploadVideos`,
         formData,
@@ -135,38 +136,154 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
               setUploadProgress(percentCompleted);
             }
           },
-          timeout: 300000, // 5 minutes timeout for large files
+          timeout: 300000,
         }
       );
 
+      console.log("🔍 Upload response:", response.data); // Debug log
+
+      // FIXED: Enhanced success checking with storage type awareness
       if (response.status === 201) {
-        alert("Upload successful!");
-        console.log("Upload result:", response.data);
-        // Reset states after successful upload
-        setRecordedBlob(null);
-        setUploading(false);
-        setUploadProgress(0);
+        if (response.data.success === true) {
+          // ✅ True success case - handle different storage scenarios
+          let successTitle = "Success!";
+          let successText = "Video uploaded successfully!";
+          let iconType = "success";
+          let timerDuration = 4000;
+
+          // Check storage type and show appropriate message
+          if (response.data.storageType === "local" || response.data.warning) {
+            successTitle = "Uploaded with Note";
+            successText =
+              response.data.warning ||
+              "Video saved to local storage (network unavailable - 404)";
+            iconType = "warning";
+            timerDuration = 5000; // Longer for warnings
+          }
+
+          Swal.fire({
+            title: successTitle,
+            text: successText,
+            timer: timerDuration,
+            showTimeProgress: true,
+            showCancelButton: false,
+            icon: iconType,
+          });
+
+          console.log("✅ Upload successful:", response.data);
+          console.log(
+            "📁 Storage type:",
+            response.data.storageType || "unknown"
+          );
+          if (response.data.warning) {
+            console.log("⚠️ Warning:", response.data.warning);
+          }
+
+          // Reset states after successful upload
+          setRecordedBlob(null);
+          setRecordedVideo(null);
+          setStatus("idle");
+          setUploading(false);
+          setUploadProgress(0);
+
+          // Optional: Refresh video list if needed
+          // if (typeof onUploadSuccess === 'function') {
+          //   onUploadSuccess();
+          // }
+        } else if (response.data.success === false) {
+          // ❌ Server returned 201 but success is explicitly false
+          console.error("❌ Server returned failure:", response.data);
+          throw new Error(response.data.message || "Upload failed on server");
+        } else {
+          // ❌ No success flag in response - this indicates a server issue
+          console.error(
+            "❌ Malformed response - no success flag:",
+            response.data
+          );
+          throw new Error(
+            "Server response format error - please contact administrator"
+          );
+        }
       } else {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        // ❌ Non-201 status code
+        console.error("❌ Unexpected status code:", response.status);
+        throw new Error(`Upload failed with status: ${response.status}`);
       }
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error("❌ Upload error:", error);
+      console.error("❌ Error response data:", error.response?.data);
+      console.error("❌ Error details:", {
+        message: error.message,
+        code: error.code,
+        responseStatus: error.response?.status,
+        responseHeaders: error.response?.headers,
+      });
 
       let errorMessage = "Upload failed";
+      let errorTitle = "Upload Failed";
+      let timerDuration = 5000;
+
       if (error.response) {
         // Server responded with error status
-        errorMessage = error.response.data.message || error.response.statusText;
+        errorMessage =
+          error.response.data?.message ||
+          error.response.statusText ||
+          "Server error occurred";
+
+        // Handle specific error types with better messages
+        if (error.response.status === 400) {
+          errorTitle = "Invalid Request";
+          if (errorMessage?.includes("too large")) {
+            errorMessage = "Video file is too large. Maximum size is 1GB";
+          } else if (errorMessage?.includes("Missing required fields")) {
+            errorMessage = "Please fill all required fields";
+          } else if (errorMessage?.includes("No file uploaded")) {
+            errorMessage = "No video file selected";
+          }
+        } else if (error.response.status === 413) {
+          errorTitle = "File Too Large";
+          errorMessage = "Video file exceeds size limit. Maximum size is 1GB";
+        } else if (error.response.status === 415) {
+          errorTitle = "Unsupported Format";
+          errorMessage =
+            "Video format not supported. Please use MP4, AVI, MOV, MKV, or WebM";
+        } else if (error.response.status >= 500) {
+          errorTitle = "Server Error";
+          errorMessage =
+            "Network storage is not accessible. Please check the network connection and try again. error code 404";
+          timerDuration = 6000; // Longer for server errors
+        }
       } else if (error.request) {
         // Request was made but no response received
-        errorMessage = "Network error - no response from server";
+        errorTitle = "Network Error";
+        errorMessage =
+          "Unable to connect to server. Please check your internet connection.";
+      } else if (error.code === "ECONNABORTED") {
+        // Request timeout
+        errorTitle = "Timeout Error";
+        errorMessage =
+          "Upload took too long. Please try again with a smaller video file.";
       } else {
         // Something else happened
-        errorMessage = error.message;
+        errorTitle = "Upload Error";
+        errorMessage = error.message || "An unexpected error occurred";
       }
 
-      alert(`Upload failed: ${errorMessage}`);
-    } finally {
+      Swal.fire({
+        title: errorTitle,
+        text: errorMessage,
+        timer: timerDuration,
+        showTimeProgress: true,
+        showCancelButton: false,
+        icon: "error",
+      });
+
+      // Keep the video for retry (don't reset recordedBlob)
       setUploading(false);
+      setUploadProgress(0);
+
+      // Optional: Keep the preview for retry
+      // setStatus("preview");
     }
   };
 
@@ -290,7 +407,10 @@ const CameraOrBrowse = ({ setIsUploading, uploadingData }) => {
       <div className="text-right relative">
         <button
           className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
-          onClick={() => setIsUploading(false)}
+          onClick={() => {
+            // setIsUploading(false);
+            setUploadingMaterial(null);
+          }}
           disabled={uploading}
         >
           <RxCross2 className="text-2xl" />

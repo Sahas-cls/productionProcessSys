@@ -152,14 +152,7 @@ const AddCustomer = ({ userRole }) => {
       .required("Customer name is required")
       .min(3, "Customer name must be at least 3 characters")
       .matches(/^[A-Za-z /]+$/, "Customer name should contain letters only"),
-    userId: yup.string().required(),
   });
-
-  useEffect(() => {
-    if (user) {
-      formik.setFieldValue("userId", user.userId);
-    }
-  }, [user]);
 
   // Handle form submission
   const handleSubmit = async (values, { resetForm }) => {
@@ -206,7 +199,6 @@ const AddCustomer = ({ userRole }) => {
           values: {
             customerType: "",
             customerName: "",
-            userId: user?.userId,
           },
         });
         setIsAddFormOpen(false);
@@ -253,7 +245,6 @@ const AddCustomer = ({ userRole }) => {
     initialValues: {
       customerType: "",
       customerName: "",
-      userId: user?.userId || "",
     },
     validationSchema,
     onSubmit: handleSubmit,
@@ -265,7 +256,6 @@ const AddCustomer = ({ userRole }) => {
     formik.setValues({
       customerType: customer.customer_type_id.toString(),
       customerName: customer.customer_name,
-      userId: user?.userId || null,
     });
     setCurrentCustomerId(customer.customer_id);
     setIsEditMode(true);
@@ -329,7 +319,6 @@ const AddCustomer = ({ userRole }) => {
       values: {
         customerType: "",
         customerName: "",
-        userId: user?.userId || null,
       },
     });
     setIsAddFormOpen(false);
@@ -344,7 +333,6 @@ const AddCustomer = ({ userRole }) => {
       values: {
         customerType: "",
         customerName: "",
-        userId: user?.userId || "",
       },
     });
     setIsAddFormOpen(true);

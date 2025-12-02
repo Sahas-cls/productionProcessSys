@@ -427,12 +427,12 @@ const ViewStyleDetails = () => {
                                       </span>{" "}
                                       {formatDate(subOp.createdAt)}
                                     </p>
-                                    <p className="text-gray-600">
+                                    {/* <p className="text-gray-600">
                                       <span className="font-medium">
                                         Machines:
                                       </span>{" "}
                                       {subOp.machines?.length || 0}
-                                    </p>
+                                    </p> */}
                                   </div>
                                 </div>
                                 {userRole === "Admin" && (

@@ -25,6 +25,18 @@ import CameraOrBrowse from "./components/CameraOrBrowse";
 import { useAuth } from "./hooks/useAuth";
 import Reports from "./components/ReportsPage";
 import WatchVideos from "./components/WatchVideos";
+import UploadMaterial from "./components/UploadMaterial";
+import ImageCaptureOrBrowse from "./components/ImageCaptureorBrows";
+import TechPackUploader from "./components/TechPackUploader";
+import FolderDocumentsUploader from "./components/FolderDocumentsUploader";
+import UploadMachine from "./components/UploadMachine";
+import DashboardPage from "./pages/DashboardPage";
+import VideoPage from "./pages/VideoPage";
+import VideoGallery from "./pages/VideoGallery";
+import ImageGallery from "./pages/ImageGallery";
+import TechPackGallery from "./pages/TechPackGallery";
+import DocumentGallery from "./pages/DocumentGallery";
+import NeedleThreatsPage from "./pages/NeedleThreatsPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -42,12 +54,15 @@ const App = () => {
           <Route path="/" element={<Login />} />
           {/* <Route path="/admin-panel" element={<AdminPanel />} /> */}
           <Route path="/factory" element={<FactoryPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/customer" element={<CustomerPage />} />
           <Route path="/season" element={<SeasonPage />} />
           <Route path="/style" element={<StylePage />} />
           <Route path="/machine" element={<MachinePage />} />
+          <Route path="/needleThreats" element={<NeedleThreatsPage />} />
           <Route path="/open-camera" element={<CameraOrBrowse />} />
           <Route path="/user/registration" element={<Register />} />
+          <Route path="/test" element={<VideoPage />} />
 
           <Route
             path="/operation-bulletin/add"
@@ -101,7 +116,20 @@ const App = () => {
           <Route path="/reports" element={<Reports />} />
 
           {/* to watch videos on component */}
-          <Route path="/sub-operation/videos" element={<WatchVideos />} />
+          <Route path="/sub-operation/videos" element={<VideoGallery />} />
+          <Route path="/sub-operation/images" element={<ImageGallery />} />
+          <Route
+            path="/sub-operation/tech_packs"
+            element={<TechPackGallery />}
+          />
+          <Route
+            path="/sub-operation/tech_packs"
+            element={<TechPackGallery />}
+          />
+          <Route
+            path="/sub-operation/documents"
+            element={<DocumentGallery />}
+          />
         </Routes>
       </BrowserRouter>
     </UserProvider>

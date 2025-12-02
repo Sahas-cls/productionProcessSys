@@ -32,11 +32,15 @@ module.exports = (sequelize, DataTypes) => {
     WorkstationSubmenu.belongsTo(models.Workstation, {
       foreignKey: "workstation_id",
       as: "workstation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     WorkstationSubmenu.belongsTo(models.SubOperation, {
       foreignKey: "sub_operation_id",
       as: "suboperatoin",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

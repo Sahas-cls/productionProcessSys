@@ -160,21 +160,21 @@ exports.deleteFactory = async (req, res, next) => {
     //   throw error;
     // }
 
-    if (isUser) {
-      const error = new Error(
-        "Cannot delete this factory because users are linked to it."
-      );
-      error.status = 400;
-      throw error;
-    }
+    // if (isUser) {
+    //   const error = new Error(
+    //     "Cannot delete this factory because users are linked to it."
+    //   );
+    //   error.status = 400;
+    //   throw error;
+    // }
 
-    if (isStyle) {
-      const error = new Error(
-        "Cannot delete this factory because styles are linked to it."
-      );
-      error.status = 400;
-      throw error;
-    }
+    // if (isStyle) {
+    //   const error = new Error(
+    //     "Cannot delete this factory because styles are linked to it."
+    //   );
+    //   error.status = 400;
+    //   throw error;
+    // }
 
     // ✅ Safe to delete
     await factory.destroy();

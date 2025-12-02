@@ -495,26 +495,29 @@ const AddStyle = ({ userRole }) => {
     >
       {/* Header Section */}
       <motion.div
-        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pt-6"
+        className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between mb-6 pt-6"
         variants={itemVariants}
       >
+        {/* Search Input - Full width on mobile, auto on desktop */}
         <motion.div
-          className="relative w-full md:w-96"
+          className="relative w-full lg:w-auto lg:flex-1 max-w-2xl"
           whileHover={{ scale: 1.01 }}
+          whileFocus={{ scale: 1.01 }}
         >
           <input
             type="text"
             placeholder="Search styles..."
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+            className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-base"
             onChange={handleSearch}
           />
-          <IoSearchSharp className="absolute left-3 top-3 text-gray-400" />
+          <IoSearchSharp className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl" />
         </motion.div>
 
-        <div className="flex gap-4 w-full md:w-auto">
+        {/* Buttons Container - Stack on mobile, row on desktop */}
+        <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
           <motion.button
             type="button"
-            className="bg-green-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
+            className="bg-green-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-green-700 min-w-[120px]"
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
@@ -522,10 +525,11 @@ const AddStyle = ({ userRole }) => {
           >
             Download
           </motion.button>
-          {userRole === "Admin" ? (
+
+          {userRole === "Admin" && (
             <motion.button
               type="button"
-              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
+              className="bg-blue-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 min-w-[120px]"
               variants={buttonVariants}
               whileHover="hover"
               whileTap="tap"
@@ -533,8 +537,6 @@ const AddStyle = ({ userRole }) => {
             >
               {isAddStyle ? "Close" : "Add Style"}
             </motion.button>
-          ) : (
-            ""
           )}
         </div>
       </motion.div>
@@ -944,133 +946,133 @@ const AddStyle = ({ userRole }) => {
       </AnimatePresence>
 
       {/* Styles Table */}
-      <motion.div
-        className="bg-white rounded-xl shadow-md max-h-[32rem] overflow-y-auto w-full"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.2 }}
-      >
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 text-xs md:text-base">
-            <tr>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Factory
-              </th>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Customer
-              </th>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Season
-              </th>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Style No
-              </th>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Style Name
-              </th>
-              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                Description
-              </th>
-              {userRole === "Admin" ? (
-                <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
-                  Actions
+        <motion.div 
+          className="bg-white rounded-xl shadow-md max-h-[20rem] overflow-x-auto overflow-y-auto w-full block"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+        >
+          <table className="min-w-max divide-y w-full divide-gray-200">
+            <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 text-xs md:text-base">
+              <tr>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Factory
                 </th>
-              ) : (
-                ""
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base">
-            {Array.isArray(filteredStyles) && filteredStyles.length > 0 ? (
-              filteredStyles.map((style) => (
-                <motion.tr
-                  key={style.style_id}
-                  className="hover:bg-gray-50 transition-colors duration-150"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-gray-900 flex items-center gap-x-6">
-                      {style.style_medias?.[0]?.media_url && (
-                        <img
-                          src={getImageUrl(style.style_medias[0].media_url)} // Using helper function
-                          alt="Style preview"
-                          width={60}
-                          height={60}
-                          loading="lazy"
-                          className="object-cover rounded"
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                          }}
-                        />
-                      )}
-                      {style.factory?.factory_name || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-700">
-                      {style.customer?.customer_name || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-700">
-                      {style.season?.season || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-semibold text-blue-600">
-                      {style.style_no || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-700">
-                      {style.style_name || "N/A"}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-700 max-w-xs truncate">
-                      {style.style_description || "N/A"}
-                    </div>
-                  </td>
-                  {userRole === "Admin" ? (
-                    <td className="px-6 py-4 whitespace-nowrap text-center">
-                      <div className="flex justify-center space-x-4">
-                        <motion.button
-                          className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleEditStyle(style)}
-                        >
-                          <MdModeEditOutline className="text-2xl" />
-                        </motion.button>
-                        <motion.button
-                          className="text-red-600 hover:text-red-800 transition-colors duration-200"
-                          whileHover={{ scale: 1.2 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => handleDeleteStyle(style.style_id)}
-                        >
-                          <MdDeleteForever className="text-2xl" />
-                        </motion.button>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Customer
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Season
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Style No
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Style Name
+                </th>
+                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                  Description
+                </th>
+                {userRole === "Admin" ? (
+                  <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
+                    Actions
+                  </th>
+                ) : (
+                  ""
+                )}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base">
+              {Array.isArray(filteredStyles) && filteredStyles.length > 0 ? (
+                filteredStyles.map((style) => (
+                  <motion.tr
+                    key={style.style_id}
+                    className="hover:bg-gray-50 transition-colors duration-150"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="font-medium text-gray-900 flex items-center gap-x-6">
+                        {style.style_medias?.[0]?.media_url && (
+                          <img
+                            src={getImageUrl(style.style_medias[0].media_url)} // Using helper function
+                            alt="Style preview"
+                            width={60}
+                            height={60}
+                            loading="lazy"
+                            className="object-cover rounded"
+                            onError={(e) => {
+                              e.target.style.display = "none";
+                            }}
+                          />
+                        )}
+                        {style.factory?.factory_name || "N/A"}
                       </div>
                     </td>
-                  ) : (
-                    ""
-                  )}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">
+                        {style.customer?.customer_name || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">
+                        {style.season?.season || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-blue-600">
+                        {style.style_no || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-700">
+                        {style.style_name || "N/A"}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-700 max-w-xs truncate">
+                        {style.style_description || "N/A"}
+                      </div>
+                    </td>
+                    {userRole === "Admin" ? (
+                      <td className="px-6 py-4 whitespace-nowrap text-center">
+                        <div className="flex justify-center space-x-4">
+                          <motion.button
+                            className="text-blue-600 hover:text-blue-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleEditStyle(style)}
+                          >
+                            <MdModeEditOutline className="text-2xl" />
+                          </motion.button>
+                          <motion.button
+                            className="text-red-600 hover:text-red-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleDeleteStyle(style.style_id)}
+                          >
+                            <MdDeleteForever className="text-2xl" />
+                          </motion.button>
+                        </div>
+                      </td>
+                    ) : (
+                      ""
+                    )}
+                  </motion.tr>
+                ))
+              ) : (
+                <motion.tr>
+                  <td colSpan={7} className="py-4 text-center text-gray-400">
+                    {searchTerm
+                      ? "No matching styles found"
+                      : "No styles available"}
+                  </td>
                 </motion.tr>
-              ))
-            ) : (
-              <motion.tr>
-                <td colSpan={7} className="py-4 text-center text-gray-400">
-                  {searchTerm
-                    ? "No matching styles found"
-                    : "No styles available"}
-                </td>
-              </motion.tr>
-            )}
-          </tbody>
-        </table>
-      </motion.div>
+              )}
+            </tbody>
+          </table>
+        </motion.div>
       {/* <div className="">
         <h1 className="text-3xl">img</h1>
         <img

@@ -37,11 +37,15 @@ module.exports = (sequelize, DataTypes) => {
     NeedleLooper.belongsTo(models.Machine, {
       foreignKey: "machine_id",
       as: "machine",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     NeedleLooper.belongsTo(models.SubOperation, {
       foreignKey: "sub_operation_id",
       as: "sub_operation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

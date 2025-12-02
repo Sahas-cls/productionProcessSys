@@ -25,6 +25,15 @@ const MachinePage = () => {
     }
   }, [user, loading, navigate]);
 
+  // Debug: Check if sidebar should be visible
+  useEffect(() => {
+    console.log("Sidebar state:", {
+      toggleSidebar,
+      screenWidth: window.innerWidth,
+      isMediumScreen: window.innerWidth >= 768
+    });
+  }, [toggleSidebar]);
+
   if (loading) {
     return <div className="">Loading...</div>;
   }
@@ -32,28 +41,34 @@ const MachinePage = () => {
   if (!user) {
     return null;
   }
+
   return (
-    <div className="flex overflow-x-hidden min-h-screen h-full">
+    <div className="flex min-h-screen bg-gray-200">
+      {/* Sidebar */}
       <Sidebar
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
       />
-      <div className="w-full h-full">
+      
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
         <Header
           toggleSidebar={toggleSidebar}
           setToggleSidebar={setToggleSidebar}
         />
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="bg-gray-200 w-full min-h-screen"
-          >
-            <AddMachine userRole={user.userRole} />
-          </motion.div>
-        </AnimatePresence>
+        <main className="flex-1 p-4 overflow-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <AddMachine userRole={user.userRole} />
+            </motion.div>
+          </AnimatePresence>
+        </main>
       </div>
     </div>
   );

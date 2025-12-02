@@ -118,13 +118,13 @@ exports.userLogin = async (req, res, next) => {
 
     // Generate JWT
     const jwtToken = jwt.sign(crrUser, process.env.JWT_SECRET, {
-      expiresIn: "2h",
+      expiresIn: "3h",
     });
 
     // Set JWT cookie
     res.cookie("jwt", jwtToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // use secure only in prod
+      secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
     });
 

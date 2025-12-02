@@ -7,65 +7,136 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         autoIncrement: true,
       },
+
       main_operation_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
+
+      thread_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+
       sub_operation_number: {
-        type: DataTypes.STRING,
-        allowNull: false,
+        type: DataTypes.STRING(255),
+        allowNull: true,
       },
+
       sub_operation_name: {
-        type: DataTypes.STRING,
-        validate: { len: [0, 255] },
+        type: DataTypes.STRING(255),
+        allowNull: true,
       },
+
       smv: {
         type: DataTypes.FLOAT,
+        allowNull: true,
       },
+
       remark: {
         type: DataTypes.TEXT,
+        allowNull: true,
       },
+
       needle_count: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+
+      machine_type: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
+      spi: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
+
+      needle_type_id: {
         type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "needle_type_n",
+          key: "needle_type_id",
+        },
+      },
+      looper_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "thread",
+          key: "thread_id",
+        },
+      },
+      created_by: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "users",
+          key: "user_id",
+        },
       },
     },
     {
       tableName: "sub_operation",
       timestamps: true,
+      underscored: false, // recommended for SQL snake_case
     }
   );
 
   SubOperation.associate = (models) => {
-    // M:N with Machine
-    SubOperation.belongsToMany(models.Machine, {
-      through: "SubOperationMachine",
-      foreignKey: "sub_operation_id",
-      otherKey: "machine_id",
-      as: "machines",
+    // Thread
+    SubOperation.belongsTo(models.Thread, {
+      foreignKey: "thread_id",
+      as: "thread",
     });
 
-    // M:1 with MainOperation
+    // created by - user
+    SubOperation.belongsTo(models.User, {
+      foreignKey: "created_by",
+      as: "creator",
+    });
+
+    // looper
+    SubOperation.belongsTo(models.Thread, {
+      foreignKey: "looper_id",
+      as: "looper",
+    });
+
+    // Main Operation
     SubOperation.belongsTo(models.MainOperation, {
       foreignKey: "main_operation_id",
       as: "mainOperation",
     });
 
-    // 1:M with other needle-related tables
-    SubOperation.hasMany(models.NeedleType, {
-      foreignKey: "sub_operation_id",
-      as: "needle_types",
+    // Needle Type
+    SubOperation.belongsTo(models.NeedleTypeN, {
+      foreignKey: "needle_type_id",
+      as: "needle_type",
     });
 
+    // Many-to-many machines
+    SubOperation.belongsToMany(models.Machine, {
+      through: "sub_operation_machine",
+      foreignKey: "sub_operation_id",
+      otherKey: "machine_id",
+      as: "machines",
+    });
+
+    // Needle Thread
     SubOperation.hasMany(models.NeedleTread, {
       foreignKey: "sub_operation_id",
       as: "needle_treads",
     });
 
+    // Needle Looper
     SubOperation.hasMany(models.NeedleLooper, {
       foreignKey: "sub_operation_id",
       as: "needle_loopers",
     });
 
+    // Media
     SubOperation.hasMany(models.SubOperationMedia, {
       foreignKey: "sub_operation_id",
       as: "medias",

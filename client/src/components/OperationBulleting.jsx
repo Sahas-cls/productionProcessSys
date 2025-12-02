@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+// Remove bobbing tread/looper and needle treads being array - there should be only one value for that no multi values
+
+import React, { useState, useEffect, useRef } from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import { FaMinus } from "react-icons/fa";
@@ -12,6 +14,8 @@ import useMachine from "../hooks/useMachine";
 import useStyles from "../hooks/useStyles";
 import useMachineTypes from "../hooks/useMachineTypes";
 import { useMemo } from "react";
+import useThreads from "../hooks/useTreads";
+import useNeedles from "../hooks/useNeedles";
 
 const OperationBulleting = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -21,7 +25,22 @@ const OperationBulleting = () => {
   const [editingOperation, setEditingOperation] = useState(null);
   const [editingIndex, setEditingIndex] = useState(null);
   const { stylesList, isLoading: styleLoading } = useStyles();
-  console.log("style list --- ", stylesList);
+  const [isMachineFocused, setIsMachineFocused] = useState(false);
+  const {
+    isLoading: threadLoading,
+    refreshThreads: refreshThreads,
+    threadList,
+    treadErrors,
+  } = useThreads();
+
+  const {
+    isLoading: needleLoading,
+    needleErrors,
+    needleList,
+    refreshNeedle,
+  } = useNeedles();
+
+  const [threadVal, setThreadVal] = useState("");
 
   // Persistent values for the main fields that should never reset
   const [persistentValues, setPersistentValues] = useState({
@@ -31,8 +50,12 @@ const OperationBulleting = () => {
   });
 
   const { machineList, isLoading, refresh } = useMachine();
-  console.log(machineList);
   const [currentOPId, setCurrentOPId] = useState("");
+
+  // State for live search
+  const [styleSearchTerm, setStyleSearchTerm] = useState("");
+  const [showStyleSuggestions, setShowStyleSuggestions] = useState(false);
+  const [filteredStyles, setFilteredStyles] = useState([]);
 
   useEffect(() => {
     const fetchOperations = async () => {
@@ -50,6 +73,20 @@ const OperationBulleting = () => {
     };
     fetchOperations();
   }, [apiUrl]);
+
+  // Filter styles based on search term
+  useEffect(() => {
+    if (stylesList && Array.isArray(stylesList)) {
+      const filtered = stylesList.filter(
+        (style) =>
+          style.style_no
+            ?.toLowerCase()
+            .includes(styleSearchTerm.toLowerCase()) ||
+          style.po_number?.toLowerCase().includes(styleSearchTerm.toLowerCase())
+      );
+      setFilteredStyles(filtered);
+    }
+  }, [styleSearchTerm, stylesList]);
 
   const validationSchema = Yup.object()
     .shape({
@@ -75,23 +112,14 @@ const OperationBulleting = () => {
         machineName: Yup.string().required("Machine Name is required"),
         machineBrand: Yup.string().required("Machine Brand is required"),
         machineLocation: Yup.string().required("Machine Location is required"),
-        needleType: Yup.array()
-          .of(
-            Yup.object().shape({
-              type: Yup.string().required("Needle Type is required"),
-            })
-          )
-          .min(1, "At least one Needle Type is required"),
         needleCount: Yup.number()
           .required("Needle count is required")
           .positive("Must be a positive number")
           .integer("Must be a whole number"),
-        needleTreads: Yup.array()
-          .of(Yup.string().required("Needle Tread is required"))
-          .min(1, "At least one Needle Tread is required"),
-        bobbinTreadLoopers: Yup.array()
-          .of(Yup.string().required("Bobbin Tread/Looper is required"))
-          .min(1, "At least one Bobbin Tread/Looper is required"),
+        needleTreads: Yup.number().required("Needle Tread is required"),
+        bobbinTreadLoopers: Yup.number().required(
+          "Bobbin Tread/Looper is required"
+        ),
       }),
     });
 
@@ -104,15 +132,16 @@ const OperationBulleting = () => {
       operationNumber: operation.operationNumber || "",
       smv: operation.smv || "",
       remarks: operation.remarks || "",
-      machineType: operation.machineType || "HLP",
+      machineType: operation.machineType || "",
       machineNo: operation.machineNo || "",
       machineName: operation.machineName || "",
       machineBrand: operation.machineBrand || "",
       machineLocation: operation.machineLocation || "",
-      needleType: operation.needleType || [{ type: "" }],
+      needleTypeId: operation.needleTypeId || "",
       needleCount: operation.needleCount || 1,
-      needleTreads: operation.needleTreads || [""],
-      bobbinTreadLoopers: operation.bobbinTreadLoopers || [""],
+      spi: operation?.spi || 1,
+      needleTreads: operation.needleTreads || "", // Changed from array to string
+      bobbinTreadLoopers: operation.bobbinTreadLoopers || "", // Changed from array to string
     };
   };
 
@@ -123,27 +152,26 @@ const OperationBulleting = () => {
     }
 
     return {
-      ...persistentValues, // Always include persistent values
+      ...persistentValues,
       currentOPId: currentOPId,
       operationName: "",
       operationNumber: "",
       smv: "",
       remarks: "",
-      machineType: "HLP",
+      machineType: "",
       machineNo: "",
       machineName: "",
       machineBrand: "",
       machineLocation: "",
-      needleType: [{ type: "" }],
+      needleTypeId: "",
       needleCount: 1,
-      needleTreads: [""],
-      bobbinTreadLoopers: [""],
+      spi: 1,
+      needleTreads: "", // Changed from array to string
+      bobbinTreadLoopers: "", // Changed from array to string
     };
   };
 
   const handleSubmit = async (values, { setSubmitting, resetForm }) => {
-    // Filter out empty values for arrays
-    // alert(values.mainOperation);
     if (values.mainOperation == 2) {
       console.log(values);
       try {
@@ -170,11 +198,8 @@ const OperationBulleting = () => {
 
     const operationData = {
       ...values,
-      needleTreads: values.needleTreads?.filter((tread) => tread !== "") || [],
-      bobbinTreadLoopers:
-        values.bobbinTreadLoopers?.filter((tread) => tread !== "") || [],
-      needleType:
-        values.needleType?.filter((needle) => needle?.type !== "") || [],
+      needleTreads: values.needleTreads || "", // Changed to single value
+      bobbinTreadLoopers: values.bobbinTreadLoopers || "", // Changed to single value
     };
 
     if (editingIndex !== null) {
@@ -199,7 +224,7 @@ const OperationBulleting = () => {
 
     // Reset form but preserve the main fields
     resetForm({
-      values: getInitialFormValues(), // This will preserve the persistent values
+      values: getInitialFormValues(),
     });
 
     setEditingOperation(null);
@@ -230,19 +255,16 @@ const OperationBulleting = () => {
     remarks: op.remarks,
     machineType: op.machineType,
     machineNo: op.machineNo,
+    spi: op.spi,
     machineName: op.machineName,
     machineBrand: op.machineBrand,
     machineLocation: op.machineLocation,
-    needleType: Array.isArray(op.needleType)
-      ? op.needleType.filter((nt) => nt && nt.type)
-      : [],
+    // Send needle type ID
+    needleTypeId: op.needleTypeId || null,
     needleCount: op.needleCount || 1,
-    needleTreads: Array.isArray(op.needleTreads)
-      ? op.needleTreads.filter((t) => t)
-      : [],
-    bobbinTreadLoopers: Array.isArray(op.bobbinTreadLoopers)
-      ? op.bobbinTreadLoopers.filter((b) => b)
-      : [],
+    // Send thread IDs as single values (not arrays)
+    needleTreads: op.needleTreads || "", // Changed to single value
+    bobbinTreadLoopers: op.bobbinTreadLoopers || "", // Changed to single value
   });
 
   // Helper function to format helper operation data for API request
@@ -264,7 +286,6 @@ const OperationBulleting = () => {
     }
 
     try {
-      // Debug: Show what we're about to send
       console.log("Pending operations to save:", pendingOperations);
 
       const { styleNumber, mainOperation, mainOperationName } =
@@ -272,25 +293,24 @@ const OperationBulleting = () => {
 
       // Separate operations by type with proper validation
       const machineOperations = pendingOperations
-        .filter((op) => op.mainOperation === "1") // Machine Operator
+        .filter((op) => op.mainOperation === "1")
         .map((op) => ({
           ...formatMachineOperation(op),
-          styleNumber, // Ensure styleNumber is included
+          styleNumber,
           mainOperation,
           mainOperationName,
         }));
 
       const helperOperations = pendingOperations
-        .filter((op) => op.mainOperation === "2") // Helper
+        .filter((op) => op.mainOperation === "2")
         .map((op) => ({
           ...formatHelperOperation(op),
-          styleNumber, // Ensure styleNumber is included
+          styleNumber,
           mainOperation,
           mainOperationName,
         }));
 
       console.log("Machine operations payload:", machineOperations);
-      console.log("Helper operations payload:", helperOperations);
 
       let mainOPId = localStorage.getItem("currentItem") || null;
       let hasSaved = false;
@@ -301,7 +321,7 @@ const OperationBulleting = () => {
         const machinePayload = {
           styleNumber,
           mainOperation,
-          mainOperationName,
+          mainOperationName: mainOperationName || "empty",
           currentOPId: mainOPId,
           operations: machineOperations,
         };
@@ -442,36 +462,19 @@ const OperationBulleting = () => {
     }));
   };
 
+  // Handle style selection from suggestions
+  const handleStyleSelect = (style, setFieldValue) => {
+    setFieldValue("styleNumber", style.style_no);
+    setStyleSearchTerm(style.style_no);
+    setShowStyleSuggestions(false);
+    handleMainFieldChange("styleNumber", style.style_no);
+  };
+
   return (
-    <div className="px-4 py-4">
+    <div className="px-4">
       <section className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-center">
         <div className="md:col-span-8 w-2/4">
-          {/* <input
-            type="text"
-            className="w-2/4 form-input-base py-3 px-4 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-            placeholder="Search operations..."
-          /> */}
-        </div>
-
-        <div className="md:col-span-4 grid grid-cols-2 gap-3 md:gap-4 w-full">
-          {/* <button
-            type="button"
-            className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition-colors"
-          >
-            Download
-          </button> */}
-          <div className=""></div>
-          <button
-            type="button"
-            onClick={() => {
-              setEditingOperation(null);
-              setEditingIndex(null);
-              setShowForm(true);
-            }}
-            className="flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-colors"
-          >
-            Add New
-          </button>
+          {/* Search input removed for brevity */}
         </div>
       </section>
 
@@ -577,34 +580,64 @@ const OperationBulleting = () => {
                       ""
                     )}
 
-                    <div>
+                    <div className="relative">
                       <label className="block mb-1">Style Number *</label>
-                      <Field
-                        as="select"
-                        name="styleNumber"
-                        className={`form-input-base ${
-                          errors.styleNumber && touched.styleNumber
-                            ? "border-red-500"
-                            : ""
-                        }`}
-                        onBlur={(e) => {
-                          handleBlur(e);
-                          handleMainFieldChange("styleNumber", e.target.value);
-                        }}
-                        onChange={(e) => {
-                          handleChange(e);
-                          handleMainFieldChange("styleNumber", e.target.value);
-                        }}
-                      >
-                        <option value="">Select a style</option>
-                        {Array.isArray(stylesList) &&
-                          stylesList.length > 0 &&
-                          stylesList.map((sty) => (
-                            <option key={sty.style_no} value={sty.style_no}>
-                              {sty.style_no} ({sty.po_number})
-                            </option>
-                          ))}
-                      </Field>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          name="styleNumber"
+                          value={styleSearchTerm}
+                          className={`form-input-base w-full ${
+                            errors.styleNumber && touched.styleNumber
+                              ? "border-red-500"
+                              : ""
+                          }`}
+                          placeholder="Type to search styles..."
+                          onChange={(e) => {
+                            setStyleSearchTerm(e.target.value);
+                            setFieldValue("styleNumber", e.target.value);
+                            setShowStyleSuggestions(true);
+                          }}
+                          onFocus={() => setShowStyleSuggestions(true)}
+                          onBlur={() => {
+                            setTimeout(
+                              () => setShowStyleSuggestions(false),
+                              200
+                            );
+                            handleBlur({
+                              target: {
+                                name: "styleNumber",
+                                value: styleSearchTerm,
+                              },
+                            });
+                            handleMainFieldChange(
+                              "styleNumber",
+                              styleSearchTerm
+                            );
+                          }}
+                        />
+
+                        {showStyleSuggestions && filteredStyles.length > 0 && (
+                          <div className="absolute z-50 left-0 mt-1 w-full bg-white shadow-lg border border-gray-300 rounded-md max-h-60 overflow-y-auto">
+                            {filteredStyles.map((style, index) => (
+                              <div
+                                key={index}
+                                className="px-3 py-2 hover:bg-blue-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onMouseDown={() =>
+                                  handleStyleSelect(style, setFieldValue)
+                                }
+                              >
+                                <div className="font-medium">
+                                  {style.style_no}
+                                </div>
+                                <div className="text-sm text-gray-600">
+                                  PO: {style.po_number}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <ErrorMessage
                         name="styleNumber"
                         component="div"
@@ -619,6 +652,10 @@ const OperationBulleting = () => {
                         errors={errors}
                         touched={touched}
                         handleBlur={handleBlur}
+                        styleSearchTerm={styleSearchTerm}
+                        setStyleSearchTerm={setStyleSearchTerm}
+                        threadList={threadList}
+                        needleList={needleList}
                       />
                     ) : values.mainOperation === "2" ? (
                       <HelperForm
@@ -737,42 +774,101 @@ const OperationBulleting = () => {
 };
 
 // Full Form Component
-const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
+const FullForm = ({
+  values,
+  setFieldValue,
+  errors,
+  touched,
+  handleBlur,
+  styleSearchTerm,
+  setStyleSearchTerm,
+  threadList,
+  needleList,
+}) => {
   const { machineList } = useMachine();
   const { machineTList } = useMachineTypes();
-  const [needleTypes, setNeedleTypes] = useState(
-    values.needleType || [{ type: "" }]
-  );
+  const [isMachineFocused, setIsMachineFocused] = useState(false);
+  const [isMachineTypeFocused, setIsMachineTypeFocused] = useState(false);
+  const [machineTypeSearchTerm, setMachineTypeSearchTerm] = useState("");
+  const [filteredMachineTypes, setFilteredMachineTypes] = useState([]);
   const [selectedMachineT, setSelectedMachineT] = useState(null);
 
-  // to filter machien list according to selected machien list
+  // States for live search inputs - now single values not arrays
+  const [needleThreadSearch, setNeedleThreadSearch] = useState("");
+  const [bobbinThreadSearch, setBobbinThreadSearch] = useState("");
+  const [showNeedleSuggestions, setShowNeedleSuggestions] = useState(false);
+  const [showBobbinSuggestions, setShowBobbinSuggestions] = useState(false);
+
+  // States for needle type search
+  const [needleTypeSearch, setNeedleTypeSearch] = useState("");
+  const [showNeedleTypeSuggestions, setShowNeedleTypeSuggestions] =
+    useState(false);
+
+  // Filter machine types based on search term
+  useEffect(() => {
+    if (machineTList && Array.isArray(machineTList)) {
+      const filtered = machineTList.filter((type) =>
+        type.toLowerCase().includes(machineTypeSearchTerm.toLowerCase())
+      );
+      setFilteredMachineTypes(filtered);
+    }
+  }, [machineTypeSearchTerm, machineTList]);
+
+  // to filter machine list according to selected machine type
   const filteredMachineList = useMemo(() => {
     if (selectedMachineT === null || selectedMachineT === "") {
       return [];
     }
-
     return machineList.filter((mch) => mch.machine_type === selectedMachineT);
   }, [selectedMachineT, machineList]);
 
+  // Safe thread filtering functions
+  const getFilteredNeedleThreads = (searchTerm) => {
+    if (!threadList || !Array.isArray(threadList)) return [];
+
+    const searchText = searchTerm || "";
+    return threadList.filter((thread) => {
+      const threadText = thread.thread_category || "";
+      return threadText.toLowerCase().includes(searchText.toLowerCase());
+    });
+  };
+
+  const getFilteredBobbinThreads = (searchTerm) => {
+    if (!threadList || !Array.isArray(threadList)) return [];
+
+    const searchText = searchTerm || "";
+    return threadList.filter((thread) => {
+      const threadText = thread.thread_category || "";
+      return threadText.toLowerCase().includes(searchText.toLowerCase());
+    });
+  };
+
+  // Safe needle type filtering function
+  const getFilteredNeedleTypes = (searchTerm) => {
+    if (!needleList || !Array.isArray(needleList)) return [];
+
+    const searchText = searchTerm || "";
+    return needleList.filter((needle) => {
+      const needleText = needle.needle_type || "";
+      return needleText.toLowerCase().includes(searchText.toLowerCase());
+    });
+  };
+
   // Handle machine selection and autofill
   const handleMachineSelect = (machineNo, machineStatus) => {
-    console.log(machineNo);
     const currentMachine = machineList.filter(
       (mch) => mch.machine_no === machineNo
     );
-    console.log("current machine = ", currentMachine[0].machine_status);
     if (currentMachine) {
       if (currentMachine[0].machine_status === "inactive") {
         Swal.fire({
-          text: "You can't use this machine because it's borken or inactive",
+          text: "You can't use this machine because it's broken or inactive",
           icon: "warning",
         });
         return;
       }
     }
 
-    if (machineStatus) {
-    }
     const selectedMachine = machineList?.find(
       (m) => m.machine_no === machineNo
     );
@@ -785,51 +881,82 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
     }
   };
 
-  const handleNeedleTreadChange = (index, value) => {
-    const newTreads = [...values.needleTreads];
-    newTreads[index] = value;
-    setFieldValue("needleTreads", newTreads);
+  // Handle machine type selection
+  const handleMachineTypeSelect = (machineType) => {
+    setFieldValue("machineType", machineType);
+    setMachineTypeSearchTerm(machineType);
+    setSelectedMachineT(machineType);
+    setIsMachineTypeFocused(false);
   };
 
-  const handleBobbinTreadChange = (index, value) => {
-    const newTreads = [...values.bobbinTreadLoopers];
-    newTreads[index] = value;
-    setFieldValue("bobbinTreadLoopers", newTreads);
+  // Handle needle thread search and selection
+  const handleNeedleThreadSelect = (thread) => {
+    setFieldValue("needleTreads", thread.thread_id);
+    setNeedleThreadSearch(thread.thread_category);
+    setShowNeedleSuggestions(false);
   };
 
-  const addNeedleType = () => {
-    const newTypes = [...needleTypes, { type: "" }];
-    setNeedleTypes(newTypes);
-    setFieldValue("needleType", newTypes);
+  // Handle bobbin thread search and selection
+  const handleBobbinThreadSelect = (thread) => {
+    setFieldValue("bobbinTreadLoopers", thread.thread_id);
+    setBobbinThreadSearch(thread.thread_category);
+    setShowBobbinSuggestions(false);
   };
 
-  const removeNeedleType = (index) => {
-    const newTypes = needleTypes.filter((_, i) => i !== index);
-    setNeedleTypes(newTypes);
-    setFieldValue("needleType", newTypes);
+  // Handle needle type search and selection
+  const handleNeedleTypeSearch = (value) => {
+    setNeedleTypeSearch(value);
+    setShowNeedleTypeSuggestions(true);
   };
 
-  const handleNeedleTypeChange = (index, value) => {
-    const newTypes = [...needleTypes];
-    newTypes[index] = { type: value };
-    setNeedleTypes(newTypes);
-    setFieldValue("needleType", newTypes);
+  const handleNeedleTypeSelect = (needle) => {
+    setFieldValue("needleTypeId", needle.needle_type_id);
+    setNeedleTypeSearch(needle.needle_type);
+    setShowNeedleTypeSuggestions(false);
   };
 
-  const updateNeedleCount = (count) => {
-    const newCount = Math.max(1, count);
-    setFieldValue("needleCount", newCount);
-
-    const newTreads = [...values.needleTreads];
-    while (newTreads.length < newCount) newTreads.push("");
-    while (newTreads.length > newCount) newTreads.pop();
-    setFieldValue("needleTreads", newTreads.slice(0, newCount));
-
-    const newBobbinTreads = [...values.bobbinTreadLoopers];
-    while (newBobbinTreads.length < newCount) newBobbinTreads.push("");
-    while (newBobbinTreads.length > newCount) newBobbinTreads.pop();
-    setFieldValue("bobbinTreadLoopers", newBobbinTreads.slice(0, newCount));
+  // Helper function to get display text for selected values
+  const getDisplayText = (id, list, displayField) => {
+    if (!id || !list || !Array.isArray(list)) return "";
+    const item = list.find((item) => {
+      if (typeof item === "object") {
+        return item.thread_id === id || item.needle_type_id === id;
+      }
+      return false;
+    });
+    return item ? item[displayField] : "";
   };
+
+  // Get current needle thread display text
+  const getCurrentNeedleThreadDisplay = () => {
+    if (!values.needleTreads || !threadList || !Array.isArray(threadList))
+      return needleThreadSearch || "";
+    const thread = threadList.find((t) => t.thread_id === values.needleTreads);
+    return thread ? thread.thread_category : needleThreadSearch;
+  };
+
+  // Get current bobbin thread display text
+  const getCurrentBobbinThreadDisplay = () => {
+    if (!values.bobbinTreadLoopers || !threadList || !Array.isArray(threadList))
+      return bobbinThreadSearch || "";
+    const thread = threadList.find(
+      (t) => t.thread_id === values.bobbinTreadLoopers
+    );
+    return thread ? thread.thread_category : bobbinThreadSearch;
+  };
+
+  // Get current needle type display text
+  const getCurrentNeedleTypeDisplay = () => {
+    if (!values.needleTypeId || !needleList || !Array.isArray(needleList))
+      return needleTypeSearch;
+    const needle = needleList.find(
+      (n) => n.needle_type_id === values.needleTypeId
+    );
+    return needle ? needle.needle_type : needleTypeSearch;
+  };
+
+  // machine type ref
+  const machineTr = useRef();
 
   return (
     <div className="">
@@ -937,28 +1064,50 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               >
                 Machine Type *
               </label>
-              <Field
-                name="machineType"
-                as="select"
-                className={`form-input-base w-full text-sm md:text-base ${
-                  errors.machineType && touched.machineType
-                    ? "border-red-500"
-                    : "border-gray-300"
-                }`}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setFieldValue("machineType", value);
-                  setSelectedMachineT(value);
-                }}
-              >
-                <option className="text-gray-400">Select a machine type</option>
-                {Array.isArray(machineTList) &&
-                  machineTList.map((mcht, index) => (
-                    <option key={index} value={mcht}>
-                      {mcht}
-                    </option>
-                  ))}
-              </Field>
+              <div className="relative w-full">
+                <input
+                  name="machineType"
+                  type="text"
+                  value={machineTypeSearchTerm}
+                  ref={machineTr}
+                  onFocus={() => setIsMachineTypeFocused(true)}
+                  onBlur={() =>
+                    setTimeout(() => setIsMachineTypeFocused(false), 200)
+                  }
+                  onChange={(e) => {
+                    setMachineTypeSearchTerm(e.target.value);
+                    setFieldValue("machineType", e.target.value);
+                    setSelectedMachineT(e.target.value);
+                  }}
+                  className={`w-full text-sm md:text-base border rounded-md px-3 py-2 appearance-none focus:outline-none focus:ring-2
+                    ${
+                      errors.machineType && touched.machineType
+                        ? "border-red-500 focus:ring-red-300"
+                        : "border-gray-300 focus:ring-blue-300"
+                    }
+                  `}
+                  placeholder="Type to search machine types..."
+                />
+
+                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
+                  ▼
+                </div>
+
+                {isMachineTypeFocused && filteredMachineTypes.length > 0 && (
+                  <div className="absolute z-50 left-0 mt-1 w-full bg-white shadow-lg border border-gray-300 rounded-md max-h-40 overflow-y-auto">
+                    {filteredMachineTypes.map((type, index) => (
+                      <div
+                        key={index}
+                        className="px-3 py-2 hover:bg-blue-100 cursor-pointer"
+                        onMouseDown={() => handleMachineTypeSelect(type)}
+                      >
+                        {type}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <ErrorMessage
                 name="machineType"
                 component="div"
@@ -989,14 +1138,18 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                 {filteredMachineList?.map((mch) => (
                   <option
                     className={`text-sm ${
-                      mch.machine_status == "active"
+                      mch.machine_status == "active" ||
+                      mch.machine_status === "Available"
                         ? "text-green-600 font-semibold bg-green-50"
                         : "text-red-600 font-semibold bg-red-50"
                     }`}
                     key={mch.machine_id}
                     value={mch.machine_no}
                   >
-                    {mch.machine_status === "active" ? "✅" : "❌"}{" "}
+                    {mch.machine_status === "active" ||
+                    mch.machine_status === "Available"
+                      ? "✅"
+                      : "❌"}{" "}
                     {mch.machine_no}
                   </option>
                 ))}
@@ -1085,73 +1238,6 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
                 className="text-red-500 text-xs md:text-sm mt-1"
               />
             </div>
-
-            {/* Needle Types */}
-            <div className="space-y-3 md:space-y-4 col-span-1">
-              <label className="block text-sm md:text-base font-medium text-gray-700">
-                Needle Types *
-              </label>
-              <div className="space-y-3">
-                {Array.isArray(needleTypes) &&
-                  needleTypes.map((item, index) => (
-                    <motion.div
-                      key={index}
-                      className="flex flex-col sm:flex-row gap-2 md:gap-3 items-start sm:items-center"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <div className="flex-1 w-full sm:w-auto">
-                        <input
-                          name={`needleType[${index}].type`}
-                          type="text"
-                          value={item.type}
-                          onChange={(e) =>
-                            handleNeedleTypeChange(index, e.target.value)
-                          }
-                          onBlur={handleBlur}
-                          className={`form-input-base w-full text-sm md:text-base ${
-                            errors.needleType?.[index]?.type &&
-                            touched.needleType
-                              ? "border-red-500"
-                              : "border-gray-300"
-                          }`}
-                          placeholder={`Needle type #${index + 1}`}
-                        />
-                      </div>
-                      <div className="w-full sm:w-auto">
-                        <motion.button
-                          type="button"
-                          onClick={() => removeNeedleType(index)}
-                          className="w-full sm:w-auto py-2 px-3 md:px-4 bg-red-500 rounded-md hover:bg-red-600 duration-200 flex items-center justify-center gap-1 text-white text-sm"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <FaMinus className="text-sm md:text-base" />
-                          <span>Remove</span>
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  ))}
-                {errors.needleType && touched.needleType && (
-                  <div className="text-red-500 text-xs md:text-sm mt-1">
-                    {typeof errors.needleType === "string"
-                      ? errors.needleType
-                      : "Please fill all needle types"}
-                  </div>
-                )}
-              </div>
-              <motion.button
-                type="button"
-                onClick={addNeedleType}
-                className="w-full md:w-auto py-2 px-4 md:px-6 bg-green-500 rounded-md hover:bg-green-600 duration-200 flex items-center justify-center gap-2 text-white text-sm md:text-base"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <PiPlusBold className="text-lg md:text-xl" />
-                <span>Add Needle Type</span>
-              </motion.button>
-            </div>
           </fieldset>
         </motion.section>
 
@@ -1166,118 +1252,235 @@ const FullForm = ({ values, setFieldValue, errors, touched, handleBlur }) => {
               Needle Configuration
             </legend>
 
-            <div className="mt-4">
-              <label htmlFor="">Needle Count *</label>
-              <div className="">
-                <Field
-                  name="needleCount"
-                  type="number"
-                  min="1"
-                  className={`form-input-base ${
-                    errors.needleCount && touched.needleCount
-                      ? "border-red-500"
-                      : ""
-                  }`}
-                  onChange={(e) =>
-                    updateNeedleCount(parseInt(e.target.value)) || 1
-                  }
-                  onBlur={handleBlur}
-                />
-                <ErrorMessage
-                  name="needleCount"
-                  component="div"
-                  className="text-red-500 text-sm mt-1"
-                />
-              </div>
-            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 md:gap-8">
+              {/* First Column */}
+              <div className="space-y-4">
+                {/* Needle Count */}
+                <div className="mt-4">
+                  <label htmlFor="">Needle Size *</label>
+                  <div className="">
+                    <Field
+                      name="needleCount"
+                      type="number"
+                      step="any"
+                      min="1"
+                      className={`form-input-base ${
+                        errors.needleCount && touched.needleCount
+                          ? "border-red-500"
+                          : ""
+                      }`}
+                      onBlur={handleBlur}
+                    />
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="mt-6">
-                <label className="block mb-2 font-medium">
-                  Needle Treads *
-                </label>
-                <div className="space-y-3">
-                  {values.needleTreads?.map((tread, index) => (
+                    <ErrorMessage
+                      name="needleCount"
+                      component="div"
+                      className="text-red-500 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+
+                {/* Needle Type */}
+                <div className="mt-4">
+                  <label className="block mb-2 font-medium">Needle Type</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={getCurrentNeedleTypeDisplay()}
+                      onChange={(e) => handleNeedleTypeSearch(e.target.value)}
+                      onFocus={() => setShowNeedleTypeSuggestions(true)}
+                      onBlur={() =>
+                        setTimeout(
+                          () => setShowNeedleTypeSuggestions(false),
+                          200
+                        )
+                      }
+                      className={`form-input-base w-full ${
+                        errors.needleTypeId && touched.needleTypeId
+                          ? "border-red-500"
+                          : ""
+                      }`}
+                      placeholder="Search needle types..."
+                    />
+
+                    {/* Needle Type Suggestions */}
+                    {showNeedleTypeSuggestions && needleList.length > 0 && (
+                      <div className="absolute z-50 left-0 mt-1 w-full bg-white shadow-lg border border-gray-300 rounded-md max-h-40 overflow-y-auto">
+                        {(needleTypeSearch
+                          ? getFilteredNeedleTypes(needleTypeSearch)
+                          : needleList
+                        ).map((needle, needleIndex) => (
+                          <div
+                            key={needleIndex}
+                            className="px-3 py-2 hover:bg-blue-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            onMouseDown={() => handleNeedleTypeSelect(needle)}
+                          >
+                            {needle.needle_type}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <ErrorMessage
+                    name="needleTypeId"
+                    component="div"
+                    className="text-red-500 text-sm mt-1"
+                  />
+                </div>
+
+                {/* Needle Treads - Now single input, not array */}
+                <div className="mt-2">
+                  <label className="block mb-2 font-medium">
+                    Needle Treads *
+                  </label>
+                  <div className="space-y-3">
                     <motion.div
-                      key={`needle-tread-${index}`}
-                      className="grid grid-cols-12 gap-3 items-center"
+                      className="relative"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
                     >
-                      <div className="col-span-10">
+                      <div className="relative">
                         <input
-                          name={`needleTreads[${index}]`}
+                          name="needleTreads"
                           type="text"
-                          value={tread}
-                          onChange={(e) =>
-                            handleNeedleTreadChange(index, e.target.value)
+                          value={getCurrentNeedleThreadDisplay()}
+                          onChange={(e) => {
+                            setNeedleThreadSearch(e.target.value);
+                          }}
+                          onFocus={() => setShowNeedleSuggestions(true)}
+                          onBlur={() =>
+                            setTimeout(
+                              () => setShowNeedleSuggestions(false),
+                              200
+                            )
                           }
-                          onBlur={handleBlur}
-                          className={`form-input-base ${
-                            errors.needleTreads?.[index] && touched.needleTreads
+                          className={`form-input-base w-full ${
+                            errors.needleTreads && touched.needleTreads
                               ? "border-red-500"
                               : ""
                           }`}
-                          placeholder={`Needle Tread #${index + 1}`}
+                          placeholder="Select needle thread"
                         />
-                        {errors.needleTreads?.[index] &&
-                          touched.needleTreads && (
-                            <div className="text-red-500 text-xs mt-1">
-                              {errors.needleTreads[index]}
-                            </div>
-                          )}
-                      </div>
-                      <div className="col-span-2 text-gray-500 text-sm">
-                        #{index + 1}
+
+                        {/* Needle Thread Suggestions */}
+                        {showNeedleSuggestions && threadList.length > 0 && (
+                          <div className="absolute z-50 left-0 mt-1 w-full bg-white shadow-lg border border-gray-300 rounded-md max-h-40 overflow-y-auto">
+                            {(needleThreadSearch
+                              ? getFilteredNeedleThreads(needleThreadSearch)
+                              : threadList
+                            ).map((thread, threadIndex) => (
+                              <div
+                                key={threadIndex}
+                                className="px-3 py-2 hover:bg-blue-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onMouseDown={() =>
+                                  handleNeedleThreadSelect(thread)
+                                }
+                              >
+                                {thread.thread_category}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {errors.needleTreads && touched.needleTreads && (
+                          <div className="text-red-500 text-xs mt-1">
+                            {errors.needleTreads}
+                          </div>
+                        )}
                       </div>
                     </motion.div>
-                  ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-6">
-                <label className="block mb-2 font-medium">
-                  Bobbin Tread/Looper *
-                </label>
-                <div className="space-y-3">
-                  {values.bobbinTreadLoopers?.map((tread, index) => (
+              {/* Second Column */}
+              <div className="space-y-4">
+                {/* SPI */}
+                <div className="mt-4">
+                  <label htmlFor="">Stitch Per Inch (SPI) *</label>
+                  <div className="">
+                    <Field
+                      name="spi"
+                      type="number"
+                      min="1"
+                      className={`form-input-base ${
+                        errors.needleCount && touched.needleCount
+                          ? "border-red-500"
+                          : ""
+                      }`}
+                    />
+                    <ErrorMessage
+                      name="spi"
+                      component="div"
+                      className="text-red-500 text-sm mt-1"
+                    />
+                  </div>
+                </div>
+
+                {/* Bobbin Tread/Looper - Now single input, not array */}
+                <div className="mt-6">
+                  <label className="block mb-2 font-medium">
+                    Bobbin Tread/Looper *
+                  </label>
+                  <div className="space-y-3">
                     <motion.div
-                      key={`bobbin-tread-${index}`}
-                      className="grid grid-cols-12 gap-3 items-center"
+                      className="relative"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: index * 0.05 }}
                     >
-                      <div className="col-span-10">
+                      <div className="relative">
                         <input
-                          name={`bobbinTreadLoopers[${index}]`}
+                          name="bobbinTreadLoopers"
                           type="text"
-                          value={tread}
-                          onChange={(e) =>
-                            handleBobbinTreadChange(index, e.target.value)
+                          value={getCurrentBobbinThreadDisplay()}
+                          onChange={(e) => {
+                            setBobbinThreadSearch(e.target.value);
+                          }}
+                          onFocus={() => setShowBobbinSuggestions(true)}
+                          onBlur={() =>
+                            setTimeout(
+                              () => setShowBobbinSuggestions(false),
+                              200
+                            )
                           }
-                          onBlur={handleBlur}
-                          className={`form-input-base ${
-                            errors.bobbinTreadLoopers?.[index] &&
+                          className={`form-input-base w-full ${
+                            errors.bobbinTreadLoopers &&
                             touched.bobbinTreadLoopers
                               ? "border-red-500"
                               : ""
                           }`}
-                          placeholder={`Bobbin Tread #${index + 1}`}
+                          placeholder="Select bobbin thread"
                         />
-                        {errors.bobbinTreadLoopers?.[index] &&
+
+                        {/* Bobbin Thread Suggestions */}
+                        {showBobbinSuggestions && threadList.length > 0 && (
+                          <div className="absolute z-50 left-0 mt-1 w-full bg-white shadow-lg border border-gray-300 rounded-md max-h-40 overflow-y-auto">
+                            {(bobbinThreadSearch
+                              ? getFilteredBobbinThreads(bobbinThreadSearch)
+                              : threadList
+                            ).map((thread, threadIndex) => (
+                              <div
+                                key={threadIndex}
+                                className="px-3 py-2 hover:bg-blue-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                onMouseDown={() =>
+                                  handleBobbinThreadSelect(thread)
+                                }
+                              >
+                                {thread.thread_category}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {errors.bobbinTreadLoopers &&
                           touched.bobbinTreadLoopers && (
                             <div className="text-red-500 text-xs mt-1">
-                              {errors.bobbinTreadLoopers[index]}
+                              {errors.bobbinTreadLoopers}
                             </div>
                           )}
                       </div>
-                      <div className="col-span-2 text-gray-500 text-sm">
-                        #{index + 1}
-                      </div>
                     </motion.div>
-                  ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1368,16 +1571,17 @@ const HelperForm = ({ values, errors, touched, handleBlur, setFieldValue }) => {
           className="text-red-500 text-sm mt-1"
         />
       </div>
-
       <Field type="hidden" name="machineType" value="HLP" />
       <Field type="hidden" name="machineNo" value="" />
       <Field type="hidden" name="machineName" value="" />
       <Field type="hidden" name="machineBrand" value="" />
       <Field type="hidden" name="machineLocation" value="" />
-      <Field type="hidden" name="needleType" value={[]} />
+      <Field type="hidden" name="needleTypeId" value="" />
       <Field type="hidden" name="needleCount" value={1} />
-      <Field type="hidden" name="needleTreads" value={[]} />
-      <Field type="hidden" name="bobbinTreadLoopers" value={[]} />
+      <Field type="hidden" name="needleTreads" value="" />{" "}
+      {/* Changed from array to empty string */}
+      <Field type="hidden" name="bobbinTreadLoopers" value="" />{" "}
+      {/* Changed from array to empty string */}
     </motion.div>
   );
 };

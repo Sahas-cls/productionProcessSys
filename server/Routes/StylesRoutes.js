@@ -8,7 +8,6 @@ const authMiddleware = require("../middlewares/AuthUser");
 // const multer = require("multer");
 const path = require("path");
 
-// Configure multer for memory storage
 // Multer storage config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {

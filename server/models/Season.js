@@ -31,6 +31,8 @@ module.exports = (sequelize, DataTypes) => {
     Season.belongsTo(models.Customer, {
       foreignKey: "customer_id",
       as: "customer",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Season.hasMany(models.Style, {

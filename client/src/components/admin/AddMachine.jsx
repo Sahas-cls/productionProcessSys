@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { IoSearchSharp, IoCloudUploadOutline } from "react-icons/io5";
 import { MdModeEditOutline, MdDeleteForever } from "react-icons/md";
@@ -7,83 +7,31 @@ import { useNavigate } from "react-router-dom";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
-import useMachine from "../../hooks/useMachine";
-import Barcode from "react-barcode";
 import { useReactToPrint } from "react-to-print";
-import PrintableBarcode from "../PrintableBarcode";
+import PrintableQRCode from "../PrintableQRCode";
 import Swal from "sweetalert2";
 import { FaCheckCircle } from "react-icons/fa";
 import { IoCloseCircle } from "react-icons/io5";
+import { RiFileExcel2Line } from "react-icons/ri";
+import { IoMdAdd } from "react-icons/io";
+import { IoClose } from "react-icons/io5";
+import UploadMachine from "../UploadMachine";
+import useLimitedMachine from "../../hooks/useLimitedMachines";
 
 const AddMachine = ({ onViewMachine, userRole }) => {
   const [isAddStyle, setIsAddStyle] = useState(false);
+  const [isUploadExcel, setIsUploadExcel] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingMachine, setEditingMachine] = useState(null);
+  const [machineCount, setMachineCount] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [backendSearchResults, setBackendSearchResults] = useState(null);
+
   const navigate = useNavigate();
   const apiUrl = import.meta.env.VITE_API_URL;
 
-  // to fetch machine dataset
-  const { machineList, isLoading, refresh } = useMachine();
-  console.log("machine list; ", machineList);
-
-  const handleExcelDownload = async () => {
-    try {
-      const response = await axios.get(`${apiUrl}/api/machine/getExcel`, {
-        withCredentials: true,
-        responseType: "blob", // 👈 important for file download
-      });
-
-      // Create file URL
-      const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
-
-      // Create hidden download link
-      const link = document.createElement("a");
-      link.href = fileUrl;
-      link.setAttribute("download", "machines.xlsx"); // 👈 filename
-      document.body.appendChild(link);
-
-      // Trigger click → download starts immediately
-      link.click();
-
-      // Cleanup
-      link.remove();
-      window.URL.revokeObjectURL(fileUrl);
-    } catch (error) {
-      if (error.status === 401) {
-        Swal.fire({
-          title: "Unauthorized",
-          text: "Your don't have permission to perform this action, please login again",
-          icon: "error",
-        }).then(() => navigate("/"));
-      }
-      console.error("Excel download failed:", error);
-    }
-  };
-
-  // Get distinct style names for a machine
-  const getStyleNames = (machine) => {
-    if (!machine.sub_operations || machine.sub_operations.length === 0) {
-      return "Empty";
-    }
-
-    const styleNames = new Set();
-    machine.sub_operations.forEach((op) => {
-      if (op.style?.style_name) {
-        styleNames.add(op.style.style_name);
-      }
-    });
-
-    return Array.from(styleNames).join(" | ") || "N/A";
-  };
-
-  // Validation schema
-  const machineSchema = Yup.object().shape({
-    machine_type: Yup.string().required("Machine type is required"),
-    machine_no: Yup.string().required("Machine number is required"),
-    machine_name: Yup.string().required("Machine name is required"),
-    machine_brand: Yup.string().required("Machine brand is required"),
-    machine_location: Yup.string().required("Machine location is required"),
-  });
+  // Custom hook for machine data
+  const { machineList, isLoading, refresh } = useLimitedMachine();
 
   // Animation variants
   const containerVariants = {
@@ -132,97 +80,207 @@ const AddMachine = ({ onViewMachine, userRole }) => {
     visible: { opacity: 1, y: 0 },
   };
 
-  const filteredMachines =
-    machineList?.filter(
-      (machine) =>
-        machine.machine_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        machine.machine_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        machine.machine_type.toLowerCase().includes(searchTerm.toLowerCase())
-    ) || [];
+  // Validation schema
+  const machineSchema = Yup.object().shape({
+    machine_type: Yup.string().required("Machine type is required"),
+    machine_no: Yup.string().required("Machine number is required"),
+    machine_name: Yup.string().required("Machine name is required"),
+    machine_brand: Yup.string().required("Machine brand is required"),
+    machine_location: Yup.string().required("Machine location is required"),
+  });
 
-  const handleSubmit = async (values, { resetForm, setFieldError }) => {
-    // const barcodeValue = JSON.stringify({
-    //   machine_no: values.machine_no,
-    //   machine_name: values.machine_name,
-    //   status: values.status,
-    // });
-    console.log(values);
-    // return;
+  // Initial form values
+  const initialValues = {
+    machine_type: "",
+    machine_no: "",
+    machine_name: "",
+    machine_brand: "",
+    machine_location: "",
+    purchase_date: "",
+    supplier: "",
+    service_date: "",
+    status: "active",
+    breakdown_date: "",
+    machine_id: "",
+  };
+
+  // Effects
+  useEffect(() => {
+    countMachines();
+  }, [machineList]);
+
+  useEffect(() => {
+    // Reset backend search results when search term is cleared
+    if (!searchTerm) {
+      setBackendSearchResults(null);
+    }
+  }, [searchTerm]);
+
+  // API calls
+  const countMachines = async () => {
     try {
-      console.log(values);
-      // return;
+      const response = await axios.get(`${apiUrl}/api/machine/countMachines`, {
+        withCredentials: true,
+      });
+      if (response.status === 200) {
+        setMachineCount(response.data.count);
+      }
+    } catch (error) {
+      console.error("Count error:", error);
+      handleAuthError(error);
+    }
+  };
+
+  const handleExcelDownload = async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/api/machine/getExcel`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+
+      const fileUrl = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = fileUrl;
+      link.setAttribute("download", "machines.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(fileUrl);
+    } catch (error) {
+      handleAuthError(error);
+      console.error("Excel download failed:", error);
+    }
+  };
+
+  const search = async (searchKey) => {
+    if (!searchKey.trim()) {
+      setBackendSearchResults(null);
+      return [];
+    }
+
+    setSearchLoading(true);
+    try {
+      const searchRes = await axios.get(
+        `${apiUrl}/api/machine/filter/${encodeURIComponent(searchKey)}`
+      );
+
+      if (searchRes.status === 200) {
+        setBackendSearchResults(searchRes.data.data);
+        return searchRes.data.data;
+      }
+      return [];
+    } catch (error) {
+      console.error("Search error:", error);
+      setBackendSearchResults([]);
+      return [];
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // Debounced search
+  const debouncedSearch = useCallback(
+    debounce((searchKey) => {
+      search(searchKey);
+    }, 500),
+    []
+  );
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+
+    if (value.trim()) {
+      debouncedSearch(value);
+    } else {
+      setBackendSearchResults(null);
+    }
+  };
+
+  // Get distinct style names for a machine
+  const getStyleNames = (machine) => {
+    if (!machine.sub_operations || machine.sub_operations.length === 0) {
+      return "Empty";
+    }
+
+    const styleNames = new Set();
+    machine.sub_operations.forEach((op) => {
+      if (op.style?.style_name) {
+        styleNames.add(op.style.style_name);
+      }
+    });
+
+    return Array.from(styleNames).join(" | ") || "N/A";
+  };
+
+  // Filter machines based on search
+  const filteredMachines = useMemo(() => {
+    // If we have backend search results, use them
+    if (backendSearchResults !== null) {
+      return backendSearchResults;
+    }
+
+    // Otherwise, filter locally
+    if (!searchTerm) return machineList;
+
+    const lowerSearch = searchTerm.toLowerCase();
+    return machineList.filter(
+      (machine) =>
+        machine.machine_no?.toLowerCase().includes(lowerSearch) ||
+        machine.machine_name?.toLowerCase().includes(lowerSearch) ||
+        machine.machine_type?.toLowerCase().includes(lowerSearch) ||
+        machine.machine_brand?.toLowerCase().includes(lowerSearch) ||
+        machine.machine_location?.toLowerCase().includes(lowerSearch)
+    );
+  }, [searchTerm, machineList, backendSearchResults]);
+
+  // Form submission
+  const handleSubmit = async (values, { resetForm, setFieldError }) => {
+    try {
+      let response;
+
       if (editingMachine) {
-        const response = await axios.put(
+        response = await axios.put(
           `${apiUrl}/api/machine/editMachine/${values.machine_id}`,
           values,
           { withCredentials: true }
         );
-
-        if (response.status === 200 || response.status === 201) {
-          Swal.fire({
-            title: "Success!",
-            text: "Machine updated successfully.",
-            icon: "success",
-            confirmButtonText: "OK",
-            confirmButtonColor: "#3085d6",
-            background: "#f5f8fa",
-            iconColor: "#28a745",
-            showClass: {
-              popup: "animate__animated animate__fadeInDown",
-            },
-            hideClass: {
-              popup: "animate__animated animate__fadeOutUp",
-            },
-          });
-          refresh();
-        }
       } else {
-        const response = await axios.post(
+        response = await axios.post(
           `${apiUrl}/api/machine/createMachine`,
           values,
           { withCredentials: true }
         );
-
-        if (response.status === 201) {
-          Swal.fire({
-            position: "center", // Top right corner
-            icon: "success", // Success icon
-            title: "Machine added successfully!",
-            showConfirmButton: true, //show ok btn
-            timer: 3000, // Auto close after 3 seconds
-            timerProgressBar: true, // Show progress bar
-            background: "#f5f8fa",
-            iconColor: "#28a745", // Green icon
-          });
-          refresh();
-        }
       }
 
-      setEditingMachine(null);
-      resetForm();
-      setIsAddStyle(false);
+      if (response.status === 200 || response.status === 201) {
+        showSuccessAlert(
+          editingMachine
+            ? "Machine updated successfully."
+            : "Machine added successfully!"
+        );
+        refresh();
+        setEditingMachine(null);
+        resetForm();
+        setIsAddStyle(false);
+      }
     } catch (error) {
-      console.error(error);
-      if (error.status === 401) {
-        Swal.fire({
-          title: "Unauthorized",
-          text: "Your don't have permission to perform this action, please login again",
-          icon: "error",
-        }).then(() => navigate("/"));
-      }
-      if (error.response && error.response.status === 400) {
+      console.error("Submit error:", error);
+      handleAuthError(error);
+
+      if (error.response?.status === 400) {
         const serverMsg = error.response.data.message;
         const field = error.response.data.field || "machine_no";
         setFieldError(field, serverMsg);
       } else {
-        alert("An error occurred. Please try again.");
+        showErrorAlert("An error occurred. Please try again.");
       }
     }
   };
 
+  // Machine operations
   const handleEdit = (machine) => {
-    // Map the backend data structure to form fields
-    console.log("machine", machine);
     const machineToEdit = {
       machine_id: machine.machine_id,
       machine_type: machine.machine_type,
@@ -255,9 +313,9 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       showCancelButton: true,
       confirmButtonText: "Yes, delete it",
       cancelButtonText: "Cancel",
-      confirmButtonColor: "#d33", // red for destructive action
-      cancelButtonColor: "#3085d6", // blue for safe action
-      reverseButtons: true, // places cancel button on the left
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      reverseButtons: true,
       background: "#f5f8fa",
       showClass: {
         popup: "animate__animated animate__fadeInDown",
@@ -267,9 +325,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       },
     });
 
-    if (!isConfirmed.isConfirmed) {
-      return;
-    }
+    if (!isConfirmed.isConfirmed) return;
 
     try {
       const response = await axios.delete(
@@ -278,104 +334,174 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       );
 
       if (response.status === 200) {
-        Swal.fire({
-          title: "Operation Successful!",
-          text: "The machine has been added successfully.",
-          icon: "success",
-          confirmButtonText: "OK",
-          confirmButtonColor: "#3085d6",
-          background: "#f5f8fa",
-          iconColor: "#28a745",
-          timer: 3000,
-          timerProgressBar: true,
-        });
-
+        showSuccessAlert("Machine deleted successfully!");
         refresh();
       }
     } catch (error) {
-      console.error(error);
-      if (error.status === 401) {
-        Swal.fire({
-          title: "Unauthorized",
-          text: "Your don't have permission to perform this action, please login again",
-          icon: "error",
-        }).then(() => navigate("/"));
-      }
-      // alert("Failed to delete machine");
+      console.error("Delete error:", error);
+      handleAuthError(error);
     }
   };
 
-  const initialValues = {
-    machine_type: "",
-    machine_no: "",
-    machine_name: "",
-    machine_brand: "",
-    machine_location: "",
-    purchase_date: "",
-    supplier: "",
-    service_date: "",
-    status: "active",
-    breakdown_date: "",
-    machine_id: "", // For editing
+  // Helper functions
+  const handleAuthError = (error) => {
+    if (error.status === 401) {
+      Swal.fire({
+        title: "Unauthorized",
+        text: "You don't have permission to perform this action, please login again",
+        icon: "error",
+      }).then(() => navigate("/"));
+    }
   };
+
+  const showSuccessAlert = (message) => {
+    Swal.fire({
+      title: "Success!",
+      text: message,
+      icon: "success",
+      confirmButtonText: "OK",
+      confirmButtonColor: "#3085d6",
+      background: "#f5f8fa",
+      iconColor: "#28a745",
+      showClass: {
+        popup: "animate__animated animate__fadeInDown",
+      },
+      hideClass: {
+        popup: "animate__animated animate__fadeOutUp",
+      },
+    });
+  };
+
+  const showErrorAlert = (message) => {
+    Swal.fire({
+      title: "Error!",
+      text: message,
+      icon: "error",
+      confirmButtonColor: "#3085d6",
+    });
+  };
+
+  const resetForms = () => {
+    setEditingMachine(null);
+    setIsAddStyle(false);
+    setIsUploadExcel(false);
+  };
+
+  // Simple debounce implementation
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
 
   return (
     <motion.div
-      className="px-4"
+      className="px-3 sm:px-4 lg:px-6"
       variants={containerVariants}
       initial="hidden"
       animate="visible"
       exit="exit"
     >
-      {/* header of the page search download add machine */}
+      {/* Header Section */}
       <motion.div
-        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pt-6"
+        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 pt-4 lg:pt-6"
         variants={itemVariants}
       >
+        {/* Search Section */}
         <motion.div
-          className="relative w-full md:w-96"
+          className="relative w-full lg:w-96"
           whileHover={{ scale: 1.01 }}
         >
-          <input
-            type="text"
-            placeholder="Search machines..."
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
-            onChange={(e) => setSearchTerm(e.target.value)}
-            value={searchTerm}
-          />
-          <IoSearchSharp className="absolute left-3 top-3 text-gray-400" />
+          <div className="flex items-center space-x-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search machines"
+                className="w-full pl-10 pr-4 py-3 sm:py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-sm sm:text-base"
+                onChange={handleSearchChange}
+                value={searchTerm}
+              />
+              <IoSearchSharp className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-lg" />
+              {searchLoading && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                </div>
+              )}
+            </div>
+            <button
+              className="bg-red-600 py-2 px-2 sm:py-1 sm:px-1 rounded-2xl shadow-md border-white border-2 flex-shrink-0"
+              onClick={() => setSearchTerm("")}
+              title="Clear Search"
+            >
+              <IoClose className="text-xl sm:text-2xl text-white" />
+            </button>
+          </div>
         </motion.div>
 
-        <div className="flex gap-4 w-full md:w-auto">
+        {/* Action Buttons */}
+        <div className="flex gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0">
           <motion.button
             type="button"
-            className="bg-green-600 py-1 md:py-2 px-6 md:px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
+            className="bg-green-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
             variants={buttonVariants}
             whileHover="hover"
             whileTap="tap"
-            onClick={() => handleExcelDownload()}
+            onClick={handleExcelDownload}
           >
-            <div className="flex items-center gap-2">
-              <IoCloudUploadOutline className="text-lg" />
-              Download
-            </div>
+            <IoCloudUploadOutline className="text-base sm:text-lg" />
+            <span>Download</span>
           </motion.button>
-          {userRole === "Admin" ? (
-            <motion.button
-              type="button"
-              className="bg-blue-600 py-2 px-6 rounded-md text-white flex-1 md:flex-none text-sm md:text-base"
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={() => {
-                setEditingMachine(null);
-                setIsAddStyle(!isAddStyle);
-              }}
-            >
-              {isAddStyle ? "Close" : "Add"}
-            </motion.button>
-          ) : (
-            ""
+
+          {userRole === "Admin" && (
+            <>
+              <motion.button
+                type="button"
+                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  resetForms();
+                  setIsAddStyle(!isAddStyle);
+                }}
+              >
+                <div>
+                  {isAddStyle ? (
+                    <IoClose className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                  ) : (
+                    <IoMdAdd className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                  )}
+                </div>
+                <span>{isAddStyle ? "Close" : "Add"}</span>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  resetForms();
+                  setIsUploadExcel(!isUploadExcel);
+                }}
+              >
+                <div>
+                  {isUploadExcel ? (
+                    <IoClose className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                  ) : (
+                    <RiFileExcel2Line className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                  )}
+                </div>
+                <span>{isUploadExcel ? "Close" : "Upload Excel"}</span>
+              </motion.button>
+            </>
           )}
         </div>
       </motion.div>
@@ -384,7 +510,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
       <AnimatePresence>
         {isAddStyle && (
           <motion.div
-            className="bg-white p-4 sm:p-6 rounded-lg shadow-md mb-6 duration-200 mx-2 sm:mx-0"
+            className="bg-white p-4 sm:p-6 rounded-lg shadow-md mb-6 duration-200 mx-0"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -401,15 +527,15 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             >
               {({ isSubmitting, values }) => (
                 <Form>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Machine Type
                       </label>
                       <Field
                         type="text"
                         name="machine_type"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_type"
@@ -418,14 +544,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Machine Number
                       </label>
                       <Field
                         type="text"
                         name="machine_no"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                         disabled={!!editingMachine}
                       />
                       <ErrorMessage
@@ -435,14 +561,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Machine Name
                       </label>
                       <Field
                         type="text"
                         name="machine_name"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_name"
@@ -451,14 +577,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Machine Brand
                       </label>
                       <Field
                         type="text"
                         name="machine_brand"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_brand"
@@ -467,14 +593,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Machine Location
                       </label>
                       <Field
                         type="text"
                         name="machine_location"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_location"
@@ -483,14 +609,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Purchase Date
                       </label>
                       <Field
                         type="date"
                         name="purchase_date"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="purchase_date"
@@ -499,14 +625,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Supplier
                       </label>
                       <Field
                         type="text"
                         name="supplier"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="supplier"
@@ -515,14 +641,14 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Last Service Date
                       </label>
                       <Field
                         type="date"
                         name="service_date"
-                        className="w-full p-2 border rounded-md text-sm sm:text-base"
+                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="service_date"
@@ -531,8 +657,8 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       />
                     </div>
 
-                    <div className="sm:col-span-2 lg:col-span-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <div className="sm:col-span-2 xl:col-span-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
                         Status
                       </label>
                       <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
@@ -584,36 +710,36 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                           transition={{
                             type: "spring",
                           }}
-                          className="sm:col-span-2 lg:col-span-3"
+                          className="sm:col-span-2 xl:col-span-3"
                         >
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
                             Date of Breakdown
                           </label>
                           <Field
                             type="date"
                             name="breakdown_date"
-                            className="w-full p-2 border rounded-md text-sm sm:text-base"
+                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                           />
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  <fieldset className="mt-4 border rounded-lg p-3 sm:p-4">
-                    <legend className="text-sm sm:text-base px-2">
-                      Your barcode will appear here
+                  <fieldset className="mt-6 border rounded-lg p-4 sm:p-6">
+                    <legend className="text-sm sm:text-base px-2 font-medium">
+                      Your QR code will appear here
                     </legend>
-                    <div className="flex justify-center w-[100px]">
-                      <PrintableBarcode
+                    <div className="flex justify-center">
+                      <PrintableQRCode
                         value={`${values.machine_no} | ${values.machine_name} | ${values.status}`}
                       />
                     </div>
                   </fieldset>
 
-                  <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
+                  <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-3">
                     <button
                       type="button"
-                      className="px-4 py-2 bg-gray-200 rounded-md text-sm sm:text-base order-2 sm:order-1"
+                      className="px-6 py-3 bg-gray-200 rounded-md text-sm sm:text-base hover:bg-gray-300 transition-colors"
                       onClick={() => {
                         setIsAddStyle(false);
                         setEditingMachine(null);
@@ -623,7 +749,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-md disabled:bg-blue-400 text-sm sm:text-base order-1 sm:order-2"
+                      className="px-6 py-3 bg-blue-600 text-white rounded-md disabled:bg-blue-400 text-sm sm:text-base hover:bg-blue-700 transition-colors"
                       disabled={isSubmitting}
                     >
                       {editingMachine ? "Update Machine" : "Save Machine"}
@@ -634,106 +760,155 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             </Formik>
           </motion.div>
         )}
+
+        {isUploadExcel && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.2 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-4"
+          >
+            <UploadMachine />
+          </motion.div>
+        )}
       </AnimatePresence>
 
-      {/* machines table */}
-      <div className="rounded-xl overflow-hidden overflow-x-auto pb-6">
-        <table className="w-full">
-          <thead className="bg-gradient-to-r from-blue-700 to-blue-600/80 text-white text-sm md:text-base">
-            <tr>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Machine Type
-              </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Machine No
-              </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Machine Name
-              </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Machine Brand
-              </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Machine Location
-              </th>
-              <th className="whitespace-nowrap border-r border px-2 py-3">
-                Existing Style
-              </th>
-              {userRole === "Admin" ? (
-                <th className="whitespace-nowrap border-r border px-2 py-3">
-                  Actions
-                </th>
-              ) : (
-                ""
-              )}
-            </tr>
-          </thead>
-          <tbody className="text-sm md:text-base">
-            {Array.isArray(filteredMachines) && filteredMachines.length > 0 ? (
-              filteredMachines.map((machine) => (
-                <tr
-                  key={machine.machine_id}
-                  className="bg-white border hover:bg-gray-50"
-                >
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    <span className="flex items-center justify-center gap-x-2">
-                      {machine.machine_status === "active" ? (
-                        <FaCheckCircle className="text-green-600" />
-                      ) : (
-                        <IoCloseCircle className="text-red-600" />
-                      )}
-                      {machine.machine_type}
-                    </span>
-                  </td>
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    {machine.machine_no}
-                  </td>
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    {machine.machine_name}
-                  </td>
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    {machine.machine_brand}
-                  </td>
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    {machine.machine_location}
-                  </td>
-                  <td className="py-2 text-center whitespace-nowrap border">
-                    {getStyleNames(machine)}
-                  </td>
-                  {userRole === "Admin" && (
-                    <td className="py-2 text-center whitespace-nowrap">
-                      <div className="flex justify-center gap-3">
-                        <TbEyeSpark
-                          onClick={() =>
-                            navigate("/view-machine", { state: machine })
-                          }
-                          className="text-2xl text-black hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
-                        />
-                        <MdModeEditOutline
-                          onClick={() => handleEdit(machine)}
-                          className="text-2xl text-black hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
-                        />
-                        <MdDeleteForever
-                          onClick={() => handleDelete(machine.machine_id)}
-                          className="text-2xl text-black hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
-                        />
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))
-            ) : (
+      {/* Machines Table Section */}
+      <div className="mb-4">
+        <p className="flex items-center font-semibold text-sm sm:text-base">
+          Showing :{" "}
+          <span className="font-bold text-white bg-blue-500 border-2 border-white/70 shadow-lg py-1 px-3 rounded-xl ml-2">
+            {Array.isArray(filteredMachines) ? filteredMachines.length : 0} /{" "}
+            {machineCount}
+          </span>
+          {backendSearchResults !== null && (
+            <span className="text-xs sm:text-sm text-gray-600 ml-2">
+              (Search results)
+            </span>
+          )}
+        </p>
+      </div>
+
+      <div className="rounded-xl pb-6 bg-white shadow-sm overflow-hidden">
+        <div className="overflow-auto">
+          <table className="min-w-full">
+            <thead className="bg-gradient-to-r from-blue-700 to-blue-600/80 text-white text-xs sm:text-sm lg:text-base sticky top-0">
               <tr>
-                <td
-                  colSpan={userRole === "Admin" ? 7 : 6}
-                  className="text-center py-4"
-                >
-                  There are no machines yet
-                </td>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Machine Type
+                </th>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Machine No
+                </th>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Machine Name
+                </th>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Machine Brand
+                </th>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Machine Location
+                </th>
+                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                  Existing Style
+                </th>
+                {userRole === "Admin" && (
+                  <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
+                    Actions
+                  </th>
+                )}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="text-xs sm:text-sm lg:text-base divide-y divide-gray-200">
+              {Array.isArray(filteredMachines) &&
+              filteredMachines.length > 0 ? (
+                filteredMachines.map((machine) => (
+                  <tr
+                    key={machine.machine_id}
+                    className="bg-white hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="flex items-center gap-x-2">
+                        {machine.machine_status === "active" ||
+                        machine.machine_status === "Available" ? (
+                          <FaCheckCircle className="text-green-600 text-sm sm:text-base" />
+                        ) : (
+                          <IoCloseCircle className="text-red-600 text-sm sm:text-base" />
+                        )}
+                        <span className="truncate max-w-[120px] sm:max-w-none">
+                          {machine.machine_type}
+                        </span>
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      {machine.machine_no}
+                    </td>
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="truncate max-w-[120px] sm:max-w-none block">
+                        {machine.machine_name}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="truncate max-w-[100px] sm:max-w-none block">
+                        {machine.machine_brand}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="truncate max-w-[120px] sm:max-w-none block">
+                        {machine.machine_location}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="truncate max-w-[120px] sm:max-w-none block">
+                        {getStyleNames(machine)}
+                      </span>
+                    </td>
+                    {userRole === "Admin" && (
+                      <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                        <div className="flex justify-start sm:justify-center gap-2 sm:gap-3">
+                          <TbEyeSpark
+                            onClick={() =>
+                              navigate("/view-machine", { state: machine })
+                            }
+                            className="text-lg sm:text-xl text-gray-600 hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="View Machine"
+                          />
+                          <MdModeEditOutline
+                            onClick={() => handleEdit(machine)}
+                            className="text-lg sm:text-xl text-gray-600 hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="Edit Machine"
+                          />
+                          <MdDeleteForever
+                            onClick={() => handleDelete(machine.machine_id)}
+                            className="text-lg sm:text-xl text-gray-600 hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="Delete Machine"
+                          />
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={userRole === "Admin" ? 7 : 6}
+                    className="text-center py-8 text-sm sm:text-base"
+                  >
+                    {searchLoading ? (
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-5 w-5 sm:h-6 sm:w-6 border-b-2 border-blue-600"></div>
+                        <span>Searching machines...</span>
+                      </div>
+                    ) : searchTerm ? (
+                      "No machines found matching your search"
+                    ) : (
+                      "There are no machines yet"
+                    )}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </motion.div>
   );

@@ -36,12 +36,16 @@ module.exports = (sequelize, DataTypes) => {
     NeedleType.belongsTo(models.Machine, {
       foreignKey: "machine_id",
       as: "machine",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
-    NeedleType.belongsTo(models.SubOperation, {
-      foreignKey: "sub_operation_id",
-      as: "sub_operation",
-    });
+    // NeedleType.belongsTo(models.SubOperation, {
+    //   foreignKey: "sub_operation_id",
+    //   as: "sub_operation",
+    //   onDelete: "CASCADE",
+    //   onUpdate: "CASCADE",
+    // });
   };
 
   return NeedleType;

@@ -53,11 +53,15 @@ module.exports = (sequelize, DataTypes) => {
     Helper.belongsTo(models.Style, {
       foreignKey: "style_id",
       as: "style",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Helper.belongsTo(models.OperationType, {
       foreignKey: "operation_type_id",
       as: "operation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

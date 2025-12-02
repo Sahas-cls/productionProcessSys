@@ -54,11 +54,15 @@ module.exports = (sequelize, DataTypes) => {
     SubOperationMedia.belongsTo(models.MainOperation, {
       foreignKey: "operation_id",
       as: "main_operation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     SubOperationMedia.belongsTo(models.SubOperation, {
       foreignKey: "sub_operation_id",
       as: "sub_operation",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
   };
 

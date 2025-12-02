@@ -92,8 +92,6 @@ module.exports = (sequelize, DataTypes) => {
     Style.hasMany(models.StyleMedia, {
       foreignKey: "style_id",
       as: "style_medias",
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
     });
 
     Style.hasMany(models.Helper, {

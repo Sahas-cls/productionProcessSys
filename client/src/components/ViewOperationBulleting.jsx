@@ -4,6 +4,7 @@ import useOperationBulletin from "../hooks/useOperationBulletin";
 import { IoSearchSharp } from "react-icons/io5";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { LuCircleArrowRight } from "react-icons/lu";
 
 const ITEMS_PER_PAGE = 12;
 
@@ -14,6 +15,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     operationBulletingList,
     setOperationBulletingList,
   } = useOperationBulletin();
+  console.log("on view bo", operationBulletingList);
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
@@ -26,6 +28,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     if (!term) return operationBulletingList;
 
     return operationBulletingList.filter((style) => {
+      // console.log("style style", style);
       return (
         style.style_no?.toLowerCase().includes(term) ||
         style.po_number?.toLowerCase().includes(term) ||
@@ -141,72 +144,111 @@ const ViewOperationBulletin = ({ onViewBO }) => {
 
 // Memoized Style Card Component to prevent unnecessary re-renders
 const StyleCard = ({ style, onViewDetails }) => {
+  // getting image from backend static path
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const getImageUrl = (mediaUrl) => {
+    if (!mediaUrl) return null;
+    if (mediaUrl.startsWith("http")) return mediaUrl;
+    return `${apiUrl}/media/${mediaUrl}`;
+  };
+
   // Calculate total sub-operations across all main operations
   const totalSubOperations =
     style.operations?.reduce((total, op) => {
       return total + (op.subOperations?.length || 0);
     }, 0) || 0;
-
+  console.log("style ---- ", style);
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+    <div className="bg-white rounded-3xl border  border-gray-200 shadow-xl overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-1 flex flex-col h-full">
       {/* Card Header */}
-      <div className="bg-gradient-to-br from-blue-700 to-blue-500 px-4 py-3 text-white">
-        <h3 className="text-white font-semibold text-center truncate text-sm md:text-base">
-          Style No: {style.style_no || "N/A"}
+      <div className="px-4 py-3 border-b text-white border-gray-100 bg-gradient-to-br from-blue-700 to-blue-500 flex flex-col justify-center items-center">
+        <h3 className="font- text-sm truncate">
+          Style No:{" "}
+          <span className="text-white font-semibold">
+            {style.style_no || "N/A"}
+          </span>
         </h3>
-        <h5 className="text-center text-sm md:text-base">
-          PO No: {style.po_number || "N/A"}
-        </h5>
+        <p className="text-xs mt-0.5">
+          PO: <span className="font-semibold">{style.po_number || "N/A"}</span>
+        </p>
       </div>
 
-      {/* Card Body */}
-      <div className="p-4 space-y-3 text-sm md:text-base">
-        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
-          <span className="font-medium text-gray-700">Style Name:</span>
-          <span className="text-right truncate">
+      {/* Image */}
+      {style.style_medias?.[0]?.media_url && (
+        <div className="p-4 flex justify-center">
+          <div className="w-32 h-32 rounded border border-gray-200 overflow-hidden">
+            <img
+              src={getImageUrl(style.style_medias[0].media_url)}
+              alt={style.style_name || "Style image"}
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() =>
+                window.open(
+                  getImageUrl(style.style_medias[0].media_url),
+                  "_blank"
+                )
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="px-4 pb-4 flex-1 space-y-3">
+        {/* Style Name */}
+        <div>
+          <h4 className="font-medium text-gray-900 text-sm mb-1">Style Name</h4>
+          <p className="text-gray-600 text-sm line-clamp-2">
             {style.style_name || "N/A"}
-          </span>
+          </p>
         </div>
 
-        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
-          <span className="font-medium text-gray-700">Main Ops:</span>
-          <span className="inline-block bg-blue-100 text-blue-800 font-bold px-2 py-1 rounded-md text-sm">
-            {style.operations?.length || 0}
-          </span>
+        {/* Description */}
+        <div>
+          <h4 className="font-medium text-gray-900 text-sm mb-1">
+            Description
+          </h4>
+          <p className="text-gray-500 text-xs line-clamp-2">
+            {style.style_description || "No description"}
+          </p>
         </div>
 
-        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
-          <span className="font-medium text-gray-700">Sub Ops:</span>
-          <span className="inline-block bg-green-100 text-green-800 font-bold px-2 py-1 rounded-md text-sm">
-            {totalSubOperations}
-          </span>
-        </div>
-
-        <div className="flex items-center justify-between border-b-2 border-black/10 pb-2">
-          <span className="font-medium text-gray-700">Description:</span>
-          <span className="text-right truncate">
-            {style.style_description || "N/A"}
-          </span>
+        {/* Operations */}
+        <div className="flex gap-4 text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span className="text-gray-600">Main:</span>
+            <span className="font-semibold text-gray-900">
+              {style.operations?.length || 0}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            <span className="text-gray-600">Sub:</span>
+            <span className="font-semibold text-gray-900">
+              {totalSubOperations}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Card Footer */}
-      <div className="px-4 pb-4 text-right flex justify-between items-center">
-        <p className="text-xs text-gray-500">
-          Created:{" "}
-          <span className="font-medium">
+      {/* Footer */}
+      <div className="px-4 py-3 border-t border-gray-100 bg-gradient-to-br from-blue-600 to-blue-700 text-white flex justify-between items-center">
+        <p className="text-xs space-x-2">
+          <span>Created At:</span>
+          <span className="">
             {new Date(style?.createdAt).toLocaleDateString("en-US", {
-              year: "numeric",
               month: "short",
               day: "numeric",
+              year: "numeric",
             })}
           </span>
         </p>
         <button
           onClick={onViewDetails}
-          className="text-blue-600 font-medium hover:text-blue-800 transition-colors focus:outline-none"
+          className="text-white hover:text-white hover:scale-110 transition-all duration-200"
+          title="View Details"
         >
-          View Details →
+          <LuCircleArrowRight className="text-xl" />
         </button>
       </div>
     </div>

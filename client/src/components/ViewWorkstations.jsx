@@ -20,6 +20,11 @@ import { FaPhotoVideo } from "react-icons/fa";
 import { MdOutlineDriveFileRenameOutline } from "react-icons/md";
 import { FaCheck } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
+import UploadMaterial from "./UploadMaterial";
+import ImageCaptureOrBrowse from "./ImageCaptureorBrows";
+import TechPackUploader from "./TechPackUploader";
+import FolderDocumentsUploader from "./FolderDocumentsUploader";
+import { FaPlay, FaImage, FaFileExcel, FaFolder } from "react-icons/fa";
 
 const ViewWorkstations = () => {
   // alert("user role: ", userRole);
@@ -46,6 +51,8 @@ const ViewWorkstations = () => {
   });
   const [editingWorkstationId, setEditingWorkstationId] = useState(null);
   const [newWorkstationNo, setNewWorkstationNo] = useState("");
+  const [uploadingMaterial, setUploadingMaterial] = useState(null);
+  // alert(uploadingMaterial);
 
   const isUploadRef = useRef(null);
   const inputRef = useRef(null);
@@ -367,13 +374,57 @@ const ViewWorkstations = () => {
               stiffness: 300,
               damping: 30,
             }}
-            className="fixed left-0 backdrop-brightness-50 right-0 bottom-0 w-full z-50 lg:w-full lg:h-screen lg:flex lg:justify-center lg:items-center"
+            className="fixed w[] left-0 backdrop-brightness-50 right-0 bottom-0 w-full z-50 lg:w-full lg:h-screen lg:flex lg:justify-center lg:items-center"
           >
-            <div className="lg:w-[40%]">
-              <CameraOrBrowse
+            <div className="md:w-[45%]">
+              {/* <CameraOrBrowse
                 setIsUploading={setIsUploading}
                 uploadingData={uploadingData}
-              />
+              /> */}
+              {uploadingMaterial === null && (
+                <UploadMaterial
+                  uploadingMaterial={uploadingMaterial}
+                  setUploadingMaterial={setUploadingMaterial}
+                  setIsUploading={setIsUploading}
+                  uploadingData={uploadingData}
+                />
+              )}
+
+              {uploadingMaterial === "video" && (
+                <CameraOrBrowse
+                  uploadingMaterial={uploadingMaterial}
+                  setUploadingMaterial={setUploadingMaterial}
+                  setIsUploading={setIsUploading}
+                  uploadingData={uploadingData}
+                />
+              )}
+
+              {uploadingMaterial === "image" && (
+                <ImageCaptureOrBrowse
+                  uploadingMaterial={uploadingMaterial}
+                  setUploadingMaterial={setUploadingMaterial}
+                  setIsUploading={setIsUploading}
+                  uploadingData={uploadingData}
+                />
+              )}
+
+              {uploadingMaterial === "techpack" && (
+                <TechPackUploader
+                  uploadingMaterial={uploadingMaterial}
+                  setUploadingMaterial={setUploadingMaterial}
+                  setIsUploading={setIsUploading}
+                  uploadingData={uploadingData}
+                />
+              )}
+
+              {uploadingMaterial === "folder" && (
+                <FolderDocumentsUploader
+                  uploadingMaterial={uploadingMaterial}
+                  setUploadingMaterial={setUploadingMaterial}
+                  setIsUploading={setIsUploading}
+                  uploadingData={uploadingData}
+                />
+              )}
             </div>
           </motion.div>
         )}
@@ -628,10 +679,11 @@ const ViewWorkstations = () => {
                                   <td className="px-4 py-3 text-gray-500 w-24">
                                     {userRole === "Admin" ? (
                                       <div className="space-x-2 flex">
-                                        {/* <button className="bg-green-300/40 p-1 text-green-700 rounded">
-                                          <BsArrowsMove className="text-xl hover:scale-125" />
-                                        </button> */}
-                                        <button className="bg-red-300/40 p-1 text-red-700 rounded">
+                                        {/* Delete Sub-operation Button */}
+                                        <button
+                                          className="bg-red-300/40 p-1 text-red-700 rounded"
+                                          title="Delete"
+                                        >
                                           <MdOutlineDeleteForever
                                             onClick={() =>
                                               handleDeleteSubOP(
@@ -642,8 +694,11 @@ const ViewWorkstations = () => {
                                             className="text-xl hover:scale-150"
                                           />
                                         </button>
+
+                                        {/* Upload Media Button */}
                                         <button
                                           type="button"
+                                          title="Upload media"
                                           className="bg-blue-300/40 p-1 text-blue-700 rounded"
                                           onClick={() => {
                                             handleUploadData(
@@ -658,9 +713,12 @@ const ViewWorkstations = () => {
                                         >
                                           <BsFillCloudUploadFill className="text-xl hover:scale-125" />
                                         </button>
+
+                                        {/* Videos Button */}
                                         <button
                                           type="button"
-                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
+                                          title="Watch videos"
                                           onClick={() =>
                                             navigate("/sub-operation/videos", {
                                               state: {
@@ -669,14 +727,72 @@ const ViewWorkstations = () => {
                                             })
                                           }
                                         >
-                                          <FaPhotoVideo className="text-xl hover:scale-125" />
+                                          <FaPlay className="text-xl text-black/60 hover:scale-125" />
+                                        </button>
+
+                                        {/* Images Button */}
+                                        <button
+                                          type="button"
+                                          title="Images"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate("/sub-operation/images", {
+                                              state: {
+                                                subOpId: subOp.sub_operation_id,
+                                              },
+                                            })
+                                          }
+                                        >
+                                          <FaImage className="text-xl hover:scale-125" />
+                                        </button>
+
+                                        {/* Tech Packs Button */}
+                                        <button
+                                          type="button"
+                                          title="Tech packs"
+                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate(
+                                              "/sub-operation/tech_packs",
+                                              {
+                                                state: {
+                                                  subOpId:
+                                                    subOp.sub_operation_id,
+                                                },
+                                              }
+                                            )
+                                          }
+                                        >
+                                          <FaFileExcel className="text-xl hover:scale-125" />
+                                        </button>
+
+                                        {/* Documents Button */}
+                                        <button
+                                          type="button"
+                                          title="Other documents"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate(
+                                              "/sub-operation/documents",
+                                              {
+                                                state: {
+                                                  subOpId:
+                                                    subOp.sub_operation_id,
+                                                },
+                                              }
+                                            )
+                                          }
+                                        >
+                                          <FaFolder className="text-xl  hover:scale-125" />
                                         </button>
                                       </div>
                                     ) : (
-                                      <div className="text-center">
+                                      <div className="space-x-2 flex">
+                                        {/* Videos Button - User */}
                                         <button
                                           type="button"
-                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          title="Watch videos"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
                                           onClick={() =>
                                             navigate("/sub-operation/videos", {
                                               state: {
@@ -685,7 +801,63 @@ const ViewWorkstations = () => {
                                             })
                                           }
                                         >
-                                          <FaPhotoVideo className="text-xl hover:scale-125" />
+                                          <FaPlay className="text-xl hover:scale-125" />
+                                        </button>
+
+                                        {/* Images Button - User */}
+                                        <button
+                                          type="button"
+                                          title="Watch images"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate("/sub-operation/images", {
+                                              state: {
+                                                subOpId: subOp.sub_operation_id,
+                                              },
+                                            })
+                                          }
+                                        >
+                                          <FaImage className="text-xl hover:scale-125" />
+                                        </button>
+
+                                        {/* Tech Packs Button - User */}
+                                        <button
+                                          type="button"
+                                          title="Tech packs"
+                                          className="bg-green-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate(
+                                              "/sub-operation/tech_packs",
+                                              {
+                                                state: {
+                                                  subOpId:
+                                                    subOp.sub_operation_id,
+                                                },
+                                              }
+                                            )
+                                          }
+                                        >
+                                          <FaFileExcel className="text-xl hover:scale-125" />
+                                        </button>
+
+                                        {/* Documents Button - User */}
+                                        <button
+                                          type="button"
+                                          title="Other documents"
+                                          className="bg-blue-200 p-1 text-black/60 rounded"
+                                          onClick={() =>
+                                            navigate(
+                                              "/sub-operation/documents",
+                                              {
+                                                state: {
+                                                  subOpId:
+                                                    subOp.sub_operation_id,
+                                                },
+                                              }
+                                            )
+                                          }
+                                        >
+                                          <FaFolder className="text-xl hover:scale-125" />
                                         </button>
                                       </div>
                                     )}
