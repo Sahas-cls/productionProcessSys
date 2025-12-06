@@ -120,12 +120,14 @@ const ImageCaptureOrBrowse = ({
     try {
       const formData = new FormData();
 
-      // Append the metadata
+      // Append the metadata - ADD subOpId HERE!
       formData.append("styleId", uploadingData.style_id || 1);
       formData.append("styleNo", uploadingData.styleNo);
       formData.append("moId", uploadingData.moId);
       formData.append("sopId", uploadingData.sopId);
       formData.append("sopName", uploadingData.sopName);
+      // ADD THIS LINE - if you have subOpId available
+      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // Use sopId as fallback
 
       // Append the image file
       if (imageBlobToUpload) {
@@ -177,12 +179,26 @@ const ImageCaptureOrBrowse = ({
           let iconType = "success";
           let timerDuration = 4000;
 
-          // Check storage type and show appropriate message
-          if (response.data.storageType === "local" || response.data.warning) {
+          // Check if it's Backblaze B2 storage
+          if (
+            response.data.storage &&
+            response.data.storage.type === "backblaze_b2"
+          ) {
+            successTitle = "Uploaded to Cloud!";
+            successText = "Image uploaded to cloud storage successfully!";
+            iconType = "success";
+            timerDuration = 4000;
+
+            console.log("☁️ Stored in Backblaze B2:", {
+              bucket: response.data.storage.bucket,
+              region: response.data.storage.region,
+              fileId: response.data.data?.b2_file_id,
+            });
+          }
+          // Check for any warnings
+          else if (response.data.warning) {
             successTitle = "Uploaded with Note";
-            successText =
-              response.data.warning ||
-              "Image saved to local storage (network unavailable)";
+            successText = response.data.warning;
             iconType = "warning";
             timerDuration = 5000;
           }
@@ -198,9 +214,23 @@ const ImageCaptureOrBrowse = ({
 
           console.log("✅ Upload successful:", response.data);
           console.log(
-            "📁 Storage type:",
-            response.data.storageType || "unknown"
+            "📁 Storage provider:",
+            response.data.storage?.type ||
+              response.data.storageProvider ||
+              "unknown"
           );
+
+          // Store the returned data for later use if needed
+          if (response.data.data) {
+            console.log("📦 Uploaded image details:", {
+              id: response.data.data.so_img_id,
+              url:
+                response.data.data.image_url_proxy ||
+                response.data.data.image_url,
+              filename: response.data.data.file_name,
+              b2FileId: response.data.data.b2_file_id,
+            });
+          }
 
           // Reset states after successful upload
           setImageBlob(null);
@@ -208,6 +238,11 @@ const ImageCaptureOrBrowse = ({
           setStatus("idle");
           setUploading(false);
           setUploadProgress(0);
+
+          // Optionally trigger a refresh of image list
+          if (typeof onUploadSuccess === "function") {
+            onUploadSuccess(response.data.data);
+          }
         } else if (response.data.success === false) {
           console.error("❌ Server returned failure:", response.data);
           throw new Error(response.data.message || "Upload failed on server");
@@ -241,7 +276,12 @@ const ImageCaptureOrBrowse = ({
           if (errorMessage?.includes("too large")) {
             errorMessage = "Image file is too large. Maximum size is 50MB";
           } else if (errorMessage?.includes("Missing required fields")) {
-            errorMessage = "Please fill all required fields";
+            // More specific error for missing subOpId
+            if (errorMessage?.includes("subOpId")) {
+              errorMessage = "Please provide sub-operation ID";
+            } else {
+              errorMessage = "Please fill all required fields";
+            }
           } else if (errorMessage?.includes("No file uploaded")) {
             errorMessage = "No image file selected";
           }
@@ -252,10 +292,16 @@ const ImageCaptureOrBrowse = ({
           errorTitle = "Unsupported Format";
           errorMessage =
             "Image format not supported. Please use JPEG, PNG, or WebP";
+        } else if (
+          error.response.status === 502 ||
+          error.response.status === 503
+        ) {
+          errorTitle = "Cloud Storage Error";
+          errorMessage = "Unable to upload to cloud storage. Please try again.";
+          timerDuration = 6000;
         } else if (error.response.status >= 500) {
           errorTitle = "Server Error";
-          errorMessage =
-            "Network storage is not accessible. Please check the network connection.";
+          errorMessage = "Server encountered an error. Please try again later.";
           timerDuration = 6000;
         }
       } else if (error.request) {

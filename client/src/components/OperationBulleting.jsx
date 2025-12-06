@@ -61,7 +61,7 @@ const OperationBulleting = () => {
     const fetchOperations = async () => {
       try {
         const response = await axios.get(
-          `${apiUrl}/api/operationBuleting/getAllOB`,
+          `${apiUrl}/api/operationBulleting/getAllOB`,
           {
             withCredentials: true,
           }

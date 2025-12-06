@@ -5,48 +5,80 @@ const { styleValidator } = require("../validators/StyleValidator");
 const validateUser = require("../middlewares/ValidateUser");
 const multer = require("multer");
 const authMiddleware = require("../middlewares/AuthUser");
-// const multer = require("multer");
 const path = require("path");
 
-// Multer storage config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "\\\\192.168.46.209\\Operation bullatin videos\\StyleImages"); // UNC path
-  },
-  filename: function (req, file, cb) {
-    const styleNo = req.body.styleNo || "unknown"; // from form
-    const poNo = req.body.poNumber || "unknown";
-    const fileType = file.fieldname === "frontImage" ? "front" : "back";
-    const ext = path.extname(file.originalname);
+// ============================================
+// IMPORTANT: Change from disk storage to memory storage
+// ============================================
 
-    // Create timestamp (YYYYMMDD_HHmmss)
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[-:T.Z]/g, "")
-      .slice(0, 14); // e.g. 20251021_104530
+// Old disk storage (for UNC - REMOVE THIS):
+// const storage = multer.diskStorage({
+//   destination: function (req, file, cb) {
+//     cb(null, "\\\\192.168.46.209\\Operation bullatin videos\\StyleImages");
+//   },
+//   filename: function (req, file, cb) {
+//     const styleNo = req.body.styleNo || "unknown";
+//     const poNo = req.body.poNumber || "unknown";
+//     const fileType = file.fieldname === "frontImage" ? "front" : "back";
+//     const ext = path.extname(file.originalname);
+//     const timestamp = new Date()
+//       .toISOString()
+//       .replace(/[-:T.Z]/g, "")
+//       .slice(0, 14);
+//     cb(null, `${styleNo}_${poNo}_${fileType}_${timestamp}${ext}`);
+//   },
+// });
 
-    // Final filename: styleNo_poNo_type_timestamp.ext
-    cb(null, `${styleNo}_${poNo}_${fileType}_${timestamp}${ext}`);
-  },
-});
+// New memory storage (for B2):
+const storage = multer.memoryStorage(); // Store files in memory as buffers
 
-// Multer upload middleware
+// Multer upload middleware with memory storage
 const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: storage, // Now using memoryStorage
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif/;
     const extname = allowedTypes.test(
       path.extname(file.originalname).toLowerCase()
     );
     const mimetype = allowedTypes.test(file.mimetype);
+
     if (extname && mimetype) {
       cb(null, true);
     } else {
-      cb(new Error("Only images are allowed"));
+      cb(new Error("Only images are allowed (jpeg, jpg, png, gif)"));
     }
   },
 });
+
+// ============================================
+// OPTIONAL: Add a middleware to handle B2-specific file naming
+// ============================================
+
+// This middleware adds a consistent filename to req.files
+const processFileNames = (req, res, next) => {
+  if (req.files) {
+    const styleNo = req.body.styleNo || "unknown";
+    const poNo = req.body.poNumber || "unknown";
+    const timestamp = Date.now();
+
+    if (req.files["frontImage"] && req.files["frontImage"][0]) {
+      const file = req.files["frontImage"][0];
+      const ext = path.extname(file.originalname);
+      file.generatedName = `${styleNo}_${poNo}_front_${timestamp}${ext}`;
+    }
+
+    if (req.files["backImage"] && req.files["backImage"][0]) {
+      const file = req.files["backImage"][0];
+      const ext = path.extname(file.originalname);
+      file.generatedName = `${styleNo}_${poNo}_back_${timestamp}${ext}`;
+    }
+  }
+  next();
+};
+// ========= routes ==============
 
 // to get all styles
 routes.get("/getStyles", styleController.getStyles);
@@ -65,6 +97,7 @@ routes.post(
     { name: "frontImage", maxCount: 1 },
     { name: "backImage", maxCount: 1 },
   ]),
+  processFileNames, // Optional: Add filename processing
   styleValidator,
   validateUser,
   styleController.addStyle
@@ -78,6 +111,7 @@ routes.put(
     { name: "frontImage", maxCount: 1 },
     { name: "backImage", maxCount: 1 },
   ]),
+  processFileNames, // Optional: Add filename processing
   styleValidator,
   validateUser,
   styleController.editStyle

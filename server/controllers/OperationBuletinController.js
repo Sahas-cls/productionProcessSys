@@ -66,6 +66,7 @@ exports.getBOList = async (req, res, next) => {
           as: "style_medias",
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
 
     console.log("data selected success........!");
@@ -98,16 +99,16 @@ exports.getSBO = async (req, res, next) => {
                   through: { attributes: [] },
                 },
                 {
-                  model: NeedleType,
-                  as: "needle_types",
+                  model: NeedleTypeN,
+                  as: "needle_type",
                 },
                 {
-                  model: NeedleTread,
-                  as: "needle_treads",
+                  model: Thread,
+                  as: "thread",
                 },
                 {
-                  model: NeedleLooper,
-                  as: "needle_loopers",
+                  model: Thread,
+                  as: "looper",
                 },
               ],
             },
@@ -612,124 +613,144 @@ exports.editOperation = async (req, res, next) => {};
 
 // to update one single sub operation
 exports.updateSubOperation = async (req, res, next) => {
-  console.log("frontend parameters:- ", req.params);
-  console.log("frontend data set:- ", req.body);
-  // return;
+  console.log("Frontend parameters:- ", req.params);
+  console.log("Frontend data set:- ", req.body);
+
   try {
     const { id } = req.params;
     const {
-      soName: subOperationName,
+      sub_operation_name,
       smv,
       remark,
-      needleType: needleTypes,
-      needleThread: needleThreads,
-      needleLooper: needleLoopers,
+      sub_operation_number,
+      needle_count,
+      spi,
+      machine_type,
+      machine_id,
+      needle_type_id,
+      thread_id,
+      looper_id,
     } = req.body;
 
-    if (!id || !subOperationName) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Basic validation
+    if (!id || !sub_operation_name) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        details: "SubOperation ID and name are required",
+      });
     }
 
+    // Start transaction
     const result = await sequelize.transaction(async (t) => {
-      // 1. Update SubOperation
-      const [updatedRows] = await SubOperation.update(
-        {
-          sub_operation_name: subOperationName,
-          smv: smv || null,
-          remark: remark || "-",
-        },
-        {
-          where: { sub_operation_id: id },
-          transaction: t,
-        }
-      );
+      // Build update object
+      const updateData = {
+        sub_operation_name,
+        smv: smv ? parseFloat(smv) : null,
+        remark: remark || "-",
+        sub_operation_number: sub_operation_number || null,
+        needle_count: needle_count ? parseFloat(needle_count) : null,
+        spi: spi ? parseFloat(spi) : null,
+        machine_type: machine_type || null,
+        needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
+        thread_id: thread_id ? parseInt(thread_id) : null,
+        looper_id: looper_id ? parseInt(looper_id) : null,
+      };
 
-      if (updatedRows === 0) throw new Error("SubOperation not found");
-
-      // 2. Get associated machines (M:M)
-      const subOp = await SubOperation.findByPk(id, {
-        include: {
-          model: Machine,
-          as: "machines", // ✅ make sure association alias is correct
-          through: { attributes: [] },
-        },
+      // Update the SubOperation
+      const [updatedRows] = await SubOperation.update(updateData, {
+        where: { sub_operation_id: id },
         transaction: t,
       });
 
-      const machines = subOp.machines || [];
-      if (machines.length === 0)
-        throw new Error("No associated machines found");
-
-      // 3. Delete old needle records
-      await Promise.all([
-        NeedleType.destroy({ where: { sub_operation_id: id }, transaction: t }),
-        NeedleTread.destroy({
-          where: { sub_operation_id: id },
-          transaction: t,
-        }),
-        NeedleLooper.destroy({
-          where: { sub_operation_id: id },
-          transaction: t,
-        }),
-      ]);
-
-      // 4. Recreate for ALL machines
-      const needleTypeData = [];
-      const needleThreadData = [];
-      const needleLooperData = [];
-
-      for (const machine of machines) {
-        const machineId = machine.machine_id;
-
-        if (needleTypes?.length) {
-          // console.log(needleTypes);
-          needleTypeData.push(
-            ...needleTypes.map((type) => ({
-              type,
-              machine_id: machineId,
-              sub_operation_id: id,
-            }))
-          );
-        }
-
-        if (needleThreads?.length) {
-          console.log(needleThreads);
-          needleThreadData.push(
-            ...needleThreads.map((thread) => ({
-              tread: thread,
-              machine_id: machineId,
-              sub_operation_id: id,
-            }))
-          );
-        }
-
-        if (needleLoopers?.length) {
-          needleLooperData.push(
-            ...needleLoopers.map((looper) => ({
-              looper_type: looper,
-              machine_id: machineId,
-              sub_operation_id: id,
-            }))
-          );
-        }
+      if (updatedRows === 0) {
+        throw new Error("SubOperation not found");
       }
 
-      await Promise.all([
-        needleTypeData.length &&
-          NeedleType.bulkCreate(needleTypeData, { transaction: t }),
-        needleThreadData.length &&
-          NeedleTread.bulkCreate(needleThreadData, { transaction: t }),
-        needleLooperData.length &&
-          NeedleLooper.bulkCreate(needleLooperData, { transaction: t }),
-      ]);
+      // Update machine association if machine_id is provided
+      if (machine_id) {
+        const machineId = parseInt(machine_id);
+
+        // Check if machine exists
+        const machine = await Machine.findByPk(machineId, { transaction: t });
+        if (!machine) {
+          throw new Error(`Machine with ID ${machineId} not found`);
+        }
+
+        // Clear existing machine associations
+        await sequelize.models.SubOperationMachine.destroy({
+          where: { sub_operation_id: id },
+          transaction: t,
+        });
+
+        // Create new association
+        await sequelize.models.SubOperationMachine.create(
+          {
+            sub_operation_id: id,
+            machine_id: machineId,
+          },
+          { transaction: t }
+        );
+      }
 
       return { success: true };
     });
 
-    res.status(200).json({ success: true, message: "SubOperation updated" });
+    // Fetch updated data
+    const updatedSubOperation = await SubOperation.findByPk(id, {
+      include: [
+        {
+          model: Machine,
+          as: "machines",
+          through: { attributes: [] },
+        },
+        {
+          model: sequelize.models.NeedleTypeN,
+          as: "needle_type",
+        },
+        {
+          model: Thread,
+          as: "thread",
+        },
+        {
+          model: Thread,
+          as: "looper",
+        },
+      ],
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "SubOperation updated successfully",
+      data: updatedSubOperation,
+    });
   } catch (error) {
     console.error("Update failed:", error);
-    res.status(500).json({ error: "Update failed", details: error.message });
+
+    // Specific error handling
+    if (error.message.includes("not found")) {
+      return res.status(404).json({
+        error: "Resource not found",
+        details: error.message,
+      });
+    }
+
+    if (
+      error.name === "SequelizeValidationError" ||
+      error.name === "SequelizeForeignKeyConstraintError"
+    ) {
+      return res.status(400).json({
+        error: "Validation error",
+        details: error.message,
+      });
+    }
+
+    res.status(500).json({
+      error: "Internal server error",
+      details:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+    });
   }
 };
 

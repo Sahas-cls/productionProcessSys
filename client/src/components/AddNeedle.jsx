@@ -149,7 +149,11 @@ const AddNeedle = () => {
       setEditingNeedle(null);
       console.log("Needle updated:", updatedNeedle);
     } catch (error) {
-      console.log("Error response:", error.response?.data);
+      console.error("Error response:", error);
+
+      const message =
+        error.response?.data?.message ||
+        "Unexpected error, please try again later";
 
       if (error.response?.status === 400) {
         const { message, field } = error.response.data;
@@ -165,7 +169,7 @@ const AddNeedle = () => {
           setFieldError("general", message);
         }
       } else {
-        setFieldError("general", "Something went wrong. Please try again.");
+        setFieldError("general", `${message}`);
       }
     } finally {
       setSubmitting(false);

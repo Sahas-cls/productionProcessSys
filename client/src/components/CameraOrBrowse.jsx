@@ -99,6 +99,7 @@ const CameraOrBrowse = ({
       formData.append("moId", uploadingData.moId);
       formData.append("sopId", uploadingData.sopId);
       formData.append("sopName", uploadingData.sopName);
+      formData.append("subOpId", uploadingData.sopId);
 
       // Append the video file
       if (videoBlob) {

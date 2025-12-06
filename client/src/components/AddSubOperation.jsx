@@ -72,14 +72,14 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
   };
 
   return (
-    <div className="bg-black/30 fixed inset-0 flex items-center justify-center z-50">
+    <div className="bg-black/30 fixed inset-0 flex items-center justify-center z-50 p-4">
       <AnimatePresence>
         <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          exit={{ scale: 0 }}
-          transition={{ duration: 0.4 }}
-          className="w-full max-w-md bg-white rounded-lg shadow-lg"
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="w-[90%] max-w-sm sm:max-w-md bg-white rounded-lg shadow-lg max-h-[90vh]"
         >
           <Formik
             initialValues={initialValues}
@@ -89,15 +89,20 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
           >
             {({ errors, touched }) => (
               <Form>
-                <div className="p-7">
-                  <h2 className="text-xl font-bold mb-4">Add Sub Operation</h2>
+                <div className="p-5 sm:p-7 w-full">
+                  <h2 className="text-lg sm:text-xl font-bold mb-4">
+                    Add Sub Operation
+                  </h2>
 
-                  <div className="grid mb-4">
-                    <label htmlFor="sub_operation_id">Sub Operation</label>
+                  {/* Dropdown */}
+                  <div className="grid mb-4 w-full">
+                    <label htmlFor="sub_operation_id" className="text-sm">
+                      Sub Operation
+                    </label>
                     <Field
                       name="sub_operation_id"
-                      className="px-2 py-2 rounded-md border border-black/40 mt-1 focus:border-none focus:outline-none focus:ring-blue-400 ring-2"
                       as="select"
+                      className="px-2 py-2 rounded-md border border-black/40 mt-1 focus:ring-blue-400 focus:outline-none ring-2 w-full"
                     >
                       <option value="">Select an operation</option>
                       {Array.isArray(subOperations) &&
@@ -110,6 +115,7 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
                           </option>
                         ))}
                     </Field>
+
                     {errors.sub_operation_id && touched.sub_operation_id && (
                       <div className="text-red-500 text-sm mt-1">
                         {errors.sub_operation_id}
@@ -117,18 +123,20 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
                     )}
                   </div>
 
-                  <div className="mt-6 grid grid-cols-2 gap-x-4">
+                  {/* Buttons */}
+                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="submit"
-                      className="bg-green-500 px-4 py-2 rounded-md text-white font-semibold disabled:bg-green-300"
+                      className="bg-green-500 px-4 py-2 rounded-md text-white font-semibold w-full disabled:bg-green-300"
                       disabled={isSubmitting}
                     >
                       {isSubmitting ? "Adding..." : "Add Operation"}
                     </button>
+
                     <button
                       type="button"
                       onClick={onCancel}
-                      className="bg-red-500 px-4 py-2 rounded-md text-white font-semibold"
+                      className="bg-red-500 px-4 py-2 rounded-md text-white font-semibold w-full"
                     >
                       Cancel
                     </button>

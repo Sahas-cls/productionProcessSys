@@ -85,9 +85,9 @@ exports.editNeedleType = async (req, res, next) => {
     }
 
     // check does name already exits?
-    const isNew = await NeedleTypeN.findOne({ where: { needle_type: type } });
+    const isNew = await NeedleTypeN.findAll({ where: { needle_type: type } });
 
-    if (isNew) {
+    if (isNew.length > 1) {
       const error = new Error("The needle type already in database");
       error.status = 401;
       throw error;

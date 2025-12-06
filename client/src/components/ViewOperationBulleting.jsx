@@ -149,7 +149,7 @@ const StyleCard = ({ style, onViewDetails }) => {
   const getImageUrl = (mediaUrl) => {
     if (!mediaUrl) return null;
     if (mediaUrl.startsWith("http")) return mediaUrl;
-    return `${apiUrl}/media/${mediaUrl}`;
+    return `${apiUrl}/api/b2-files/${mediaUrl}`;;
   };
 
   // Calculate total sub-operations across all main operations

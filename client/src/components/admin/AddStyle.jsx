@@ -34,7 +34,7 @@ const AddStyle = ({ userRole }) => {
   const [editingStyle, setEditingStyle] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
-  const { stylesList, isLoading, refresh } = useStyles();
+  const { stylesList, isLoading: styleLoading, refresh } = useStyles();
   const apiUrl = import.meta.env.VITE_API_URL;
 
   // Memoized filtered styles based on search term
@@ -483,7 +483,7 @@ const AddStyle = ({ userRole }) => {
   const getImageUrl = (mediaUrl) => {
     if (!mediaUrl) return null;
     if (mediaUrl.startsWith("http")) return mediaUrl;
-    return `${apiUrl}/media/${mediaUrl}`;
+    return `${apiUrl}/api/b2-files/${mediaUrl}`;
   };
 
   return (
@@ -946,42 +946,54 @@ const AddStyle = ({ userRole }) => {
       </AnimatePresence>
 
       {/* Styles Table */}
-        <motion.div 
-          className="bg-white rounded-xl shadow-md max-h-[20rem] overflow-x-auto overflow-y-auto w-full block"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-        >
-          <table className="min-w-max divide-y w-full divide-gray-200">
-            <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 text-xs md:text-base">
-              <tr>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Factory
+      <motion.div
+        className="bg-white rounded-xl shadow-md max-h-[30rem] overflow-x-auto overflow-y-auto w-full block"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.2 }}
+      >
+        <table className="min-w-max divide-y w-full divide-gray-200">
+          <thead className="bg-gradient-to-r from-blue-600 to-blue-500 sticky top-0 text-xs md:text-base">
+            <tr>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Factory
+              </th>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Customer
+              </th>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Season
+              </th>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Style No
+              </th>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Style Name
+              </th>
+              <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
+                Description
+              </th>
+              {userRole === "Admin" ? (
+                <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
+                  Actions
                 </th>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Season
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Style No
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Style Name
-                </th>
-                <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
-                  Description
-                </th>
-                {userRole === "Admin" ? (
-                  <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
-                    Actions
-                  </th>
-                ) : (
-                  ""
-                )}
+              ) : (
+                ""
+              )}
+            </tr>
+          </thead>
+          {styleLoading ? (
+            <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base overflow-x-hidden">
+              <tr className="overflow-x-hidden">
+                <td colSpan={7} className="py-2">
+                  <div className="flex flex-col items-center">
+                    <div className="text-center border-2 border-blue-600 border-t-transparent border-b-transparent w-[50px] h-[50px] rounded-full animate-spin"></div>
+                    <p className="">Styles Loading</p>
+                  </div>
+                </td>
               </tr>
-            </thead>
+            </tbody>
+          ) : (
             <tbody className="bg-white divide-y divide-gray-200 text-xs md:text-base">
               {Array.isArray(filteredStyles) && filteredStyles.length > 0 ? (
                 filteredStyles.map((style) => (
@@ -996,7 +1008,11 @@ const AddStyle = ({ userRole }) => {
                       <div className="font-medium text-gray-900 flex items-center gap-x-6">
                         {style.style_medias?.[0]?.media_url && (
                           <img
-                            src={getImageUrl(style.style_medias[0].media_url)} // Using helper function
+                            // Change from direct B2 URL:
+                            // src={`https://s3.eu-central-003.backblazeb2.com/guston-test-bucket/${style.style_medias[0].media_url}`}
+
+                            // To your proxy route:
+                            src={`${apiUrl}/api/b2-files/${style.style_medias[0].media_url}`}
                             alt="Style preview"
                             width={60}
                             height={60}
@@ -1004,6 +1020,8 @@ const AddStyle = ({ userRole }) => {
                             className="object-cover rounded"
                             onError={(e) => {
                               e.target.style.display = "none";
+                              // Optional: Add fallback
+                              e.target.src = "/placeholder-image.jpg";
                             }}
                           />
                         )}
@@ -1071,8 +1089,9 @@ const AddStyle = ({ userRole }) => {
                 </motion.tr>
               )}
             </tbody>
-          </table>
-        </motion.div>
+          )}
+        </table>
+      </motion.div>
       {/* <div className="">
         <h1 className="text-3xl">img</h1>
         <img

@@ -24,6 +24,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("front", "back"),
         allowNull: false,
       },
+      b2_file_id: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: { len: [0, 100] },
+      },
     },
     {
       tableName: "style_media",

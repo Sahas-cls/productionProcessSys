@@ -109,17 +109,18 @@ const TechPackUploader = ({
     try {
       const formData = new FormData();
 
-      // Append the metadata
+      // Append the metadata - ADD subOpId HERE!
       formData.append("styleId", uploadingData.style_id || 1);
       formData.append("styleNo", uploadingData.styleNo);
       formData.append("moId", uploadingData.moId);
       formData.append("sopId", uploadingData.sopId);
       formData.append("sopName", uploadingData.sopName);
+      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // ADD THIS LINE
       formData.append("originalFileName", selectedFile.name);
       formData.append("fileSize", selectedFile.size);
       formData.append("fileType", selectedFile.type);
 
-      // Append the Excel file
+      // Append the Excel file - use "techPack" field name (matching backend)
       formData.append("techPack", selectedFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -140,7 +141,7 @@ const TechPackUploader = ({
               setUploadProgress(percentCompleted);
             }
           },
-          timeout: 60000, // 60 seconds for larger files
+          timeout: 120000, // Increased to 120 seconds for larger tech packs
         }
       );
 
@@ -154,26 +155,44 @@ const TechPackUploader = ({
           let iconType = "success";
           let timerDuration = 4000;
 
-          // Check for processing results
-          if (response.data.processingResults) {
-            const results = response.data.processingResults;
-            successText = `Tech Pack processed successfully! Sheets: ${
-              results.sheetsProcessed
-            }, Rows: ${response.data.rowsImported || results.totalRows}`;
+          // Check for Excel processing results
+          if (response.data.data?.excel_processing) {
+            const results = response.data.data.excel_processing;
+            successText = `Tech Pack processed successfully!`;
 
-            if (response.data.warnings && response.data.warnings.length > 0) {
-              successTitle = "Uploaded with Warnings";
-              iconType = "warning";
-              successText += ` (${response.data.warnings.length} warnings)`;
+            if (results.sheetsProcessed > 0) {
+              successText += ` Sheets: ${results.sheetsProcessed}, Rows: ${results.totalRows}`;
+            }
+
+            if (results.error) {
+              successTitle = "Uploaded with Processing Note";
+              iconType = "info";
+              successText += ` (Data extraction had issues)`;
             }
           }
 
-          // Check storage type
-          if (response.data.storageType === "local" || response.data.warning) {
+          // Check if it's Backblaze B2 storage
+          if (
+            response.data.storage &&
+            response.data.storage.type === "backblaze_b2"
+          ) {
+            successTitle = "Uploaded to Cloud!";
+            successText = "Tech Pack uploaded to cloud storage successfully!";
+            iconType = "success";
+            timerDuration = 4000;
+
+            console.log("☁️ Stored in Backblaze B2:", {
+              bucket: response.data.storage.bucket,
+              region: response.data.storage.region,
+              fileId: response.data.data?.b2_file_id,
+              fileSize: response.data.data?.file_size,
+            });
+          }
+
+          // Check for any warnings
+          else if (response.data.warning) {
             successTitle = "Uploaded with Note";
-            successText =
-              response.data.warning ||
-              "Tech Pack saved to local storage (network unavailable)";
+            successText = response.data.warning;
             iconType = "warning";
             timerDuration = 5000;
           }
@@ -188,6 +207,27 @@ const TechPackUploader = ({
           });
 
           console.log("✅ Tech Pack upload successful:", response.data);
+          console.log(
+            "📁 Storage provider:",
+            response.data.storage?.type ||
+              response.data.storageProvider ||
+              "Backblaze B2"
+          );
+
+          // Store the returned data for later use if needed
+          if (response.data.data) {
+            console.log("📦 Uploaded tech pack details:", {
+              id: response.data.data.so_tech_id,
+              url:
+                response.data.data.tech_pack_url_proxy ||
+                response.data.data.tech_pack_url,
+              filename: response.data.data.file_name,
+              b2FileId: response.data.data.b2_file_id,
+              fileSize: response.data.data.file_size,
+              excelSheets: response.data.data.excel_processing?.sheetsProcessed,
+              excelRows: response.data.data.excel_processing?.totalRows,
+            });
+          }
 
           // Reset states after successful upload
           setSelectedFile(null);
@@ -198,6 +238,11 @@ const TechPackUploader = ({
           // Reset file input
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
+          }
+
+          // Optionally trigger a refresh of tech pack list
+          if (typeof onUploadSuccess === "function") {
+            onUploadSuccess(response.data.data);
           }
         } else if (response.data.success === false) {
           console.error("❌ Server returned failure:", response.data);
@@ -230,9 +275,16 @@ const TechPackUploader = ({
           "Server error occurred";
 
         if (error.response.status === 400) {
-          errorTitle = "Invalid File";
+          errorTitle = "Invalid Request";
           if (errorMessage?.includes("too large")) {
-            errorMessage = "File is too large. Maximum size is 10MB";
+            errorMessage = "File is too large. Maximum size is 50MB";
+          } else if (errorMessage?.includes("Missing required fields")) {
+            // More specific error for missing subOpId
+            if (errorMessage?.includes("subOpId")) {
+              errorMessage = "Please provide sub-operation ID";
+            } else {
+              errorMessage = "Please fill all required fields";
+            }
           } else if (errorMessage?.includes("Invalid file format")) {
             errorMessage = "Invalid Excel file format. Please check the file";
           } else if (errorMessage?.includes("corrupted")) {
@@ -244,7 +296,7 @@ const TechPackUploader = ({
           }
         } else if (error.response.status === 413) {
           errorTitle = "File Too Large";
-          errorMessage = "File exceeds size limit. Maximum size is 10MB";
+          errorMessage = "File exceeds size limit. Maximum size is 50MB";
         } else if (error.response.status === 415) {
           errorTitle = "Unsupported Format";
           errorMessage =
@@ -253,9 +305,16 @@ const TechPackUploader = ({
           errorTitle = "Processing Error";
           errorMessage =
             "The Tech Pack could not be processed. Please check the file structure";
+        } else if (
+          error.response.status === 502 ||
+          error.response.status === 503
+        ) {
+          errorTitle = "Cloud Storage Error";
+          errorMessage = "Unable to upload to cloud storage. Please try again.";
+          timerDuration = 6000;
         } else if (error.response.status >= 500) {
           errorTitle = "Server Error";
-          errorMessage = "Server is not accessible. Please try again later";
+          errorMessage = "Server encountered an error. Please try again later.";
           timerDuration = 6000;
         }
       } else if (error.request) {

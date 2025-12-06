@@ -512,14 +512,7 @@ const ViewStyleDetails = () => {
                                             </span>{" "}
                                             {machine.machine_location}
                                           </p>
-                                          <p className="text-gray-700">
-                                            <span className="font-medium">
-                                              Needles:
-                                            </span>{" "}
-                                            {machine.needle_count}
-                                          </p>
                                         </div>
-
                                         {/* Needle Types */}
                                         {subOp.needle_types?.filter(
                                           (nt) =>
@@ -605,6 +598,50 @@ const ViewStyleDetails = () => {
                                         )}
                                       </div>
                                     ))}
+                                  </div>
+                                  <h2 className="font-medium mt-4">
+                                    Needle configurations
+                                  </h2>
+                                  <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
+                                    {/* needle size */}
+                                    <div className="">
+                                      <p className="text-gray-700">
+                                        <span className="font-medium text-sm">
+                                          Needle Size:
+                                        </span>{" "}
+                                        {subOp.needle_count}
+                                      </p>
+                                    </div>
+
+                                    {/* needle type */}
+                                    <div className="">
+                                      <p className="text-gray-700">
+                                        <span className="font-medium text-sm">
+                                          Needle Type:
+                                        </span>{" "}
+                                        {subOp?.needle_type?.needle_type}
+                                      </p>
+                                    </div>
+
+                                    {/* needle type */}
+                                    <div className="">
+                                      <p className="text-gray-700">
+                                        <span className="font-medium text-sm">
+                                          Thread Type:
+                                        </span>{" "}
+                                        {subOp?.thread?.thread_category}
+                                      </p>
+                                    </div>
+
+                                    {/* looper type */}
+                                    <div className="">
+                                      <p className="text-gray-700">
+                                        <span className="font-medium text-sm">
+                                          Looper Type:
+                                        </span>{" "}
+                                        {subOp?.looper?.thread_category}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
                               )}

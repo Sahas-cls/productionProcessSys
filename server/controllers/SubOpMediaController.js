@@ -9,24 +9,29 @@ const {
 } = require("../models");
 const path = require("path");
 const fs = require("fs");
-
+const B2SubOpStorage = require("../utils/b2SubOpStorage");
+const axios = require("axios");
+const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 // to upload video
+const b2SubOpStorage = require("../utils/b2SubOpStorage");
+require("dotenv").config();
+
 exports.uploadVideo = async (req, res, next) => {
-  console.log("Request body:", req.body);
+  console.log("📤 [B2] Video upload request received");
+  console.log("📋 Request body:", req.body);
   console.log(
-    "File details:",
+    "📁 File details:",
     req.file
       ? {
           originalname: req.file.originalname,
           mimetype: req.file.mimetype,
           size: req.file.size,
+          bufferSize: req.file.buffer?.length || 0,
         }
       : "No file"
   );
 
-  let filename = null;
-  let filePath = null;
-  let fileWriteSuccessful = false;
+  let uploadResult = null;
   let dbRecord = null;
 
   try {
@@ -39,14 +44,19 @@ exports.uploadVideo = async (req, res, next) => {
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId } = req.body;
+    const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
 
     // Validate required fields
-    if (!styleNo || !moId || !sopId) {
-      console.log("❌ Missing required fields:", { styleNo, moId, sopId });
+    if (!styleNo || !moId || !sopId || !subOpId) {
+      console.log("❌ Missing required fields:", {
+        styleNo,
+        moId,
+        sopId,
+        subOpId,
+      });
       return res.status(400).json({
         message:
-          "Missing required fields: styleNo, moId, and sopId are required",
+          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
         success: false,
       });
     }
@@ -67,162 +77,184 @@ exports.uploadVideo = async (req, res, next) => {
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    filename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+    // Generate filename - use generatedName from middleware if available
+    const filename =
+      req.file.generatedName ||
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+
     console.log("📁 Generated filename:", filename);
+    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
 
-    // Network path configuration
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpVideos";
-
-    // Check network accessibility first - if not accessible, return error and exit
-    console.log("🔍 Checking network path accessibility...");
-    const isNetworkAccessible = await checkNetworkPath(networkPath);
-
-    if (!isNetworkAccessible) {
-      console.log(
-        "❌ Network path not accessible - returning error to frontend"
-      );
-      return res.status(503).json({
-        message:
-          "Network storage is not accessible. Please check the network connection and try again.",
+    // Validate file buffer
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      console.log("❌ File buffer is empty");
+      return res.status(400).json({
+        message: "Uploaded file is empty or corrupted",
         success: false,
-        error: "NETWORK_STORAGE_UNAVAILABLE",
       });
     }
 
-    console.log("✅ Network path is accessible, proceeding with upload");
-    filePath = path.join(networkPath, filename);
-    console.log("🎯 Final file path:", filePath);
+    // ==================== UPLOAD TO BACKBLAZE B2 ====================
+    console.log("☁️  Uploading to Backblaze B2...");
 
-    // Save file to disk with proper error handling
     try {
-      console.log("💾 Attempting to write file to network...");
-      console.log(
-        "📊 File buffer size:",
-        req.file.buffer?.length || 0,
-        "bytes"
+      // Upload file to B2
+      uploadResult = await b2SubOpStorage.uploadSubOpFile(
+        req.file.buffer,
+        filename,
+        "video", // media type for folder organization
+        subOpId // subOpId for folder organization
       );
 
-      if (!req.file.buffer || req.file.buffer.length === 0) {
-        throw new Error("File buffer is empty");
+      console.log("✅ B2 Upload Successful:", {
+        filePath: uploadResult.filePath,
+        fileId: uploadResult.fileId,
+        fileName: uploadResult.fileName,
+      });
+    } catch (b2Error) {
+      console.error("❌ B2 Upload Failed:", {
+        error: b2Error.message,
+        code: b2Error.code,
+        stack: b2Error.stack?.split("\n")[0],
+      });
+
+      let errorMessage = "Failed to upload video to cloud storage";
+      let statusCode = 500;
+
+      if (
+        b2Error.code === "AccessDenied" ||
+        b2Error.code === "InvalidAccessKeyId"
+      ) {
+        errorMessage = "Cloud storage authentication failed";
+        statusCode = 503;
+      } else if (b2Error.code === "NoSuchBucket") {
+        errorMessage = "Cloud storage bucket not found";
+        statusCode = 503;
+      } else if (
+        b2Error.message.includes("ENOTFOUND") ||
+        b2Error.message.includes("ECONNREFUSED")
+      ) {
+        errorMessage = "Cannot connect to cloud storage";
+        statusCode = 503;
       }
 
-      fs.writeFileSync(filePath, req.file.buffer);
-      console.log("✅ File write completed, verifying...");
-
-      // Verify file was actually written
-      const stats = fs.statSync(filePath);
-      console.log("📈 File stats - Size:", stats.size, "bytes");
-
-      if (stats.size > 0) {
-        fileWriteSuccessful = true;
-        console.log("✅ File saved successfully to network storage:", filePath);
-      } else {
-        console.error("❌ File write resulted in empty file");
-        throw new Error("File write resulted in empty file (0 bytes)");
-      }
-    } catch (writeError) {
-      console.error("❌ File write error to network:", writeError);
-      throw new Error(
-        `Failed to save video file to network storage: ${writeError.message}`
-      );
+      return res.status(statusCode).json({
+        message: errorMessage,
+        error:
+          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+        success: false,
+        storage: "backblaze_b2",
+      });
     }
 
-    // Only save to DB if file write was successful
-    if (fileWriteSuccessful) {
-      try {
-        console.log("💾 Saving to database...");
-        dbRecord = await SubOperationMedia.create({
-          style_id: styleId,
-          operation_id: moId,
-          sub_operation_id: sopId,
-          sub_operation_name: sopName || "null",
-          media_url: filename,
-          video_url: filename,
-        });
-        console.log("✅ Database record created with ID:", dbRecord.id);
-      } catch (dbError) {
-        console.error("❌ Database error:", dbError);
-        throw new Error(`Database save failed: ${dbError.message}`);
+    // ==================== SAVE TO DATABASE ====================
+    console.log("💾 Saving to database...");
+
+    try {
+      dbRecord = await SubOperationMedia.create({
+        style_id: styleId,
+        operation_id: moId,
+        sub_operation_id: sopId,
+        sub_operation_name: sopName || null,
+        media_url: uploadResult.filePath, // Store B2 file path
+        video_url: uploadResult.filePath, // Store B2 file path
+        // NEW FIELDS:
+        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
+        file_size: req.file.size,
+        original_filename: req.file.originalname,
+        uploaded_by: req.user?.userId || null,
+        file_type: req.file.mimetype,
+      });
+
+      console.log("✅ Database record created:", {
+        so_media_id: dbRecord.so_media_id,
+        media_url: dbRecord.media_url,
+        b2_file_id: dbRecord.b2_file_id,
+      });
+    } catch (dbError) {
+      console.error("❌ Database save failed:", dbError);
+
+      // Attempt to delete from B2 since DB save failed
+      if (uploadResult && uploadResult.fileId) {
+        try {
+          console.log("🧹 Cleaning up B2 file after DB failure...");
+          await b2SubOpStorage.deleteFile(
+            uploadResult.fileId,
+            uploadResult.filePath
+          );
+          console.log("✅ B2 file cleaned up");
+        } catch (cleanupError) {
+          console.error("❌ Failed to clean up B2 file:", cleanupError);
+        }
       }
+
+      return res.status(500).json({
+        message: "Failed to save video record to database",
+        error:
+          process.env.NODE_ENV === "development" ? dbError.message : undefined,
+        success: false,
+      });
     }
 
-    // Final success response
-    console.log("🎉 Upload process completed successfully");
+    // ==================== SUCCESS RESPONSE ====================
+    console.log("🎉 Video upload completed successfully!");
+
     res.status(201).json({
-      message: "Video uploaded to network storage successfully",
-      data: dbRecord,
-      filename: filename,
-      path: filePath,
+      message: "Video uploaded to cloud storage successfully",
       success: true,
+      data: {
+        so_media_id: dbRecord.so_media_id,
+        media_url: uploadResult.filePath,
+        video_url: uploadResult.filePath,
+        video_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+        file_name: uploadResult.fileName,
+        original_filename: req.file.originalname,
+        file_size: req.file.size,
+        file_type: req.file.mimetype,
+        sub_operation_name: dbRecord.sub_operation_name,
+        uploaded_at: dbRecord.createdAt,
+        b2_file_id: uploadResult.fileId,
+      },
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: "eu-central-003",
+      },
     });
   } catch (error) {
-    console.error("❌ Upload process failed:", error.message);
+    console.error("❌ Unhandled error in video upload:", {
+      message: error.message,
+      stack: error.stack,
+    });
 
-    // Clean up file if it was partially created but DB operation failed
-    if (
-      filename &&
-      filePath &&
-      fs.existsSync(filePath) &&
-      !fileWriteSuccessful
-    ) {
+    // Final cleanup if anything went wrong
+    if (uploadResult && uploadResult.fileId) {
       try {
-        console.log("🧹 Cleaning up file after error:", filePath);
-        fs.unlinkSync(filePath);
-        console.log("✅ File cleaned up successfully");
-      } catch (cleanupError) {
-        console.error("❌ Error deleting file during cleanup:", cleanupError);
-      }
-    }
-
-    // Clean up DB record if file write failed but DB record was created
-    if (dbRecord && !fileWriteSuccessful) {
-      try {
-        console.log("🧹 Cleaning up database record after error:", dbRecord.id);
-        await SubOperationMedia.destroy({ where: { id: dbRecord.id } });
-        console.log("✅ Database record cleaned up successfully");
-      } catch (dbCleanupError) {
-        console.error(
-          "❌ Error deleting database record during cleanup:",
-          dbCleanupError
+        console.log("🧹 Final cleanup of B2 file...");
+        await b2SubOpStorage.deleteFile(
+          uploadResult.fileId,
+          uploadResult.filePath
         );
+      } catch (cleanupError) {
+        console.error("❌ Final cleanup failed:", cleanupError);
       }
     }
 
-    // Determine appropriate status code and error message
-    let statusCode = 500;
-    let errorMessage = "Server error during file upload";
-
-    if (
-      error.message.includes("Missing required fields") ||
-      error.message.includes("No file uploaded")
-    ) {
-      statusCode = 400;
-      errorMessage = error.message;
-    } else if (
-      error.message.includes("Failed to save video file to network storage")
-    ) {
-      statusCode = 500;
-      errorMessage = "Failed to save video file to network storage";
-    } else if (error.message.includes("Database save failed")) {
-      statusCode = 500;
-      errorMessage = "Failed to save record to database";
-    } else if (
-      error.name === "SequelizeError" ||
-      error.name === "SequelizeValidationError"
-    ) {
-      statusCode = 500;
-      errorMessage = "Database error occurred";
+    // Clean up DB record if it was created
+    if (dbRecord && dbRecord.so_media_id) {
+      try {
+        console.log("🧹 Final cleanup of database record...");
+        await SubOperationMedia.destroy({
+          where: { so_media_id: dbRecord.so_media_id },
+        });
+      } catch (dbCleanupError) {
+        console.error("❌ Database cleanup failed:", dbCleanupError);
+      }
     }
 
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
-
-    res.status(statusCode).json({
-      message: errorMessage,
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Internal server error",
+    res.status(500).json({
+      message: "Failed to upload video",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
       success: false,
     });
   }
@@ -268,14 +300,16 @@ async function checkNetworkPath(networkPath) {
 
 // to get uploaded video according to the specific sub operation
 exports.getVideos = async (req, res, next) => {
-  //
   const { subOpId } = req.params;
-  console.log("providing videos ------------ ", subOpId);
+  console.log("📹 [B2] Fetching videos for subOpId:", subOpId);
+
   if (isNaN(subOpId)) {
-    return res
-      .status(400)
-      .json({ status: "error", message: "Invalid subOpId" });
+    return res.status(400).json({
+      status: "error",
+      message: "Invalid subOpId",
+    });
   }
+
   try {
     const videos = await SubOperationMedia.findAll({
       where: { sub_operation_id: parseInt(subOpId) },
@@ -284,13 +318,38 @@ exports.getVideos = async (req, res, next) => {
         { model: SubOperation, as: "sub_operation" },
         { model: MainOperation, as: "main_operation" },
       ],
+      order: [["createdAt", "DESC"]], // Newest first
     });
 
-    console.log("videos: ", videos);
+    console.log(`✅ Found ${videos.length} videos for subOpId ${subOpId}`);
 
-    res.status(200).json({ status: "success", data: videos });
+    // Transform videos to include proxy URLs for frontend
+    const videosWithUrls = videos.map((video) => {
+      const videoData = video.toJSON();
+
+      // Add proxy URL for frontend access
+      if (videoData.media_url) {
+        videoData.video_url_proxy = `/api/b2-files/${videoData.media_url}`;
+      }
+
+      // If you want to keep both URLs for reference
+      videoData.video_url_original = videoData.media_url;
+
+      // Optional: Add direct B2 URL if bucket is public
+      // videoData.video_url_direct = `https://s3.eu-central-003.backblazeb2.com/${process.env.B2_BUCKET_NAME}/${videoData.media_url}`;
+
+      return videoData;
+    });
+
+    res.status(200).json({
+      status: "success",
+      data: videosWithUrls,
+      count: videos.length,
+      storage_type: "backblaze_b2",
+      proxy_base: "/api/b2-files/",
+    });
   } catch (error) {
-    console.error("Error while fetching videos: ", error);
+    console.error("❌ Error while fetching videos:", error);
     return next(error);
   }
 };
@@ -316,31 +375,68 @@ exports.deleteVideo = async (req, res, next) => {
       });
     }
 
-    // Extract filename from record
+    // Extract filename from record (adjust based on your field name)
     const filename = videoRecord.media_url || videoRecord.video_url;
+    const bucketId = process.env.B2_BUCKET_ID || "your-bucket-id";
 
-    if (!filename) {
-      // Delete DB record even if filename is missing
-      await SubOperationMedia.destroy({
-        where: { so_media_id: so_media_id },
-      });
+    // Initialize Backblaze B2 client
+    const B2 = require("backblaze-b2");
+    const b2 = new B2({
+      applicationKeyId: process.env.B2_KEY_ID,
+      applicationKey: process.env.B2_APPLICATION_KEY,
+    });
 
-      return res.status(200).json({
-        message: "Database record deleted (no file found to delete)",
-      });
+    let fileDeleted = false;
+    let b2FileId = null;
+
+    // Check if we have a Backblaze file reference
+    if (videoRecord.b2_file_id) {
+      b2FileId = videoRecord.b2_file_id;
     }
 
-    // Construct file path (same as upload path)
-    const filePath = path.join(
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpVideos",
-      filename
-    );
+    // Delete from Backblaze B2 if filename exists
+    if (filename || b2FileId) {
+      try {
+        // Authorize with B2
+        await b2.authorize();
 
-    // Check if file exists and delete it
-    let fileDeleted = false;
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      fileDeleted = true;
+        // If we have a fileId (most reliable way to delete)
+        if (b2FileId) {
+          await b2.deleteFileVersion({
+            fileId: b2FileId,
+            fileName: filename || videoRecord.original_filename,
+          });
+          fileDeleted = true;
+        }
+        // Fallback: delete by filename if we don't have fileId
+        else if (filename) {
+          // First, get file info to obtain fileId
+          const listResponse = await b2.listFileNames({
+            bucketId: bucketId,
+            startFileName: filename,
+            maxFileCount: 1,
+          });
+
+          if (listResponse.data.files.length > 0) {
+            const fileInfo = listResponse.data.files[0];
+            await b2.deleteFileVersion({
+              fileId: fileInfo.fileId,
+              fileName: fileInfo.fileName,
+            });
+            fileDeleted = true;
+          }
+        }
+      } catch (b2Error) {
+        // If file not found in B2, that's okay - we'll still delete DB record
+        if (b2Error.response && b2Error.response.status === 404) {
+          console.log(
+            "File not found in Backblaze B2, proceeding with DB deletion"
+          );
+        } else {
+          console.error("Backblaze B2 deletion error:", b2Error);
+          // Don't fail completely - we'll still try to delete the DB record
+        }
+      }
     }
 
     // Delete the database record
@@ -354,6 +450,7 @@ exports.deleteVideo = async (req, res, next) => {
         recordDeleted: true,
         fileDeleted: fileDeleted,
         filename: filename,
+        storageProvider: "Backblaze B2",
       },
     });
   } catch (error) {
@@ -373,21 +470,21 @@ exports.deleteVideo = async (req, res, next) => {
 
 // to upload image
 exports.uploadImage = async (req, res, next) => {
-  console.log("Request body:", req.body);
+  console.log("📤 [B2] Image upload request received");
+  console.log("📋 Request body:", req.body);
   console.log(
-    "File details:",
+    "📁 File details:",
     req.file
       ? {
           originalname: req.file.originalname,
           mimetype: req.file.mimetype,
           size: req.file.size,
+          bufferSize: req.file.buffer?.length || 0,
         }
       : "No file"
   );
 
-  let filename = null;
-  let filePath = null;
-  let fileWriteSuccessful = false;
+  let uploadResult = null;
   let dbRecord = null;
 
   try {
@@ -400,14 +497,19 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId } = req.body;
+    const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
 
     // Validate required fields
-    if (!styleNo || !moId || !sopId) {
-      console.log("❌ Missing required fields:", { styleNo, moId, sopId });
+    if (!styleNo || !moId || !sopId || !subOpId) {
+      console.log("❌ Missing required fields:", {
+        styleNo,
+        moId,
+        sopId,
+        subOpId,
+      });
       return res.status(400).json({
         message:
-          "Missing required fields: styleNo, moId, and sopId are required",
+          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
         success: false,
       });
     }
@@ -428,179 +530,223 @@ exports.uploadImage = async (req, res, next) => {
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    filename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+    // Generate filename - use generatedName from middleware if available
+    const filename =
+      req.file.generatedName ||
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+
     console.log("📁 Generated filename:", filename);
+    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
 
-    // Network path configuration for images
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpImages";
-
-    // Check network accessibility first - if not accessible, return error and exit
-    console.log("🔍 Checking network path accessibility...");
-    const isNetworkAccessible = await checkNetworkPath(networkPath);
-
-    if (!isNetworkAccessible) {
-      console.log(
-        "❌ Network path not accessible - returning error to frontend"
-      );
-      return res.status(503).json({
-        message:
-          "Network storage is not accessible. Please check the network connection and try again.",
+    // Validate file buffer
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      console.log("❌ File buffer is empty");
+      return res.status(400).json({
+        message: "Uploaded file is empty or corrupted",
         success: false,
-        error: "NETWORK_STORAGE_UNAVAILABLE",
       });
     }
 
-    console.log("✅ Network path is accessible, proceeding with upload");
-    filePath = path.join(networkPath, filename);
-    console.log("🎯 Final file path:", filePath);
+    // ==================== UPLOAD TO BACKBLAZE B2 ====================
+    console.log("☁️ Uploading to Backblaze B2...");
 
-    // Save file to disk with proper error handling
     try {
-      console.log("💾 Attempting to write file to network...");
-      console.log(
-        "📊 File buffer size:",
-        req.file.buffer?.length || 0,
-        "bytes"
+      // Upload file to B2 - using "image" type instead of "video"
+      uploadResult = await b2SubOpStorage.uploadSubOpFile(
+        req.file.buffer,
+        filename,
+        "image", // Changed to "image" for folder organization
+        subOpId // subOpId for folder organization
       );
 
-      if (!req.file.buffer || req.file.buffer.length === 0) {
-        throw new Error("File buffer is empty");
+      console.log("✅ B2 Upload Successful:", {
+        filePath: uploadResult.filePath,
+        fileId: uploadResult.fileId,
+        fileName: uploadResult.fileName,
+      });
+    } catch (b2Error) {
+      console.error("❌ B2 Upload Failed:", {
+        error: b2Error.message,
+        code: b2Error.code,
+        stack: b2Error.stack?.split("\n")[0],
+      });
+
+      let errorMessage = "Failed to upload image to cloud storage";
+      let statusCode = 500;
+
+      if (
+        b2Error.code === "AccessDenied" ||
+        b2Error.code === "InvalidAccessKeyId"
+      ) {
+        errorMessage = "Cloud storage authentication failed";
+        statusCode = 503;
+      } else if (b2Error.code === "NoSuchBucket") {
+        errorMessage = "Cloud storage bucket not found";
+        statusCode = 503;
+      } else if (
+        b2Error.message.includes("ENOTFOUND") ||
+        b2Error.message.includes("ECONNREFUSED")
+      ) {
+        errorMessage = "Cannot connect to cloud storage";
+        statusCode = 503;
       }
 
-      fs.writeFileSync(filePath, req.file.buffer);
-      console.log("✅ File write completed, verifying...");
-
-      // Verify file was actually written
-      const stats = fs.statSync(filePath);
-      console.log("📈 File stats - Size:", stats.size, "bytes");
-
-      if (stats.size > 0) {
-        fileWriteSuccessful = true;
-        console.log("✅ File saved successfully to network storage:", filePath);
-      } else {
-        console.error("❌ File write resulted in empty file");
-        throw new Error("File write resulted in empty file (0 bytes)");
-      }
-    } catch (writeError) {
-      console.error("❌ File write error to network:", writeError);
-      throw new Error(
-        `Failed to save image file to network storage: ${writeError.message}`
-      );
+      return res.status(statusCode).json({
+        message: errorMessage,
+        error:
+          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+        success: false,
+        storage: "backblaze_b2",
+      });
     }
 
-    // Only save to DB if file write was successful
-    if (fileWriteSuccessful) {
-      try {
-        console.log("💾 Saving to database...");
-        dbRecord = await SubOperationImages.create({
-          style_id: styleId || 1, // Default to 1 if not provided, adjust as needed
-          operation_id: moId,
-          sub_operation_id: sopId,
-          sub_operation_name: sopName || "null",
-          image_url: filename,
-        });
-        console.log("✅ Database record created with ID:", dbRecord.so_img_id);
-      } catch (dbError) {
-        console.error("❌ Database error:", dbError);
-        throw new Error(`Database save failed: ${dbError.message}`);
+    // ==================== SAVE TO DATABASE ====================
+    console.log("💾 Saving to database...");
+
+    try {
+      // Assuming your image model is SubOperationImages
+      dbRecord = await SubOperationImages.create({
+        style_id: styleId || 1, // Default to 1 if not provided
+        operation_id: moId,
+        sub_operation_id: sopId,
+        sub_operation_name: sopName || null,
+        // Store B2 file paths
+        image_url: uploadResult.filePath,
+        // NEW FIELDS to match video structure:
+        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
+        file_size: req.file.size,
+        original_filename: req.file.originalname,
+        uploaded_by: req.user?.userId || null,
+        file_type: req.file.mimetype,
+        // If you want to track subOpId separately:
+        sub_op_id: subOpId,
+      });
+
+      console.log("✅ Database record created:", {
+        so_img_id: dbRecord.so_img_id,
+        image_url: dbRecord.image_url,
+        b2_file_id: dbRecord.b2_file_id,
+      });
+    } catch (dbError) {
+      console.error("❌ Database save failed:", dbError);
+
+      // Attempt to delete from B2 since DB save failed
+      if (uploadResult && uploadResult.fileId) {
+        try {
+          console.log("🧹 Cleaning up B2 file after DB failure...");
+          await b2SubOpStorage.deleteFile(
+            uploadResult.fileId,
+            uploadResult.filePath
+          );
+          console.log("✅ B2 file cleaned up");
+        } catch (cleanupError) {
+          console.error("❌ Failed to clean up B2 file:", cleanupError);
+        }
       }
+
+      return res.status(500).json({
+        message: "Failed to save image record to database",
+        error:
+          process.env.NODE_ENV === "development" ? dbError.message : undefined,
+        success: false,
+      });
     }
 
-    // Final success response
-    console.log("🎉 Upload process completed successfully");
+    // ==================== SUCCESS RESP ====================
+    console.log("🎉 Image upload completed successfully!");
+
     res.status(201).json({
-      message: "Image uploaded to network storage successfully",
-      data: dbRecord,
-      filename: filename,
-      path: filePath,
+      message: "Image uploaded to cloud storage successfully",
       success: true,
+      data: {
+        so_img_id: dbRecord.so_img_id,
+        image_url: uploadResult.filePath,
+        image_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+        file_name: uploadResult.fileName,
+        original_filename: req.file.originalname,
+        file_size: req.file.size,
+        file_type: req.file.mimetype,
+        sub_operation_name: dbRecord.sub_operation_name,
+        uploaded_at: dbRecord.createdAt,
+        b2_file_id: uploadResult.fileId,
+      },
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: "eu-central-003", // Adjust if needed
+      },
     });
   } catch (error) {
-    console.error("❌ Upload process failed:", error.message);
+    console.error("❌ Unhandled error in image upload:", {
+      message: error.message,
+      stack: error.stack,
+    });
 
-    // Clean up file if it was partially created but DB operation failed
-    if (
-      filename &&
-      filePath &&
-      fs.existsSync(filePath) &&
-      !fileWriteSuccessful
-    ) {
+    // Final cleanup if anything went wrong
+    if (uploadResult && uploadResult.fileId) {
       try {
-        console.log("🧹 Cleaning up file after error:", filePath);
-        fs.unlinkSync(filePath);
-        console.log("✅ File cleaned up successfully");
+        console.log("🧹 Final cleanup of B2 file...");
+        await b2SubOpStorage.deleteFile(
+          uploadResult.fileId,
+          uploadResult.filePath
+        );
       } catch (cleanupError) {
-        console.error("❌ Error deleting file during cleanup:", cleanupError);
+        console.error("❌ Final cleanup failed:", cleanupError);
       }
     }
 
-    // Clean up DB record if file write failed but DB record was created
-    if (dbRecord && !fileWriteSuccessful) {
+    // Clean up DB record if it was created
+    if (dbRecord && dbRecord.so_img_id) {
       try {
-        console.log(
-          "🧹 Cleaning up database record after error:",
-          dbRecord.so_img_id
-        );
+        console.log("🧹 Final cleanup of database record...");
         await SubOperationImages.destroy({
           where: { so_img_id: dbRecord.so_img_id },
         });
-        console.log("✅ Database record cleaned up successfully");
       } catch (dbCleanupError) {
-        console.error(
-          "❌ Error deleting database record during cleanup:",
-          dbCleanupError
-        );
+        console.error("❌ Database cleanup failed:", dbCleanupError);
       }
     }
 
-    // Determine appropriate status code and error message
-    let statusCode = 500;
-    let errorMessage = "Server error during file upload";
-
-    if (
-      error.message.includes("Missing required fields") ||
-      error.message.includes("No file uploaded")
-    ) {
-      statusCode = 400;
-      errorMessage = error.message;
-    } else if (
-      error.message.includes("Failed to save image file to network storage")
-    ) {
-      statusCode = 500;
-      errorMessage = "Failed to save image file to network storage";
-    } else if (error.message.includes("Database save failed")) {
-      statusCode = 500;
-      errorMessage = "Failed to save record to database";
-    } else if (
-      error.name === "SequelizeError" ||
-      error.name === "SequelizeValidationError"
-    ) {
-      statusCode = 500;
-      errorMessage = "Database error occurred";
-    }
-
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
-
-    res.status(statusCode).json({
-      message: errorMessage,
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Internal server error",
+    res.status(500).json({
+      message: "Failed to upload image",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
       success: false,
     });
   }
 };
 
+// Helper function to delete from Backblaze B2
+async function deleteFromBackblazeB2(filename, fileId = null) {
+  const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
+
+  const s3Client = new S3Client({
+    endpoint: `https://s3.${
+      process.env.B2_REGION || "us-west-002"
+    }.backblazeb2.com`,
+    region: process.env.B2_REGION || "us-west-002",
+    credentials: {
+      accessKeyId: process.env.B2_KEY_ID,
+      secretAccessKey: process.env.B2_APPLICATION_KEY,
+    },
+    forcePathStyle: true,
+  });
+
+  const deleteParams = {
+    Bucket: process.env.B2_BUCKET_NAME,
+    Key: `images/${filename}`,
+  };
+
+  await s3Client.send(new DeleteObjectCommand(deleteParams));
+}
 // to delete image
 exports.deleteImage = async (req, res, next) => {
   const { so_img_id } = req.params;
 
-  console.log("🗑️ Delete image request for ID:", so_img_id);
+  console.log("🗑️ [B2] Delete image request for ID:", so_img_id);
 
   let imageRecord = null;
-  let filePath = null;
+  let b2Deleted = false;
+  let b2Error = null;
 
   try {
     // Validate image ID
@@ -617,6 +763,17 @@ exports.deleteImage = async (req, res, next) => {
       console.log("🔍 Searching for image record in database...");
       imageRecord = await SubOperationImages.findOne({
         where: { so_img_id: so_img_id },
+        attributes: [
+          "so_img_id",
+          "image_url",
+          "b2_file_id",
+          "sub_operation_name",
+          "original_filename",
+          "file_size",
+          "style_id",
+          "operation_id",
+          "sub_operation_id",
+        ],
       });
 
       if (!imageRecord) {
@@ -629,69 +786,145 @@ exports.deleteImage = async (req, res, next) => {
 
       console.log("✅ Image record found:", {
         id: imageRecord.so_img_id,
-        filename: imageRecord.image_url,
-        style_id: imageRecord.style_id,
-        operation_id: imageRecord.operation_id,
+        b2_file_id: imageRecord.b2_file_id,
+        image_url: imageRecord.image_url,
+        original_filename: imageRecord.original_filename,
+        file_size: imageRecord.file_size,
+        sub_operation_id: imageRecord.sub_operation_id,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // Construct file path
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpImages";
-    filePath = path.join(networkPath, imageRecord.image_url);
-    console.log("📁 File path to delete:", filePath);
+    // ==================== DELETE FROM BACKBLAZE B2 ====================
+    if (imageRecord.b2_file_id && imageRecord.image_url) {
+      console.log("☁️ Deleting from Backblaze B2...");
 
-    // Check if file exists and delete it
-    let fileDeleted = false;
-    try {
-      console.log("🔍 Checking if file exists...");
-      if (fs.existsSync(filePath)) {
-        console.log("✅ File exists, proceeding with deletion...");
-        fs.unlinkSync(filePath);
-        fileDeleted = true;
-        console.log("✅ File deleted successfully from network storage");
-      } else {
-        console.log(
-          "⚠️ File not found in storage, but will delete database record"
+      try {
+        // Check if we have the b2SubOpStorage service
+        if (!b2SubOpStorage || !b2SubOpStorage.deleteFile) {
+          console.error("❌ B2 storage service not available");
+          throw new Error("Cloud storage service unavailable");
+        }
+
+        await b2SubOpStorage.deleteFile(
+          imageRecord.b2_file_id,
+          imageRecord.image_url
         );
+
+        b2Deleted = true;
+        console.log("✅ B2 deletion successful:", {
+          fileId: imageRecord.b2_file_id,
+          filePath: imageRecord.image_url,
+        });
+      } catch (b2DeleteError) {
+        b2Error = b2DeleteError;
+        console.error("⚠️ B2 deletion failed:", {
+          error: b2DeleteError.message,
+          code: b2DeleteError.code,
+          fileId: imageRecord.b2_file_id,
+        });
+
+        // Check if it's a "not found" error - that's okay, file might already be deleted
+        if (
+          b2DeleteError.code === "NoSuchKey" ||
+          b2DeleteError.message.includes("not found") ||
+          b2DeleteError.message.includes("NoSuchFile")
+        ) {
+          console.log(
+            "ℹ️ File not found in B2 (may have been deleted already)"
+          );
+          b2Deleted = true; // Consider it "deleted" for our purposes
+        } else if (
+          b2DeleteError.code === "AccessDenied" ||
+          b2DeleteError.message.includes("InvalidAccessKeyId")
+        ) {
+          console.error("❌ B2 authentication failed - check credentials");
+          // Don't throw - still delete DB record
+        } else if (
+          b2DeleteError.message.includes("ENOTFOUND") ||
+          b2DeleteError.message.includes("ECONNREFUSED")
+        ) {
+          console.error("❌ Cannot connect to B2 - network issue");
+          // Don't throw - still delete DB record
+        }
       }
-    } catch (fileError) {
-      console.error("❌ File deletion error:", fileError);
-      // Don't throw error here - we still want to delete the DB record
+    } else {
+      console.log("ℹ️ No B2 file ID or image URL found, skipping B2 deletion");
       console.log(
-        "⚠️ File deletion failed, but continuing with database record deletion"
+        "   B2 File ID:",
+        imageRecord.b2_file_id ? "Exists" : "Missing"
+      );
+      console.log(
+        "   Image URL:",
+        imageRecord.image_url ? "Exists" : "Missing"
       );
     }
 
-    // Delete database record
+    // ==================== DELETE FROM DATABASE ====================
+    let dbDeleted = false;
     try {
       console.log("💾 Deleting database record...");
       await SubOperationImages.destroy({
         where: { so_img_id: so_img_id },
       });
+      dbDeleted = true;
       console.log("✅ Database record deleted successfully");
     } catch (dbDeleteError) {
       console.error("❌ Database deletion error:", dbDeleteError);
+
+      // If DB deletion fails, but B2 deletion succeeded, we have an orphaned file
+      if (b2Deleted) {
+        console.error(
+          "⚠️ WARNING: File deleted from B2 but database record remains!"
+        );
+        console.error("⚠️ Image data:", {
+          b2_file_id: imageRecord.b2_file_id,
+          image_url: imageRecord.image_url,
+          original_filename: imageRecord.original_filename,
+        });
+      }
+
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // Success response
-    console.log("🎉 Image deletion completed successfully");
-    res.json({
+    // ==================== PREPARE RESPONSE ====================
+    console.log("🎉 Image deletion process completed");
+
+    const response = {
       message: "Image deleted successfully",
+      success: true,
       data: {
         id: so_img_id,
-        filename: imageRecord.image_url,
-        fileDeleted: fileDeleted,
-        recordDeleted: true,
+        filename: imageRecord.original_filename || imageRecord.image_url,
+        original_filename: imageRecord.original_filename,
+        file_size: imageRecord.file_size,
+        b2_file_id: imageRecord.b2_file_id,
+        b2_deleted: b2Deleted,
+        db_deleted: dbDeleted,
+        storage_provider: "backblaze_b2",
       },
-      success: true,
-    });
+    };
+
+    // Add warnings if B2 deletion had issues
+    if (b2Error && !b2Deleted) {
+      response.warning =
+        "Image removed from database but cloud storage cleanup failed";
+      response.warning_details = {
+        message: b2Error.message,
+        code: b2Error.code,
+      };
+
+      console.log("⚠️ Returning with warning:", response.warning);
+    } else if (!imageRecord.b2_file_id) {
+      response.note = "Image was stored without B2 file ID (legacy record)";
+    }
+
+    res.json(response);
   } catch (error) {
     console.error("❌ Delete process failed:", error.message);
+    console.error("❌ Error stack:", error.stack);
 
     // Determine appropriate status code and error message
     let statusCode = 500;
@@ -703,9 +936,18 @@ exports.deleteImage = async (req, res, next) => {
     } else if (error.message.includes("Database deletion failed")) {
       statusCode = 500;
       errorMessage = "Failed to delete image record from database";
+
+      // If DB failed but B2 succeeded, add specific warning
+      if (b2Deleted) {
+        errorMessage +=
+          " (WARNING: File was deleted from cloud storage but database record remains)";
+      }
     } else if (error.message.includes("Valid image ID is required")) {
       statusCode = 400;
       errorMessage = error.message;
+    } else if (error.message.includes("Cloud storage service unavailable")) {
+      statusCode = 503;
+      errorMessage = "Cloud storage service is temporarily unavailable";
     }
 
     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
@@ -717,6 +959,16 @@ exports.deleteImage = async (req, res, next) => {
           ? error.message
           : "Internal server error",
       success: false,
+      // Include debug info for failed deletions
+      debug:
+        process.env.NODE_ENV === "development"
+          ? {
+              image_id: so_img_id,
+              b2_file_id: imageRecord?.b2_file_id,
+              b2_deleted: b2Deleted,
+              b2_error: b2Error?.message,
+            }
+          : undefined,
     });
   }
 };
@@ -724,21 +976,21 @@ exports.deleteImage = async (req, res, next) => {
 // !================================== tech pack controllers (excel)
 // to upload tech pack
 exports.uploadTechPack = async (req, res, next) => {
-  console.log("Request body:", req.body);
+  console.log("📤 [B2] Tech pack upload request received");
+  console.log("📋 Request body:", req.body);
   console.log(
-    "File details:",
+    "📁 File details:",
     req.file
       ? {
           originalname: req.file.originalname,
           mimetype: req.file.mimetype,
           size: req.file.size,
+          bufferSize: req.file.buffer?.length || 0,
         }
       : "No file"
   );
 
-  let filename = null;
-  let filePath = null;
-  let fileWriteSuccessful = false;
+  let uploadResult = null;
   let dbRecord = null;
 
   try {
@@ -751,14 +1003,19 @@ exports.uploadTechPack = async (req, res, next) => {
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId } = req.body;
+    const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
 
     // Validate required fields
-    if (!styleNo || !moId || !sopId) {
-      console.log("❌ Missing required fields:", { styleNo, moId, sopId });
+    if (!styleNo || !moId || !sopId || !subOpId) {
+      console.log("❌ Missing required fields:", {
+        styleNo,
+        moId,
+        sopId,
+        subOpId,
+      });
       return res.status(400).json({
         message:
-          "Missing required fields: styleNo, moId, and sopId are required",
+          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
         success: false,
       });
     }
@@ -779,183 +1036,401 @@ exports.uploadTechPack = async (req, res, next) => {
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    filename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+    // Generate filename - use generatedName from middleware if available
+    const filename =
+      req.file.generatedName ||
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+
     console.log("📁 Generated filename:", filename);
+    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
 
-    // Network path configuration for tech packs
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpTechPacks";
-
-    // Check network accessibility first - if not accessible, return error and exit
-    console.log("🔍 Checking network path accessibility...");
-    const isNetworkAccessible = await checkNetworkPath(networkPath);
-
-    if (!isNetworkAccessible) {
-      console.log(
-        "❌ Network path not accessible - returning error to frontend"
-      );
-      return res.status(503).json({
-        message:
-          "Network storage is not accessible. Please check the network connection and try again.",
+    // Validate file buffer
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      console.log("❌ File buffer is empty");
+      return res.status(400).json({
+        message: "Uploaded file is empty or corrupted",
         success: false,
-        error: "NETWORK_STORAGE_UNAVAILABLE",
       });
     }
 
-    console.log("✅ Network path is accessible, proceeding with upload");
-    filePath = path.join(networkPath, filename);
-    console.log("🎯 Final file path:", filePath);
+    // ==================== UPLOAD TO BACKBLAZE B2 ====================
+    console.log("☁️ Uploading to Backblaze B2...");
 
-    // Save file to disk with proper error handling
     try {
-      console.log("💾 Attempting to write file to network...");
-      console.log(
-        "📊 File buffer size:",
-        req.file.buffer?.length || 0,
-        "bytes"
+      // Upload file to B2 - using "techpack" type for folder organization
+      uploadResult = await b2SubOpStorage.uploadSubOpFile(
+        req.file.buffer,
+        filename,
+        "techpack", // Changed to "techpack" for folder organization
+        subOpId // subOpId for folder organization
       );
 
-      if (!req.file.buffer || req.file.buffer.length === 0) {
-        throw new Error("File buffer is empty");
+      console.log("✅ B2 Upload Successful:", {
+        filePath: uploadResult.filePath,
+        fileId: uploadResult.fileId,
+        fileName: uploadResult.fileName,
+      });
+    } catch (b2Error) {
+      console.error("❌ B2 Upload Failed:", {
+        error: b2Error.message,
+        code: b2Error.code,
+        stack: b2Error.stack?.split("\n")[0],
+      });
+
+      let errorMessage = "Failed to upload tech pack to cloud storage";
+      let statusCode = 500;
+
+      if (
+        b2Error.code === "AccessDenied" ||
+        b2Error.code === "InvalidAccessKeyId"
+      ) {
+        errorMessage = "Cloud storage authentication failed";
+        statusCode = 503;
+      } else if (b2Error.code === "NoSuchBucket") {
+        errorMessage = "Cloud storage bucket not found";
+        statusCode = 503;
+      } else if (
+        b2Error.message.includes("ENOTFOUND") ||
+        b2Error.message.includes("ECONNREFUSED")
+      ) {
+        errorMessage = "Cannot connect to cloud storage";
+        statusCode = 503;
       }
 
-      fs.writeFileSync(filePath, req.file.buffer);
-      console.log("✅ File write completed, verifying...");
-
-      // Verify file was actually written
-      const stats = fs.statSync(filePath);
-      console.log("📈 File stats - Size:", stats.size, "bytes");
-
-      if (stats.size > 0) {
-        fileWriteSuccessful = true;
-        console.log("✅ File saved successfully to network storage:", filePath);
-      } else {
-        console.error("❌ File write resulted in empty file");
-        throw new Error("File write resulted in empty file (0 bytes)");
-      }
-    } catch (writeError) {
-      console.error("❌ File write error to network:", writeError);
-      throw new Error(
-        `Failed to save tech pack file to network storage: ${writeError.message}`
-      );
+      return res.status(statusCode).json({
+        message: errorMessage,
+        error:
+          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+        success: false,
+        storage: "backblaze_b2",
+      });
     }
 
-    // Only save to DB if file write was successful
-    if (fileWriteSuccessful) {
+    // ==================== PROCESS EXCEL DATA (IF NEEDED) ====================
+    let excelProcessingResults = null;
+
+    // Check if it's an Excel file and process it if needed
+    const isExcelFile = ext === ".xlsx" || ext === ".xls";
+    if (isExcelFile) {
       try {
-        console.log("💾 Saving to database...");
-        dbRecord = await SubOperationTechPack.create({
-          style_id: styleId || 1,
-          operation_id: moId,
-          sub_operation_id: sopId,
-          sub_operation_name: sopName || "null",
-          tech_pack_url: filename,
-        });
-        console.log("✅ Database record created with ID:", dbRecord.so_tech_id);
-      } catch (dbError) {
-        console.error("❌ Database error:", dbError);
-        throw new Error(`Database save failed: ${dbError.message}`);
+        console.log("📊 Processing Excel file data...");
+        excelProcessingResults = await processTechPackExcel(req.file.buffer);
+        console.log("✅ Excel processing completed:", excelProcessingResults);
+      } catch (excelError) {
+        console.warn(
+          "⚠️ Excel processing failed, but file upload succeeded:",
+          excelError.message
+        );
+        excelProcessingResults = {
+          sheetsProcessed: 0,
+          totalRows: 0,
+          error: excelError.message,
+          note: "File uploaded but data extraction failed",
+        };
       }
+    } else {
+      excelProcessingResults = {
+        sheetsProcessed: 0,
+        totalRows: 0,
+        note: "Not an Excel file, skipping data processing",
+      };
     }
 
-    // Final success response
-    console.log("🎉 Upload process completed successfully");
+    // ==================== SAVE TO DATABASE ====================
+    console.log("💾 Saving to database...");
+
+    try {
+      dbRecord = await SubOperationTechPack.create({
+        style_id: styleId || 1,
+        operation_id: moId,
+        sub_operation_id: sopId,
+        sub_operation_name: sopName || null,
+        tech_pack_url: uploadResult.filePath, // Store B2 file path
+        // NEW FIELDS:
+        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
+        file_size: req.file.size,
+        original_filename: req.file.originalname,
+        uploaded_by: req.user?.userId || null,
+        file_type: req.file.mimetype,
+        sub_op_id: subOpId,
+        // Excel processing results
+        excel_sheets_processed: excelProcessingResults?.sheetsProcessed || 0,
+        excel_total_rows: excelProcessingResults?.totalRows || 0,
+        excel_processing_note: excelProcessingResults?.note || null,
+      });
+
+      console.log("✅ Database record created:", {
+        so_tech_id: dbRecord.so_tech_id,
+        tech_pack_url: dbRecord.tech_pack_url,
+        b2_file_id: dbRecord.b2_file_id,
+        excel_sheets: dbRecord.excel_sheets_processed,
+        excel_rows: dbRecord.excel_total_rows,
+      });
+    } catch (dbError) {
+      console.error("❌ Database save failed:", dbError);
+
+      // Attempt to delete from B2 since DB save failed
+      if (uploadResult && uploadResult.fileId) {
+        try {
+          console.log("🧹 Cleaning up B2 file after DB failure...");
+          await b2SubOpStorage.deleteFile(
+            uploadResult.fileId,
+            uploadResult.filePath
+          );
+          console.log("✅ B2 file cleaned up");
+        } catch (cleanupError) {
+          console.error("❌ Failed to clean up B2 file:", cleanupError);
+        }
+      }
+
+      return res.status(500).json({
+        message: "Failed to save tech pack record to database",
+        error:
+          process.env.NODE_ENV === "development" ? dbError.message : undefined,
+        success: false,
+      });
+    }
+
+    // ==================== SUCCESS RESPONSE ====================
+    console.log("🎉 Tech pack upload completed successfully!");
+
     res.status(201).json({
-      message: "Tech pack uploaded to network storage successfully",
-      data: dbRecord,
-      filename: filename,
-      path: filePath,
+      message: "Tech pack uploaded to cloud storage successfully",
       success: true,
-      processingResults: {
-        sheetsProcessed: 1, // You can update this after actual Excel processing
-        totalRows: 0, // Update after processing Excel data
+      data: {
+        so_tech_id: dbRecord.so_tech_id,
+        tech_pack_url: uploadResult.filePath,
+        tech_pack_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+        file_name: uploadResult.fileName,
+        original_filename: req.file.originalname,
+        file_size: req.file.size,
+        file_type: req.file.mimetype,
+        sub_operation_name: dbRecord.sub_operation_name,
+        uploaded_at: dbRecord.createdAt,
+        b2_file_id: uploadResult.fileId,
+        excel_processing: excelProcessingResults,
+      },
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: "eu-central-003", // Adjust if needed
       },
     });
   } catch (error) {
-    console.error("❌ Upload process failed:", error.message);
+    console.error("❌ Unhandled error in tech pack upload:", {
+      message: error.message,
+      stack: error.stack,
+    });
 
-    // Clean up file if it was partially created but DB operation failed
-    if (
-      filename &&
-      filePath &&
-      fs.existsSync(filePath) &&
-      !fileWriteSuccessful
-    ) {
+    // Final cleanup if anything went wrong
+    if (uploadResult && uploadResult.fileId) {
       try {
-        console.log("🧹 Cleaning up file after error:", filePath);
-        fs.unlinkSync(filePath);
-        console.log("✅ File cleaned up successfully");
+        console.log("🧹 Final cleanup of B2 file...");
+        await b2SubOpStorage.deleteFile(
+          uploadResult.fileId,
+          uploadResult.filePath
+        );
       } catch (cleanupError) {
-        console.error("❌ Error deleting file during cleanup:", cleanupError);
+        console.error("❌ Final cleanup failed:", cleanupError);
       }
     }
 
-    // Clean up DB record if file write failed but DB record was created
-    if (dbRecord && !fileWriteSuccessful) {
+    // Clean up DB record if it was created
+    if (dbRecord && dbRecord.so_tech_id) {
       try {
-        console.log(
-          "🧹 Cleaning up database record after error:",
-          dbRecord.so_tech_id
-        );
+        console.log("🧹 Final cleanup of database record...");
         await SubOperationTechPack.destroy({
           where: { so_tech_id: dbRecord.so_tech_id },
         });
-        console.log("✅ Database record cleaned up successfully");
       } catch (dbCleanupError) {
-        console.error(
-          "❌ Error deleting database record during cleanup:",
-          dbCleanupError
-        );
+        console.error("❌ Database cleanup failed:", dbCleanupError);
       }
     }
 
-    // Determine appropriate status code and error message
-    let statusCode = 500;
-    let errorMessage = "Server error during file upload";
-
-    if (
-      error.message.includes("Missing required fields") ||
-      error.message.includes("No file uploaded")
-    ) {
-      statusCode = 400;
-      errorMessage = error.message;
-    } else if (
-      error.message.includes("Failed to save tech pack file to network storage")
-    ) {
-      statusCode = 500;
-      errorMessage = "Failed to save tech pack file to network storage";
-    } else if (error.message.includes("Database save failed")) {
-      statusCode = 500;
-      errorMessage = "Failed to save record to database";
-    } else if (
-      error.name === "SequelizeError" ||
-      error.name === "SequelizeValidationError"
-    ) {
-      statusCode = 500;
-      errorMessage = "Database error occurred";
-    }
-
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
-
-    res.status(statusCode).json({
-      message: errorMessage,
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Internal server error",
+    res.status(500).json({
+      message: "Failed to upload tech pack",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
       success: false,
     });
   }
 };
 
+// Helper function to process Excel tech pack data (if needed)
+async function processTechPackExcel(buffer) {
+  try {
+    const XLSX = require("xlsx");
+
+    // Read the Excel file from buffer
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheetNames = workbook.SheetNames;
+
+    let totalRows = 0;
+    const processedSheets = [];
+
+    // Process each sheet
+    for (const sheetName of sheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      const sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const rowCount = sheetData.length;
+
+      processedSheets.push({
+        name: sheetName,
+        rows: rowCount,
+        columns: sheetData[0]?.length || 0,
+      });
+
+      totalRows += rowCount;
+    }
+
+    return {
+      sheetsProcessed: sheetNames.length,
+      totalRows: totalRows,
+      sheets: processedSheets,
+      fileName: workbook.Props?.Title || "Unknown",
+      processedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    console.error("❌ Excel processing error:", error);
+    throw new Error(`Failed to process Excel file: ${error.message}`);
+  }
+}
+
 // Delete tech pack controller
+// exports.deleteTechPack = async (req, res, next) => {
+//   const { so_tech_id } = req.params;
+
+//   console.log("🗑️ Delete tech pack request for ID:", so_tech_id);
+
+//   let techPackRecord = null;
+//   let filePath = null;
+
+//   try {
+//     // Validate tech pack ID
+//     if (!so_tech_id || isNaN(so_tech_id)) {
+//       console.log("❌ Invalid tech pack ID:", so_tech_id);
+//       return res.status(400).json({
+//         message: "Valid tech pack ID is required",
+//         success: false,
+//       });
+//     }
+
+//     // Find the tech pack record in database
+//     try {
+//       console.log("🔍 Searching for tech pack record in database...");
+//       techPackRecord = await SubOperationTechPack.findOne({
+//         where: { so_tech_id: so_tech_id },
+//       });
+
+//       if (!techPackRecord) {
+//         console.log("❌ Tech pack record not found for ID:", so_tech_id);
+//         return res.status(404).json({
+//           message: "Tech pack record not found",
+//           success: false,
+//         });
+//       }
+
+//       console.log("✅ Tech pack record found:", {
+//         id: techPackRecord.so_tech_id,
+//         filename: techPackRecord.tech_pack_url,
+//         style_id: techPackRecord.style_id,
+//         operation_id: techPackRecord.operation_id,
+//       });
+//     } catch (findError) {
+//       console.error("❌ Database find error:", findError);
+//       throw new Error(`Database search failed: ${findError.message}`);
+//     }
+
+//     // Construct file path
+//     const networkPath =
+//       "\\\\192.168.46.209\\Operation bullatin videos\\SubOpTechPacks";
+//     filePath = path.join(networkPath, techPackRecord.tech_pack_url);
+//     console.log("📁 File path to delete:", filePath);
+
+//     // Check if file exists and delete it
+//     let fileDeleted = false;
+//     try {
+//       console.log("🔍 Checking if file exists...");
+//       if (fs.existsSync(filePath)) {
+//         console.log("✅ File exists, proceeding with deletion...");
+//         fs.unlinkSync(filePath);
+//         fileDeleted = true;
+//         console.log("✅ File deleted successfully from network storage");
+//       } else {
+//         console.log(
+//           "⚠️ File not found in storage, but will delete database record"
+//         );
+//       }
+//     } catch (fileError) {
+//       console.error("❌ File deletion error:", fileError);
+//       // Don't throw error here - we still want to delete the DB record
+//       console.log(
+//         "⚠️ File deletion failed, but continuing with database record deletion"
+//       );
+//     }
+
+//     // Delete database record
+//     try {
+//       console.log("💾 Deleting database record...");
+//       await SubOperationTechPack.destroy({
+//         where: { so_tech_id: so_tech_id },
+//       });
+//       console.log("✅ Database record deleted successfully");
+//     } catch (dbDeleteError) {
+//       console.error("❌ Database deletion error:", dbDeleteError);
+//       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
+//     }
+
+//     // Success response
+//     console.log("🎉 Tech pack deletion completed successfully");
+//     res.json({
+//       message: "Tech pack deleted successfully",
+//       data: {
+//         id: so_tech_id,
+//         filename: techPackRecord.tech_pack_url,
+//         fileDeleted: fileDeleted,
+//         recordDeleted: true,
+//       },
+//       success: true,
+//     });
+//   } catch (error) {
+//     console.error("❌ Delete process failed:", error.message);
+
+//     // Determine appropriate status code and error message
+//     let statusCode = 500;
+//     let errorMessage = "Server error during tech pack deletion";
+
+//     if (error.message.includes("Database search failed")) {
+//       statusCode = 500;
+//       errorMessage = "Failed to find tech pack record";
+//     } else if (error.message.includes("Database deletion failed")) {
+//       statusCode = 500;
+//       errorMessage = "Failed to delete tech pack record from database";
+//     } else if (error.message.includes("Valid tech pack ID is required")) {
+//       statusCode = 400;
+//       errorMessage = error.message;
+//     }
+
+//     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
+
+//     res.status(statusCode).json({
+//       message: errorMessage,
+//       error:
+//         process.env.NODE_ENV === "development"
+//           ? error.message
+//           : "Internal server error",
+//       success: false,
+//     });
+//   }
+// };
+
 exports.deleteTechPack = async (req, res, next) => {
   const { so_tech_id } = req.params;
 
-  console.log("🗑️ Delete tech pack request for ID:", so_tech_id);
+  console.log("🗑️ [B2] Delete tech pack request for ID:", so_tech_id);
 
   let techPackRecord = null;
-  let filePath = null;
+  let b2Deleted = false;
+  let b2Error = null;
 
   try {
     // Validate tech pack ID
@@ -972,6 +1447,17 @@ exports.deleteTechPack = async (req, res, next) => {
       console.log("🔍 Searching for tech pack record in database...");
       techPackRecord = await SubOperationTechPack.findOne({
         where: { so_tech_id: so_tech_id },
+        attributes: [
+          "so_tech_id",
+          "tech_pack_url",
+          "b2_file_id",
+          "sub_operation_name",
+          "original_filename",
+          "file_size",
+          "style_id",
+          "operation_id",
+          "sub_operation_id",
+        ],
       });
 
       if (!techPackRecord) {
@@ -984,71 +1470,92 @@ exports.deleteTechPack = async (req, res, next) => {
 
       console.log("✅ Tech pack record found:", {
         id: techPackRecord.so_tech_id,
-        filename: techPackRecord.tech_pack_url,
-        style_id: techPackRecord.style_id,
-        operation_id: techPackRecord.operation_id,
+        b2_file_id: techPackRecord.b2_file_id,
+        tech_pack_url: techPackRecord.tech_pack_url,
+        original_filename: techPackRecord.original_filename,
+        file_size: techPackRecord.file_size,
+        sub_op_id: techPackRecord.sub_op_id,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // Construct file path
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpTechPacks";
-    filePath = path.join(networkPath, techPackRecord.tech_pack_url);
-    console.log("📁 File path to delete:", filePath);
+    // ==================== DELETE FROM BACKBLAZE B2 ====================
+    if (techPackRecord.b2_file_id && techPackRecord.tech_pack_url) {
+      console.log("☁️ Deleting from Backblaze B2...");
 
-    // Check if file exists and delete it
-    let fileDeleted = false;
-    try {
-      console.log("🔍 Checking if file exists...");
-      if (fs.existsSync(filePath)) {
-        console.log("✅ File exists, proceeding with deletion...");
-        fs.unlinkSync(filePath);
-        fileDeleted = true;
-        console.log("✅ File deleted successfully from network storage");
-      } else {
-        console.log(
-          "⚠️ File not found in storage, but will delete database record"
+      try {
+        await b2SubOpStorage.deleteFile(
+          techPackRecord.b2_file_id,
+          techPackRecord.tech_pack_url
         );
+
+        b2Deleted = true;
+        console.log("✅ B2 deletion successful");
+      } catch (b2DeleteError) {
+        b2Error = b2DeleteError;
+        console.error("⚠️ B2 deletion failed:", b2DeleteError.message);
+
+        // Check if it's a "not found" error
+        if (
+          b2DeleteError.code === "NoSuchKey" ||
+          b2DeleteError.message.includes("not found")
+        ) {
+          console.log(
+            "ℹ️ File not found in B2 (may have been deleted already)"
+          );
+          b2Deleted = true;
+        }
       }
-    } catch (fileError) {
-      console.error("❌ File deletion error:", fileError);
-      // Don't throw error here - we still want to delete the DB record
-      console.log(
-        "⚠️ File deletion failed, but continuing with database record deletion"
-      );
+    } else {
+      console.log("ℹ️ No B2 file ID or tech pack URL, skipping B2 deletion");
     }
 
-    // Delete database record
+    // ==================== DELETE FROM DATABASE ====================
+    let dbDeleted = false;
     try {
       console.log("💾 Deleting database record...");
       await SubOperationTechPack.destroy({
         where: { so_tech_id: so_tech_id },
       });
+      dbDeleted = true;
       console.log("✅ Database record deleted successfully");
     } catch (dbDeleteError) {
       console.error("❌ Database deletion error:", dbDeleteError);
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // Success response
-    console.log("🎉 Tech pack deletion completed successfully");
-    res.json({
+    // ==================== SUCCESS RESPONSE ====================
+    console.log("🎉 Tech pack deletion completed");
+
+    const response = {
       message: "Tech pack deleted successfully",
+      success: true,
       data: {
         id: so_tech_id,
-        filename: techPackRecord.tech_pack_url,
-        fileDeleted: fileDeleted,
-        recordDeleted: true,
+        filename:
+          techPackRecord.original_filename || techPackRecord.tech_pack_url,
+        b2_deleted: b2Deleted,
+        db_deleted: dbDeleted,
+        storage_provider: "backblaze_b2",
       },
-      success: true,
-    });
+    };
+
+    // Add warnings if B2 deletion had issues
+    if (b2Error && !b2Deleted) {
+      response.warning =
+        "Tech pack removed from database but cloud storage cleanup failed";
+      response.warning_details = {
+        message: b2Error.message,
+        code: b2Error.code,
+      };
+    }
+
+    res.json(response);
   } catch (error) {
     console.error("❌ Delete process failed:", error.message);
 
-    // Determine appropriate status code and error message
     let statusCode = 500;
     let errorMessage = "Server error during tech pack deletion";
 
@@ -1062,8 +1569,6 @@ exports.deleteTechPack = async (req, res, next) => {
       statusCode = 400;
       errorMessage = error.message;
     }
-
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
 
     res.status(statusCode).json({
       message: errorMessage,
@@ -1079,9 +1584,10 @@ exports.deleteTechPack = async (req, res, next) => {
 // !================================== folder controllers
 // to upload folder (multiple documents)
 exports.uploadFolder = async (req, res, next) => {
-  console.log("Request body:", req.body);
+  console.log("📤 [B2] Folder upload request received");
+  console.log("📋 Request body:", req.body);
   console.log(
-    "Files details:",
+    "📁 Files details:",
     req.files ? `Total files: ${req.files.length}` : "No files"
   );
 
@@ -1095,57 +1601,45 @@ exports.uploadFolder = async (req, res, next) => {
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId, folderName } = req.body;
+    const { styleNo, moId, sopId, sopName, styleId, folderName, subOpId } =
+      req.body;
 
     // Validate required fields
-    if (!styleNo || !moId || !sopId) {
-      console.log("❌ Missing required fields:", { styleNo, moId, sopId });
+    if (!styleNo || !moId || !sopId || !subOpId) {
+      console.log("❌ Missing required fields:", {
+        styleNo,
+        moId,
+        sopId,
+        subOpId,
+      });
       return res.status(400).json({
         message:
-          "Missing required fields: styleNo, moId, and sopId are required",
+          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
         success: false,
       });
     }
 
-    // Network path configuration for folders
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpFolders";
-
-    // Check network accessibility first - if not accessible, return error and exit
-    console.log("🔍 Checking network path accessibility...");
-    const isNetworkAccessible = await checkNetworkPath(networkPath);
-
-    if (!isNetworkAccessible) {
-      console.log(
-        "❌ Network path not accessible - returning error to frontend"
-      );
-      return res.status(503).json({
-        message:
-          "Network storage is not accessible. Please check the network connection and try again.",
-        success: false,
-        error: "NETWORK_STORAGE_UNAVAILABLE",
-      });
-    }
-
-    console.log("✅ Network path is accessible, proceeding with upload");
+    console.log(
+      `📦 Processing ${req.files.length} files for subOpId: ${subOpId}`
+    );
 
     const uploadResults = [];
     const failedFiles = [];
     const dbRecords = [];
+    const filesToCleanup = []; // Track files that need cleanup on error
 
     // Process each file
     for (const [index, file] of req.files.entries()) {
       let filename = null;
-      let filePath = null;
-      let fileWriteSuccessful = false;
+      let uploadResult = null;
       let dbRecord = null;
 
       try {
-        console.log(
-          `\n📄 Processing file ${index + 1}/${req.files.length}: ${
-            file.originalname
-          }`
-        );
+        console.log(`\n📄 Processing file ${index + 1}/${req.files.length}:`, {
+          originalname: file.originalname,
+          mimetype: file.mimetype,
+          size: file.size,
+        });
 
         // Generate filename with timestamp and index for uniqueness
         const ext = path.extname(file.originalname).toLowerCase();
@@ -1166,72 +1660,103 @@ exports.uploadFolder = async (req, res, next) => {
         filename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}_${index}${ext}`;
         console.log("📁 Generated filename:", filename);
 
-        filePath = path.join(networkPath, filename);
-        console.log("🎯 Final file path:", filePath);
+        // Validate file buffer
+        if (!file.buffer || file.buffer.length === 0) {
+          throw new Error("File buffer is empty");
+        }
 
-        // Save file to disk with proper error handling
+        // ==================== UPLOAD TO BACKBLAZE B2 ====================
+        console.log("☁️ Uploading to Backblaze B2...");
+
         try {
-          console.log("💾 Attempting to write file to network...");
-          console.log(
-            "📊 File buffer size:",
-            file.buffer?.length || 0,
-            "bytes"
+          // Upload file to B2 - using "document" type for folder organization
+          uploadResult = await b2SubOpStorage.uploadSubOpFile(
+            file.buffer,
+            filename,
+            "document", // Use "document" type for folder files
+            subOpId
           );
 
-          if (!file.buffer || file.buffer.length === 0) {
-            throw new Error("File buffer is empty");
-          }
+          console.log("✅ B2 Upload Successful:", {
+            filePath: uploadResult.filePath,
+            fileId: uploadResult.fileId,
+            fileName: uploadResult.fileName,
+          });
 
-          fs.writeFileSync(filePath, file.buffer);
-          console.log("✅ File write completed, verifying...");
-
-          // Verify file was actually written
-          const stats = fs.statSync(filePath);
-          console.log("📈 File stats - Size:", stats.size, "bytes");
-
-          if (stats.size > 0) {
-            fileWriteSuccessful = true;
-            console.log("✅ File saved successfully to network storage");
-          } else {
-            console.error("❌ File write resulted in empty file");
-            throw new Error("File write resulted in empty file (0 bytes)");
-          }
-        } catch (writeError) {
-          console.error("❌ File write error to network:", writeError);
+          // Add to cleanup list in case of later failures
+          filesToCleanup.push({
+            fileId: uploadResult.fileId,
+            filePath: uploadResult.filePath,
+          });
+        } catch (b2Error) {
+          console.error("❌ B2 Upload Failed:", b2Error.message);
           throw new Error(
-            `Failed to save file to network storage: ${writeError.message}`
+            `Failed to upload file to cloud storage: ${b2Error.message}`
           );
         }
 
-        // Only save to DB if file write was successful
-        if (fileWriteSuccessful) {
-          try {
-            console.log("💾 Saving to database...");
-            dbRecord = await SubOperationFolder.create({
-              style_id: styleId || 1,
-              operation_id: moId,
-              sub_operation_id: sopId,
-              sub_operation_name: sopName || "null",
-              folder_url: filename,
-            });
-            console.log(
-              "✅ Database record created with ID:",
-              dbRecord.so_folder_id
-            );
-            dbRecords.push(dbRecord);
-          } catch (dbError) {
-            console.error("❌ Database error:", dbError);
-            throw new Error(`Database save failed: ${dbError.message}`);
+        // ==================== SAVE TO DATABASE ====================
+        try {
+          console.log("💾 Saving to database...");
+          dbRecord = await SubOperationFolder.create({
+            style_id: styleId || 1,
+            operation_id: moId,
+            sub_operation_id: sopId,
+            sub_operation_name: sopName || null,
+            folder_url: uploadResult.filePath, // Store B2 file path
+            // NEW FIELDS:
+            b2_file_id: uploadResult.fileId,
+            file_size: file.size,
+            original_filename: file.originalname,
+            uploaded_by: req.user?.userId || null,
+            file_type: file.mimetype,
+            sub_op_id: subOpId,
+            folder_name: folderName || "Untitled Folder",
+          });
+
+          console.log("✅ Database record created:", {
+            so_folder_id: dbRecord.so_folder_id,
+            folder_url: dbRecord.folder_url,
+            b2_file_id: dbRecord.b2_file_id,
+          });
+
+          dbRecords.push(dbRecord);
+        } catch (dbError) {
+          console.error("❌ Database save failed:", dbError);
+
+          // Remove from cleanup list since we'll clean up immediately
+          const fileIndex = filesToCleanup.findIndex(
+            (f) => f.fileId === uploadResult.fileId
+          );
+          if (fileIndex > -1) {
+            filesToCleanup.splice(fileIndex, 1);
           }
+
+          // Clean up B2 file since DB save failed
+          try {
+            console.log("🧹 Cleaning up B2 file after DB failure...");
+            await b2SubOpStorage.deleteFile(
+              uploadResult.fileId,
+              uploadResult.filePath
+            );
+          } catch (cleanupError) {
+            console.error("❌ Failed to clean up B2 file:", cleanupError);
+          }
+
+          throw new Error(`Database save failed: ${dbError.message}`);
         }
 
         // Add to successful results
         uploadResults.push({
-          id: dbRecord?.so_folder_id,
+          id: dbRecord.so_folder_id,
           originalName: file.originalname,
           savedName: filename,
+          filePath: uploadResult.filePath,
+          b2FileId: uploadResult.fileId,
           size: file.size,
+          type: file.mimetype,
           status: "success",
+          uploadTime: new Date().toISOString(),
         });
 
         console.log(`✅ File ${index + 1} processed successfully`);
@@ -1241,32 +1766,32 @@ exports.uploadFolder = async (req, res, next) => {
           fileError.message
         );
 
-        // Clean up file if it was partially created
-        if (
-          filename &&
-          filePath &&
-          fs.existsSync(filePath) &&
-          !fileWriteSuccessful
-        ) {
-          try {
-            console.log("🧹 Cleaning up failed file:", filePath);
-            fs.unlinkSync(filePath);
-          } catch (cleanupError) {
-            console.error(
-              "❌ Error deleting file during cleanup:",
-              cleanupError
-            );
-          }
-        }
-
         failedFiles.push({
           originalName: file.originalname,
+          filename: filename,
           error: fileError.message,
+          status: "failed",
         });
       }
     }
 
-    // Final response
+    // ==================== CLEANUP PARTIAL UPLOADS IF ALL FILES FAILED ====================
+    if (uploadResults.length === 0 && filesToCleanup.length > 0) {
+      console.log("🧹 Cleaning up all B2 files since all uploads failed...");
+      for (const file of filesToCleanup) {
+        try {
+          await b2SubOpStorage.deleteFile(file.fileId, file.filePath);
+          console.log(`✅ Cleaned up: ${file.filePath}`);
+        } catch (cleanupError) {
+          console.error(
+            `❌ Failed to clean up ${file.filePath}:`,
+            cleanupError.message
+          );
+        }
+      }
+    }
+
+    // ==================== FINAL RESPONSE ====================
     const totalProcessed = uploadResults.length + failedFiles.length;
     console.log(
       `\n📊 Upload Summary: ${uploadResults.length} successful, ${failedFiles.length} failed out of ${totalProcessed} total files`
@@ -1279,17 +1804,27 @@ exports.uploadFolder = async (req, res, next) => {
         message: "All files failed to upload",
         success: false,
         failedFiles: failedFiles,
+        storage: "backblaze_b2",
       });
     }
 
     const response = {
-      message: `Folder upload completed: ${uploadResults.length} files uploaded successfully`,
+      message: `Folder upload completed: ${uploadResults.length} files uploaded successfully to cloud storage`,
       data: uploadResults,
       success: true,
       uploadResults: {
         filesProcessed: uploadResults.length,
         failedFiles: failedFiles.length,
         totalFiles: totalProcessed,
+        totalSize: uploadResults.reduce(
+          (sum, file) => sum + (file.size || 0),
+          0
+        ),
+      },
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: "eu-central-003", // Adjust if needed
       },
     };
 
@@ -1297,12 +1832,17 @@ exports.uploadFolder = async (req, res, next) => {
     if (failedFiles.length > 0) {
       response.warnings = `${failedFiles.length} files failed to upload`;
       response.failedFiles = failedFiles;
+      response.partialSuccess = true;
     }
 
     console.log("🎉 Folder upload process completed");
     res.status(201).json(response);
   } catch (error) {
     console.error("❌ Upload process failed:", error.message);
+
+    // Final cleanup if anything went wrong
+    console.log("🧹 Performing final cleanup after error...");
+    // Note: Individual file cleanup is handled in the loop
 
     // Determine appropriate status code and error message
     let statusCode = 500;
@@ -1314,9 +1854,11 @@ exports.uploadFolder = async (req, res, next) => {
     ) {
       statusCode = 400;
       errorMessage = error.message;
-    } else if (error.message.includes("Network storage is not accessible")) {
-      statusCode = 503;
-      errorMessage = "Network storage is not accessible";
+    } else if (
+      error.message.includes("Failed to upload file to cloud storage")
+    ) {
+      statusCode = 502;
+      errorMessage = "Cloud storage upload failed";
     }
 
     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
@@ -1328,129 +1870,289 @@ exports.uploadFolder = async (req, res, next) => {
           ? error.message
           : "Internal server error",
       success: false,
+      storage: "backblaze_b2",
     });
   }
 };
 
 // Delete folder document
+// exports.deleteFolderDocument = async (req, res, next) => {
+//   const { so_folder_id } = req.params;
+
+//   console.log("🗑️ Delete folder document request for ID:", so_folder_id);
+
+//   let folderRecord = null;
+//   let filePath = null;
+
+//   try {
+//     // Validate folder document ID
+//     if (!so_folder_id || isNaN(so_folder_id)) {
+//       console.log("❌ Invalid folder document ID:", so_folder_id);
+//       return res.status(400).json({
+//         message: "Valid folder document ID is required",
+//         success: false,
+//       });
+//     }
+
+//     // Find the folder record in database
+//     try {
+//       console.log("🔍 Searching for folder document record in database...");
+//       folderRecord = await SubOperationFolder.findOne({
+//         where: { so_folder_id: so_folder_id },
+//       });
+
+//       if (!folderRecord) {
+//         console.log(
+//           "❌ Folder document record not found for ID:",
+//           so_folder_id
+//         );
+//         return res.status(404).json({
+//           message: "Folder document record not found",
+//           success: false,
+//         });
+//       }
+
+//       console.log("✅ Folder document record found:", {
+//         id: folderRecord.so_folder_id,
+//         filename: folderRecord.folder_url,
+//         style_id: folderRecord.style_id,
+//         operation_id: folderRecord.operation_id,
+//       });
+//     } catch (findError) {
+//       console.error("❌ Database find error:", findError);
+//       throw new Error(`Database search failed: ${findError.message}`);
+//     }
+
+//     // Construct file path
+//     const networkPath =
+//       "\\\\192.168.46.209\\Operation bullatin videos\\SubOpFolders";
+//     filePath = path.join(networkPath, folderRecord.folder_url);
+//     console.log("📁 File path to delete:", filePath);
+
+//     // Check if file exists and delete it
+//     let fileDeleted = false;
+//     try {
+//       console.log("🔍 Checking if file exists...");
+//       if (fs.existsSync(filePath)) {
+//         console.log("✅ File exists, proceeding with deletion...");
+//         fs.unlinkSync(filePath);
+//         fileDeleted = true;
+//         console.log("✅ File deleted successfully from network storage");
+//       } else {
+//         console.log(
+//           "⚠️ File not found in storage, but will delete database record"
+//         );
+//       }
+//     } catch (fileError) {
+//       console.error("❌ File deletion error:", fileError);
+//       // Don't throw error here - we still want to delete the DB record
+//       console.log(
+//         "⚠️ File deletion failed, but continuing with database record deletion"
+//       );
+//     }
+
+//     // Delete database record
+//     try {
+//       console.log("💾 Deleting database record...");
+//       await SubOperationFolder.destroy({
+//         where: { so_folder_id: so_folder_id },
+//       });
+//       console.log("✅ Database record deleted successfully");
+//     } catch (dbDeleteError) {
+//       console.error("❌ Database deletion error:", dbDeleteError);
+//       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
+//     }
+
+//     // Success response
+//     console.log("🎉 Folder document deletion completed successfully");
+//     res.json({
+//       message: "Folder document deleted successfully",
+//       data: {
+//         id: so_folder_id,
+//         filename: folderRecord.folder_url,
+//         fileDeleted: fileDeleted,
+//         recordDeleted: true,
+//       },
+//       success: true,
+//     });
+//   } catch (error) {
+//     console.error("❌ Delete process failed:", error.message);
+
+//     // Determine appropriate status code and error message
+//     let statusCode = 500;
+//     let errorMessage = "Server error during folder document deletion";
+
+//     if (error.message.includes("Database search failed")) {
+//       statusCode = 500;
+//       errorMessage = "Failed to find folder document record";
+//     } else if (error.message.includes("Database deletion failed")) {
+//       statusCode = 500;
+//       errorMessage = "Failed to delete folder document record from database";
+//     } else if (error.message.includes("Valid folder document ID is required")) {
+//       statusCode = 400;
+//       errorMessage = error.message;
+//     }
+
+//     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
+
+//     res.status(statusCode).json({
+//       message: errorMessage,
+//       error:
+//         process.env.NODE_ENV === "development"
+//           ? error.message
+//           : "Internal server error",
+//       success: false,
+//     });
+//   }
+// };
+
 exports.deleteFolderDocument = async (req, res, next) => {
   const { so_folder_id } = req.params;
 
-  console.log("🗑️ Delete folder document request for ID:", so_folder_id);
+  console.log("🗑️ [B2] Delete folder file request for ID:", so_folder_id);
 
-  let folderRecord = null;
-  let filePath = null;
+  let folderFileRecord = null;
+  let b2Deleted = false;
+  let b2Error = null;
 
   try {
-    // Validate folder document ID
+    // Validate folder file ID
     if (!so_folder_id || isNaN(so_folder_id)) {
-      console.log("❌ Invalid folder document ID:", so_folder_id);
+      console.log("❌ Invalid folder file ID:", so_folder_id);
       return res.status(400).json({
-        message: "Valid folder document ID is required",
+        message: "Valid folder file ID is required",
         success: false,
       });
     }
 
-    // Find the folder record in database
+    // Find the folder file record in database
     try {
-      console.log("🔍 Searching for folder document record in database...");
-      folderRecord = await SubOperationFolder.findOne({
+      console.log("🔍 Searching for folder file record in database...");
+      folderFileRecord = await SubOperationFolder.findOne({
         where: { so_folder_id: so_folder_id },
+        attributes: [
+          "so_folder_id",
+          "folder_url",
+          "b2_file_id",
+          "sub_operation_name",
+          "original_filename",
+          "file_size",
+          "style_id",
+          "operation_id",
+          "sub_operation_id",
+        ],
       });
 
-      if (!folderRecord) {
-        console.log(
-          "❌ Folder document record not found for ID:",
-          so_folder_id
-        );
+      if (!folderFileRecord) {
+        console.log("❌ Folder file record not found for ID:", so_folder_id);
         return res.status(404).json({
-          message: "Folder document record not found",
+          message: "Folder file record not found",
           success: false,
         });
       }
 
-      console.log("✅ Folder document record found:", {
-        id: folderRecord.so_folder_id,
-        filename: folderRecord.folder_url,
-        style_id: folderRecord.style_id,
-        operation_id: folderRecord.operation_id,
+      console.log("✅ Folder file record found:", {
+        id: folderFileRecord.so_folder_id,
+        b2_file_id: folderFileRecord.b2_file_id,
+        folder_url: folderFileRecord.folder_url,
+        original_filename: folderFileRecord.original_filename,
+        file_size: folderFileRecord.file_size,
+        folder_name: folderFileRecord.folder_name,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // Construct file path
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpFolders";
-    filePath = path.join(networkPath, folderRecord.folder_url);
-    console.log("📁 File path to delete:", filePath);
+    // ==================== DELETE FROM BACKBLAZE B2 ====================
+    if (folderFileRecord.b2_file_id && folderFileRecord.folder_url) {
+      console.log("☁️ Deleting from Backblaze B2...");
 
-    // Check if file exists and delete it
-    let fileDeleted = false;
-    try {
-      console.log("🔍 Checking if file exists...");
-      if (fs.existsSync(filePath)) {
-        console.log("✅ File exists, proceeding with deletion...");
-        fs.unlinkSync(filePath);
-        fileDeleted = true;
-        console.log("✅ File deleted successfully from network storage");
-      } else {
-        console.log(
-          "⚠️ File not found in storage, but will delete database record"
+      try {
+        await b2SubOpStorage.deleteFile(
+          folderFileRecord.b2_file_id,
+          folderFileRecord.folder_url
         );
+
+        b2Deleted = true;
+        console.log("✅ B2 deletion successful");
+      } catch (b2DeleteError) {
+        b2Error = b2DeleteError;
+        console.error("⚠️ B2 deletion failed:", b2DeleteError.message);
+
+        // Check if it's a "not found" error
+        if (
+          b2DeleteError.code === "NoSuchKey" ||
+          b2DeleteError.message.includes("not found")
+        ) {
+          console.log(
+            "ℹ️ File not found in B2 (may have been deleted already)"
+          );
+          b2Deleted = true;
+        }
       }
-    } catch (fileError) {
-      console.error("❌ File deletion error:", fileError);
-      // Don't throw error here - we still want to delete the DB record
-      console.log(
-        "⚠️ File deletion failed, but continuing with database record deletion"
-      );
+    } else {
+      console.log("ℹ️ No B2 file ID or folder URL, skipping B2 deletion");
     }
 
-    // Delete database record
+    // ==================== DELETE FROM DATABASE ====================
+    let dbDeleted = false;
     try {
       console.log("💾 Deleting database record...");
       await SubOperationFolder.destroy({
         where: { so_folder_id: so_folder_id },
       });
+      dbDeleted = true;
       console.log("✅ Database record deleted successfully");
     } catch (dbDeleteError) {
       console.error("❌ Database deletion error:", dbDeleteError);
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // Success response
-    console.log("🎉 Folder document deletion completed successfully");
-    res.json({
-      message: "Folder document deleted successfully",
+    // ==================== SUCCESS RESPONSE ====================
+    console.log("🎉 Folder file deletion completed");
+
+    const response = {
+      message: "Folder file deleted successfully",
+      success: true,
       data: {
         id: so_folder_id,
-        filename: folderRecord.folder_url,
-        fileDeleted: fileDeleted,
-        recordDeleted: true,
+        filename:
+          folderFileRecord.original_filename || folderFileRecord.folder_url,
+        folder_name: folderFileRecord.folder_name,
+        b2_deleted: b2Deleted,
+        db_deleted: dbDeleted,
+        storage_provider: "backblaze_b2",
       },
-      success: true,
-    });
+    };
+
+    // Add warnings if B2 deletion had issues
+    if (b2Error && !b2Deleted) {
+      response.warning =
+        "Folder file removed from database but cloud storage cleanup failed";
+      response.warning_details = {
+        message: b2Error.message,
+        code: b2Error.code,
+      };
+    }
+
+    res.json(response);
   } catch (error) {
     console.error("❌ Delete process failed:", error.message);
 
-    // Determine appropriate status code and error message
     let statusCode = 500;
-    let errorMessage = "Server error during folder document deletion";
+    let errorMessage = "Server error during folder file deletion";
 
     if (error.message.includes("Database search failed")) {
       statusCode = 500;
-      errorMessage = "Failed to find folder document record";
+      errorMessage = "Failed to find folder file record";
     } else if (error.message.includes("Database deletion failed")) {
       statusCode = 500;
-      errorMessage = "Failed to delete folder document record from database";
-    } else if (error.message.includes("Valid folder document ID is required")) {
+      errorMessage = "Failed to delete folder file record from database";
+    } else if (error.message.includes("Valid folder file ID is required")) {
       statusCode = 400;
       errorMessage = error.message;
     }
-
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
 
     res.status(statusCode).json({
       message: errorMessage,
@@ -1626,22 +2328,89 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
 exports.getImages = async (req, res) => {
   try {
     const { subOpId } = req.params;
-    // Implementation to get images from SubOperationImages model
+
+    // Validate parameter
+    if (!subOpId) {
+      return res.status(400).json({
+        success: false,
+        message: "subOpId parameter is required",
+      });
+    }
+
+    console.log(`📸 Fetching images for subOpId: ${subOpId}`);
+
+    // Get images from database
     const images = await SubOperationImages.findAll({
-      where: { sub_operation_id: subOpId },
+      where: { sub_operation_id: subOpId }, // Using sub_op_id instead of sub_operation_id
       order: [["createdAt", "DESC"]],
+      attributes: [
+        "so_img_id",
+        "sub_operation_id",
+        "sub_operation_name",
+        "image_url",
+        "b2_file_id",
+        "file_size",
+        "original_filename",
+        "file_type",
+        "uploaded_by",
+        "createdAt",
+        "updatedAt",
+      ],
+    });
+
+    console.log(`✅ Found ${images.length} images for subOpId: ${subOpId}`);
+
+    // Generate B2 URLs for each image
+    const imagesWithUrls = images.map((image) => {
+      const imageData = image.toJSON();
+
+      // Generate B2 public URL
+      let publicUrl = imageData.public_url; // If already stored in DB
+
+      if (!publicUrl && imageData.image_url) {
+        // Construct B2 URL from image_url (which should be the B2 path)
+        const bucketName = process.env.B2_BUCKET_NAME;
+        const region = process.env.B2_REGION || "eu-central-003";
+
+        // Check if image_url is already a full path
+        if (imageData.image_url.startsWith("http")) {
+          publicUrl = imageData.image_url;
+        } else {
+          // Construct URL - adjust based on your bucket configuration
+          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${imageData.image_url}`;
+        }
+      }
+
+      // Add proxy URL for frontend access
+      const proxyUrl = `/api/b2-files/${imageData.image_url}`;
+
+      return {
+        ...imageData,
+        public_url: publicUrl,
+        proxy_url: proxyUrl,
+        // For compatibility with frontend
+        direct_url: publicUrl,
+        preview_url: proxyUrl, // Use proxy for preview to avoid CORS issues
+      };
     });
 
     res.json({
       success: true,
-      data: images,
+      data: imagesWithUrls,
+      count: images.length,
       message: "Images fetched successfully",
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: process.env.B2_REGION || "eu-central-003",
+      },
     });
   } catch (error) {
-    console.error("Error fetching images:", error);
+    console.error("❌ Error fetching images:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch images",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -1649,45 +2418,307 @@ exports.getImages = async (req, res) => {
 exports.getTechPacks = async (req, res) => {
   try {
     const { subOpId } = req.params;
-    // Implementation to get tech packs from SubOperationTechPack model
+
+    // Validate parameter
+    if (!subOpId) {
+      return res.status(400).json({
+        success: false,
+        message: "subOpId parameter is required",
+      });
+    }
+
+    console.log(`📋 Fetching tech packs for subOpId: ${subOpId}`);
+
+    // Get tech packs from database
     const techPacks = await SubOperationTechPack.findAll({
-      where: { sub_operation_id: subOpId },
+      where: { sub_operation_id: subOpId }, // Changed from sub_op_id to match your model
       order: [["createdAt", "DESC"]],
+      attributes: [
+        "so_tech_id",
+        "sub_operation_id",
+        "sub_operation_name",
+        "tech_pack_url",
+        "b2_file_id",
+        "file_size",
+        "original_filename",
+        "file_type",
+        "uploaded_by",
+        "createdAt",
+        "updatedAt",
+      ],
+    });
+
+    console.log(
+      `✅ Found ${techPacks.length} tech packs for subOpId: ${subOpId}`
+    );
+
+    // Generate URLs for each tech pack
+    const techPacksWithUrls = techPacks.map((techPack) => {
+      const techPackData = techPack.toJSON();
+
+      // Generate B2 URL
+      let publicUrl = techPackData.public_url; // If already stored in DB
+
+      if (!publicUrl && techPackData.tech_pack_url) {
+        // Check if tech_pack_url is already a full path
+        if (techPackData.tech_pack_url.startsWith("http")) {
+          publicUrl = techPackData.tech_pack_url;
+        } else {
+          // Construct B2 URL
+          const bucketName = process.env.B2_BUCKET_NAME;
+          const region = process.env.B2_REGION || "eu-central-003";
+          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${techPackData.tech_pack_url}`;
+        }
+      }
+
+      // Add proxy URL for frontend access
+      const proxyUrl = `/api/b2-files/${techPackData.tech_pack_url}`;
+
+      // Determine file icon based on extension
+      const fileIcon = getFileIcon(
+        techPackData.original_filename || techPackData.tech_pack_url
+      );
+
+      return {
+        ...techPackData,
+        public_url: publicUrl,
+        proxy_url: proxyUrl,
+        // For frontend compatibility
+        direct_url: publicUrl,
+        preview_url: proxyUrl,
+        file_icon: fileIcon,
+        // File info for display
+        file_name:
+          techPackData.original_filename ||
+          techPackData.tech_pack_url?.split("/").pop() ||
+          "techpack.xlsx",
+        file_extension: getFileExtension(
+          techPackData.original_filename || techPackData.tech_pack_url
+        ),
+        // Human readable file size
+        file_size_formatted: formatFileSize(techPackData.file_size),
+      };
     });
 
     res.json({
       success: true,
-      data: techPacks,
+      data: techPacksWithUrls,
+      count: techPacks.length,
       message: "Tech packs fetched successfully",
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: process.env.B2_REGION || "eu-central-003",
+      },
     });
   } catch (error) {
-    console.error("Error fetching tech packs:", error);
+    console.error("❌ Error fetching tech packs:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch tech packs",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
+
+// Helper function to get file icon
+function getFileIcon(filename) {
+  if (!filename) return "📄";
+
+  const ext = getFileExtension(filename).toLowerCase();
+
+  const iconMap = {
+    ".xlsx": "📊",
+    ".xls": "📊",
+    ".csv": "📑",
+    ".pdf": "📕",
+    ".doc": "📘",
+    ".docx": "📘",
+    ".txt": "📝",
+    ".zip": "🗜️",
+    ".rar": "🗜️",
+    ".7z": "🗜️",
+  };
+
+  return iconMap[ext] || "📄";
+}
+
+// Helper function to get file extension
+function getFileExtension(filename) {
+  if (!filename) return "";
+  const lastDot = filename.lastIndexOf(".");
+  return lastDot === -1 ? "" : filename.substring(lastDot);
+}
+
+// Helper function to format file size
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
 
 exports.getFolderDocuments = async (req, res) => {
   try {
     const { subOpId } = req.params;
-    // Implementation to get folder documents from SubOperationFolder model
-    const folders = await SubOperationFolder.findAll({
+
+    // Validate parameter
+    if (!subOpId) {
+      return res.status(400).json({
+        success: false,
+        message: "subOpId parameter is required",
+      });
+    }
+
+    console.log(`📂 Fetching folder files for subOpId: ${subOpId}`);
+
+    // Get folder files from database
+    const folderFiles = await SubOperationFolder.findAll({
       where: { sub_operation_id: subOpId },
       order: [["createdAt", "DESC"]],
+      attributes: [
+        "so_folder_id",
+        "sub_operation_id",
+        "sub_operation_name",
+        "folder_url",
+        "b2_file_id",
+        "file_size",
+        "original_filename",
+        "file_type",
+        "uploaded_by",
+        "createdAt",
+        "updatedAt",
+      ],
+    });
+
+    console.log(
+      `✅ Found ${folderFiles.length} folder files for subOpId: ${subOpId}`
+    );
+
+    // Generate URLs for each file
+    const folderFilesWithUrls = folderFiles.map((folderFile) => {
+      const folderFileData = folderFile.toJSON();
+
+      // Generate B2 URL
+      let publicUrl = null;
+      if (folderFileData.folder_url) {
+        if (folderFileData.folder_url.startsWith("http")) {
+          publicUrl = folderFileData.folder_url;
+        } else {
+          const bucketName = process.env.B2_BUCKET_NAME;
+          const region = process.env.B2_REGION || "eu-central-003";
+          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${folderFileData.folder_url}`;
+        }
+      }
+
+      // Add proxy URL for frontend access
+      const proxyUrl = folderFileData.folder_url
+        ? `/api/b2-files/${folderFileData.folder_url}`
+        : null;
+
+      // Determine file type icon
+      const fileIcon = getFileIcon(
+        folderFileData.original_filename || folderFileData.folder_url
+      );
+      const fileType = getFileType(
+        folderFileData.file_type || folderFileData.original_filename
+      );
+
+      return {
+        ...folderFileData,
+        public_url: publicUrl,
+        proxy_url: proxyUrl,
+        // For frontend compatibility
+        direct_url: publicUrl,
+        preview_url: proxyUrl,
+        file_icon: fileIcon,
+        file_type_name: fileType,
+        // File info for display
+        file_name:
+          folderFileData.original_filename ||
+          folderFileData.folder_url?.split("/").pop() ||
+          "file",
+        file_extension: getFileExtension(
+          folderFileData.original_filename || folderFileData.folder_url
+        ),
+        // Human readable file size
+        file_size_formatted: formatFileSize(folderFileData.file_size),
+      };
     });
 
     res.json({
       success: true,
-      data: folders,
-      message: "Folder documents fetched successfully",
+      data: folderFilesWithUrls,
+      count: folderFiles.length,
+      message: "Folder files fetched successfully",
+      storage: {
+        type: "backblaze_b2",
+        bucket: process.env.B2_BUCKET_NAME,
+        region: process.env.B2_REGION || "eu-central-003",
+      },
     });
   } catch (error) {
-    console.error("Error fetching folder documents:", error);
+    console.error("❌ Error fetching folder files:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch folder documents",
+      message: "Failed to fetch folder files",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
+
+// Helper functions (add these or reuse from previous controllers)
+function getFileIcon(filename) {
+  if (!filename) return "📄";
+  const ext = getFileExtension(filename).toLowerCase();
+  const iconMap = {
+    ".pdf": "📕",
+    ".doc": "📘",
+    ".docx": "📘",
+    ".txt": "📝",
+    ".zip": "🗜️",
+    ".rar": "🗜️",
+    ".7z": "🗜️",
+    ".jpg": "🖼️",
+    ".jpeg": "🖼️",
+    ".png": "🖼️",
+    ".gif": "🖼️",
+    ".xlsx": "📊",
+    ".xls": "📊",
+    ".csv": "📑",
+  };
+  return iconMap[ext] || "📄";
+}
+
+function getFileType(mimeTypeOrFilename) {
+  if (!mimeTypeOrFilename) return "Document";
+
+  if (mimeTypeOrFilename.includes("/")) {
+    // It's a MIME type
+    const parts = mimeTypeOrFilename.split("/");
+    return parts[1] ? parts[1].toUpperCase() : "Document";
+  } else {
+    // It's a filename
+    const ext = getFileExtension(mimeTypeOrFilename).toLowerCase();
+    const typeMap = {
+      ".pdf": "PDF Document",
+      ".doc": "Word Document",
+      ".docx": "Word Document",
+      ".txt": "Text File",
+      ".zip": "Archive",
+      ".rar": "Archive",
+      ".7z": "Archive",
+      ".jpg": "Image",
+      ".jpeg": "Image",
+      ".png": "Image",
+      ".gif": "Image",
+      ".xlsx": "Excel Spreadsheet",
+      ".xls": "Excel Spreadsheet",
+      ".csv": "CSV File",
+    };
+    return typeMap[ext] || "Document";
+  }
+}

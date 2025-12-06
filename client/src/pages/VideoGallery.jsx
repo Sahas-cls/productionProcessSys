@@ -35,11 +35,12 @@ const VideoGallery = () => {
         { withCredentials: true }
       );
       setVideos(response.data?.data || []);
+      console.log("📹 Videos loaded:", response.data);
     } catch (error) {
       console.error("Error fetching videos:", error);
       Swal.fire({
         title: "Error",
-        text: "Failed to load videos",
+        text: "Failed to load videos from cloud storage",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -48,18 +49,68 @@ const VideoGallery = () => {
     }
   };
 
+  // Helper to get video MIME type from extension
+  const getVideoMimeType = (url) => {
+    if (!url) return 'video/mp4';
+    const ext = url.split('.').pop().toLowerCase();
+    const mimeTypes = {
+      'mp4': 'video/mp4',
+      'webm': 'video/webm',
+      'ogg': 'video/ogg',
+      'avi': 'video/x-msvideo',
+      'mov': 'video/quicktime',
+      'wmv': 'video/x-ms-wmv',
+      'flv': 'video/x-flv',
+      'mkv': 'video/x-matroska',
+      'm4v': 'video/x-m4v',
+    };
+    return mimeTypes[ext] || 'video/mp4';
+  };
+
   const getFileUrl = (item) => {
-    const baseUrl = import.meta.env.VITE_API_URL;
-    return `${baseUrl}/videos/${item.media_url}`;
+    // Use proxy URL from backend if available
+    if (item.video_url_proxy) {
+      const baseUrl = import.meta.env.VITE_API_URL || "";
+      return `${baseUrl}${item.video_url_proxy}`;
+    }
+    
+    // Fallback: construct proxy URL from B2 path
+    if (item.media_url) {
+      const baseUrl = import.meta.env.VITE_API_URL || "";
+      return `${baseUrl}/api/b2-files/${item.media_url}`;
+    }
+    
+    console.warn("No media_url found for video:", item);
+    return "";
   };
 
   const getFileName = (item) => {
-    return item.media_url;
+    // Use original filename if available
+    if (item.original_filename) {
+      return item.original_filename;
+    }
+    
+    // Extract from B2 path like "SubOpVideos/123/filename.mp4"
+    if (item.media_url) {
+      const parts = item.media_url.split('/');
+      return parts[parts.length - 1] || item.media_url;
+    }
+    
+    return "Unknown video file";
   };
 
   const handleFileAction = (item) => {
     const fileUrl = getFileUrl(item);
-    window.open(fileUrl, "_blank");
+    if (fileUrl) {
+      window.open(fileUrl, "_blank");
+    } else {
+      Swal.fire({
+        title: "Error",
+        text: "Video URL not available",
+        icon: "error",
+        timer: 3000,
+      });
+    }
   };
 
   const handleDelete = async (id, fileName) => {
@@ -88,7 +139,7 @@ const VideoGallery = () => {
         await fetchVideos();
         Swal.fire({
           title: "Deleted!",
-          text: "Video has been deleted.",
+          text: "Video has been deleted from cloud storage.",
           icon: "success",
           timer: 2000,
           showConfirmButton: false,
@@ -98,7 +149,7 @@ const VideoGallery = () => {
       console.error("Delete error:", error);
       Swal.fire({
         title: "Error",
-        text: "Failed to delete video. Please try again.",
+        text: error.response?.data?.message || "Failed to delete video from cloud storage.",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -138,8 +189,13 @@ const VideoGallery = () => {
           <span>Go back</span>
         </button>
 
-        <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm">
-          Total Videos: {videos.length}
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm">
+            Total Videos: {videos.length}
+          </div>
+          <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+            ☁️ Cloud Storage
+          </div>
         </div>
       </div>
 
@@ -159,7 +215,7 @@ const VideoGallery = () => {
           <div className="flex justify-center items-center py-12">
             <div className="text-center">
               <BeatLoader color="#3b82f6" size={15} />
-              <p className="mt-4 text-gray-600">Loading videos...</p>
+              <p className="mt-4 text-gray-600">Loading videos from cloud...</p>
             </div>
           </div>
         ) : !videos || videos.length === 0 ? (
@@ -177,6 +233,7 @@ const VideoGallery = () => {
             {videos.map((item) => {
               const fileUrl = getFileUrl(item);
               const fileName = getFileName(item);
+              const mimeType = getVideoMimeType(fileUrl);
 
               return (
                 <motion.div
@@ -187,44 +244,56 @@ const VideoGallery = () => {
                 >
                   {/* Video Preview */}
                   <div className="relative w-full aspect-video bg-gray-100">
-                    <Plyr
-                      source={{
-                        type: "video",
-                        title: item.sub_operation_name || "Video",
-                        sources: [
-                          {
-                            src: fileUrl,
-                            type: "video/webm",
-                          },
-                        ],
-                      }}
-                      options={{
-                        controls: [
-                          "play-large",
-                          "play",
-                          "progress",
-                          "current-time",
-                          "duration",
-                          "mute",
-                          "volume",
-                          "settings",
-                          "pip",
-                          "fullscreen",
-                          "rewind",
-                          "fast-forward",
-                        ],
-                        ratio: "16:9",
-                        clickToPlay: true,
-                        tooltips: { controls: true, seek: true },
-                        keyboard: { global: true },
-                        seekTime: 10,
-                        disableContextMenu: true,
-                      }}
-                    />
+                    {fileUrl ? (
+                      <Plyr
+                        source={{
+                          type: "video",
+                          title: item.sub_operation_name || "Video",
+                          sources: [
+                            {
+                              src: fileUrl,
+                              type: mimeType,
+                            },
+                          ],
+                        }}
+                        options={{
+                          controls: [
+                            "play-large",
+                            "play",
+                            "progress",
+                            "current-time",
+                            "duration",
+                            "mute",
+                            "volume",
+                            "settings",
+                            "pip",
+                            "fullscreen",
+                            "rewind",
+                            "fast-forward",
+                          ],
+                          ratio: "16:9",
+                          clickToPlay: true,
+                          tooltips: { controls: true, seek: true },
+                          keyboard: { global: true },
+                          seekTime: 10,
+                          disableContextMenu: true,
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full bg-gray-200">
+                        <div className="text-center text-gray-500">
+                          <FaPlay className="text-4xl mx-auto mb-2 opacity-50" />
+                          <p>Video not available</p>
+                        </div>
+                      </div>
+                    )}
 
                     {deletingId === item.so_media_id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
                         <BeatLoader color="#ffffff" size={10} />
+                        <span className="ml-3 text-white text-sm">
+                          Deleting from cloud...
+                        </span>
                       </div>
                     )}
                   </div>
@@ -237,7 +306,7 @@ const VideoGallery = () => {
                     <div className="text-sm text-gray-600 space-y-2">
                       <div className="flex justify-between">
                         <span className="font-medium">File:</span>
-                        <span className="text-xs font-mono truncate max-w-[120px]">
+                        <span className="text-xs font-mono truncate max-w-[120px]" title={fileName}>
                           {fileName}
                         </span>
                       </div>
@@ -245,6 +314,12 @@ const VideoGallery = () => {
                         <div className="flex justify-between">
                           <span className="font-medium">Size:</span>
                           <span>{formatFileSize(item.file_size)}</span>
+                        </div>
+                      )}
+                      {item.file_type && (
+                        <div className="flex justify-between">
+                          <span className="font-medium">Type:</span>
+                          <span className="text-xs">{item.file_type}</span>
                         </div>
                       )}
                     </div>
@@ -257,7 +332,9 @@ const VideoGallery = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleFileAction(item)}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
+                          disabled={!fileUrl}
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
+                          title={fileUrl ? "Open video" : "Video not available"}
                         >
                           <FaExternalLinkAlt className="text-sm" />
                           View

@@ -3,9 +3,45 @@ const routes = express.Router();
 const multer = require("multer");
 const path = require("path");
 const controller = require("../controllers/SubOpMediaController");
+const authMiddleware = require("../middlewares/AuthUser");
 
-// Use memory storage for all uploads
+// Use memory storage for all uploads (CORRECT for B2)
 const storage = multer.memoryStorage();
+
+// ==================== FILENAME GENERATION MIDDLEWARE ====================
+// This adds generated filenames to req.files for consistent naming
+const generateFilenames = (req, res, next) => {
+  if (req.files || req.file) {
+    const files = req.files || [req.file].filter(Boolean);
+    const subOpId = req.body.subOpId || "unknown";
+    const timestamp = Date.now();
+
+    files.forEach((file, index) => {
+      if (file) {
+        const originalName = file.originalname;
+        const ext = path.extname(originalName);
+        const baseName = path.basename(originalName, ext);
+
+        // Generate unique filename
+        const uniqueName = `${baseName}_${subOpId}_${timestamp}_${index}${ext}`;
+        file.generatedName = uniqueName;
+        file.originalName = originalName;
+
+        // Also store file type for B2 folder organization
+        if (file.mimetype.startsWith("video/")) {
+          file.mediaType = "video";
+        } else if (file.mimetype.startsWith("image/")) {
+          file.mediaType = "image";
+        } else if (file.fieldname === "techPack") {
+          file.mediaType = "techpack";
+        } else if (file.fieldname === "documents") {
+          file.mediaType = "document";
+        }
+      }
+    });
+  }
+  next();
+};
 
 // ==================== VIDEO UPLOAD CONFIG ====================
 const videoUpload = multer({
@@ -104,7 +140,9 @@ const folderUpload = multer({
       ".jpg",
       ".jpeg",
       ".png",
+      ".webp",
       ".zip",
+      ".rar",
       ".ods",
     ];
 
@@ -118,8 +156,10 @@ const folderUpload = multer({
       "text/csv",
       "image/jpeg",
       "image/png",
+      "image/webp",
       "application/zip",
       "application/x-zip-compressed",
+      "application/x-rar-compressed",
       "application/vnd.oasis.opendocument.spreadsheet",
     ];
 
@@ -147,27 +187,33 @@ const handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
-        message: "File too large",
         success: false,
+        message:
+          "File too large. Maximum size is: " +
+          (error.field === "video"
+            ? "1GB"
+            : error.field === "image"
+            ? "50MB"
+            : "20MB"),
       });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
       return res.status(400).json({
-        message: "Too many files",
         success: false,
+        message: "Too many files. Maximum is 10 files per upload",
       });
     }
     if (error.code === "LIMIT_UNEXPECTED_FILE") {
       return res.status(400).json({
-        message: "Unexpected file field",
         success: false,
+        message: "Unexpected file field. Check field name",
       });
     }
   } else if (error) {
     // This catches the fileFilter errors
     return res.status(400).json({
-      message: error.message,
       success: false,
+      message: error.message,
     });
   }
   next();
@@ -179,8 +225,10 @@ const handleMulterError = (error, req, res, next) => {
 routes.get("/getVideos/:subOpId", controller.getVideos);
 routes.post(
   "/uploadVideos",
+  authMiddleware,
   videoUpload.single("video"),
   handleMulterError,
+  generateFilenames, // Add filename generation
   controller.uploadVideo
 );
 routes.delete("/deleteVideo/:so_media_id", controller.deleteVideo);
@@ -191,6 +239,7 @@ routes.post(
   "/uploadImages",
   imageUpload.single("image"),
   handleMulterError,
+  generateFilenames, // Add filename generation
   controller.uploadImage
 );
 routes.delete("/deleteImage/:so_img_id", controller.deleteImage);
@@ -201,6 +250,7 @@ routes.post(
   "/uploadTechPack",
   folderUpload.single("techPack"),
   handleMulterError,
+  generateFilenames, // Add filename generation
   controller.uploadTechPack
 );
 routes.delete("/deleteTechPack/:so_tech_id", controller.deleteTechPack);
@@ -211,6 +261,7 @@ routes.post(
   "/uploadFolder",
   folderUpload.array("documents", 10), // max 10 files
   handleMulterError,
+  generateFilenames, // Add filename generation
   controller.uploadFolder
 );
 routes.delete(

@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { FaImage, FaTrash, FaExternalLinkAlt, FaArrowLeft } from "react-icons/fa";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  FaImage,
+  FaTrash,
+  FaExternalLinkAlt,
+  FaArrowLeft,
+  FaCloud,
+  FaDownload,
+} from "react-icons/fa";
 import { BeatLoader } from "react-spinners";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
@@ -12,31 +19,64 @@ const ImageGallery = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userRole = user?.userRole;
-  
+  const params = useParams();
+
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [subOpId, setSubOpId] = useState(null);
 
   useEffect(() => {
-    if (location.state?.subOpId) {
-      fetchImages();
-    }
-  }, [location.state?.subOpId]);
+    // Get subOpId from params, location state, or URL query
+    const id =
+      params.subOpId ||
+      location.state?.subOpId ||
+      new URLSearchParams(location.search).get("subOpId");
 
-  const fetchImages = async () => {
-    const subOpId = location.state.subOpId;
+    if (id) {
+      setSubOpId(id);
+      fetchImages(id);
+    } else {
+      Swal.fire({
+        title: "Missing Parameter",
+        text: "Sub-operation ID is required to view images",
+        icon: "error",
+        confirmButtonText: "Go Back",
+      }).then(() => navigate(-1));
+    }
+  }, [location, params]);
+
+  const fetchImages = async (id) => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getImages/${subOpId}`,
+        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getImages/${id}`,
         { withCredentials: true }
       );
-      setImages(response.data?.data || []);
+
+      if (response.data.success) {
+        setImages(response.data.data || []);
+        console.log(
+          `✅ Loaded ${
+            response.data.data?.length || 0
+          } images from Backblaze B2`
+        );
+      } else {
+        throw new Error(response.data.message || "Failed to load images");
+      }
     } catch (error) {
-      console.error("Error fetching images:", error);
+      console.error("❌ Error fetching images:", error);
+
+      let errorMessage = "Failed to load images";
+      if (error.response?.status === 404) {
+        errorMessage = "No images found for this sub-operation";
+      } else if (error.response?.status === 400) {
+        errorMessage = "Invalid sub-operation ID";
+      }
+
       Swal.fire({
         title: "Error",
-        text: "Failed to load images",
+        text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -45,18 +85,82 @@ const ImageGallery = () => {
     }
   };
 
-  const getFileUrl = (item) => {
+  // Get the best URL for the image - prefers proxy URL for security
+  const getImageUrl = (item) => {
     const baseUrl = import.meta.env.VITE_API_URL;
-    return `${baseUrl}/subop-images/${item.image_url}`;
+
+    // Priority: proxy_url -> preview_url -> public_url -> direct_url -> old format
+    if (item.proxy_url) {
+      return `${baseUrl}${item.proxy_url}`;
+    } else if (item.preview_url) {
+      return `${baseUrl}${item.preview_url}`;
+    } else if (item.public_url) {
+      return item.public_url;
+    } else if (item.direct_url) {
+      return item.direct_url;
+    } else if (item.image_url) {
+      // Legacy support - check if it's already a full URL
+      if (item.image_url.startsWith("http")) {
+        return item.image_url;
+      }
+      // Use B2 proxy endpoint
+      return `${baseUrl}/api/b2-files/${item.image_url}`;
+    }
+
+    return "";
+  };
+
+  // Get URL for download (direct B2 link)
+  const getDownloadUrl = (item) => {
+    if (item.public_url) {
+      return item.public_url;
+    }
+    if (item.direct_url) {
+      return item.direct_url;
+    }
+    return getImageUrl(item);
   };
 
   const getFileName = (item) => {
-    return item.image_url;
+    return (
+      item.original_filename || item.image_url?.split("/").pop() || "image.jpg"
+    );
   };
 
-  const handleFileAction = (item) => {
-    const fileUrl = getFileUrl(item);
-    window.open(fileUrl, "_blank");
+  const handleViewImage = (item) => {
+    const imageUrl = getImageUrl(item);
+    if (imageUrl) {
+      window.open(imageUrl, "_blank");
+    } else {
+      Swal.fire({
+        title: "Error",
+        text: "Cannot open image - URL not available",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+    }
+  };
+
+  const handleDownload = (item) => {
+    const downloadUrl = getDownloadUrl(item);
+    const fileName = getFileName(item);
+
+    if (downloadUrl) {
+      // Create a temporary link for download
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      Swal.fire({
+        title: "Error",
+        text: "Cannot download image - URL not available",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+    }
   };
 
   const handleDelete = async (id, fileName) => {
@@ -77,25 +181,35 @@ const ImageGallery = () => {
 
     try {
       const response = await axios.delete(
-        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/deleteImage/${id}`,
+        `${
+          import.meta.env.VITE_API_URL
+        }/api/subOperationMedia/deleteImage/${id}`,
         { withCredentials: true }
       );
 
-      if (response.status === 200) {
-        await fetchImages();
+      if (response.data.success) {
+        await fetchImages(subOpId);
         Swal.fire({
           title: "Deleted!",
-          text: "Image has been deleted.",
+          text: "Image has been deleted from cloud storage.",
           icon: "success",
           timer: 2000,
           showConfirmButton: false,
         });
+      } else {
+        throw new Error(response.data.message || "Delete failed");
       }
     } catch (error) {
       console.error("Delete error:", error);
+
+      let errorMessage = "Failed to delete image. Please try again.";
+      if (error.response?.data?.warning) {
+        errorMessage = error.response.data.warning;
+      }
+
       Swal.fire({
         title: "Error",
-        text: "Failed to delete image. Please try again.",
+        text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -123,6 +237,12 @@ const ImageGallery = () => {
     });
   };
 
+  const handleRefresh = () => {
+    if (subOpId) {
+      fetchImages(subOpId);
+    }
+  };
+
   return (
     <div className="px-4 md:px-8 lg:px-16 xl:px-32 min-h-screen bg-gray-50 py-8">
       {/* Page header */}
@@ -135,8 +255,28 @@ const ImageGallery = () => {
           <span>Go back</span>
         </button>
 
-        <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm">
-          Total Images: {images.length}
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
+            <FaCloud className="text-blue-500" />
+            <span>Total Images: {images.length}</span>
+            {images.length > 0 && (
+              <span className="text-xs text-gray-400">
+                (
+                {formatFileSize(
+                  images.reduce((sum, img) => sum + (img.file_size || 0), 0)
+                )}
+                )
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={loading}
+            className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 px-3 py-1 rounded hover:bg-blue-50 flex items-center gap-2"
+          >
+            {loading ? <BeatLoader size={5} color="#3b82f6" /> : "Refresh"}
+          </button>
         </div>
       </div>
 
@@ -145,10 +285,13 @@ const ImageGallery = () => {
         <div className="w-full flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <FaImage className="text-blue-500 text-2xl" />
-            <h1 className="text-2xl font-bold">Images</h1>
+            <h1 className="text-2xl font-bold">Image Gallery</h1>
             <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
-              {images.length}
+              {images.length} {images.length === 1 ? "image" : "images"}
             </span>
+            <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              SubOp ID: {subOpId}
+            </div>
           </div>
         </div>
 
@@ -156,23 +299,33 @@ const ImageGallery = () => {
           <div className="flex justify-center items-center py-12">
             <div className="text-center">
               <BeatLoader color="#3b82f6" size={15} />
-              <p className="mt-4 text-gray-600">Loading images...</p>
+              <p className="mt-4 text-gray-600">
+                Loading images from cloud storage...
+              </p>
             </div>
           </div>
         ) : !images || images.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl shadow-sm">
-            <div className="text-gray-400 mb-4 text-6xl">🖼️</div>
+            <div className="text-gray-400 mb-4 text-6xl">
+              <FaCloud />
+            </div>
             <h3 className="text-xl font-medium text-gray-600 mb-2">
-              No images available
+              No images found
             </h3>
-            <p className="text-gray-500 max-w-md">
-              There are no images uploaded for this sub-operation yet.
+            <p className="text-gray-500 max-w-md mb-4">
+              There are no images uploaded for sub-operation {subOpId} yet.
             </p>
+            <button
+              onClick={handleRefresh}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Check again
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {images.map((item) => {
-              const fileUrl = getFileUrl(item);
+              const imageUrl = getImageUrl(item);
               const fileName = getFileName(item);
 
               return (
@@ -182,42 +335,65 @@ const ImageGallery = () => {
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
                 >
-                  <div className="relative w-full aspect-video bg-gray-100 group">
+                  <div className="relative w-full aspect-video bg-gray-50 group">
                     <button
-                      onClick={() => handleFileAction(item)}
+                      onClick={() => handleViewImage(item)}
                       className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all"
                     >
-                      <img
-                        src={fileUrl}
-                        alt={item.sub_operation_name || "Image"}
-                        className="w-full h-full object-scale-down group-hover:scale-110 duration-150"
-                        onError={(e) => {
-                          e.target.style.display = "none";
-                          e.target.nextSibling.style.display = "flex";
-                        }}
-                      />
-                      <div className="hidden flex-col items-center justify-center text-gray-400">
-                        <FaImage className="text-2xl text-blue-500" />
-                        <span className="text-xs mt-2">Click to view</span>
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={item.sub_operation_name || fileName}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                            // Show fallback
+                            const fallback =
+                              e.target.parentElement.querySelector(
+                                ".image-fallback"
+                              );
+                            if (fallback) fallback.classList.remove("hidden");
+                          }}
+                        />
+                      ) : null}
+
+                      {/* Fallback when image fails to load */}
+                      <div className="image-fallback hidden flex-col items-center justify-center text-gray-400 p-4">
+                        <FaImage className="text-4xl text-blue-500 mb-2" />
+                        <span className="text-sm">Image Preview</span>
+                        <span className="text-xs mt-1">Click to view</span>
+                      </div>
+
+                      {/* Cloud storage indicator */}
+                      <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <FaCloud className="text-xs" />
+                        <span>B2</span>
                       </div>
                     </button>
 
                     {deletingId === item.so_img_id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
                         <BeatLoader color="#ffffff" size={10} />
+                        <span className="ml-2 text-white text-sm">
+                          Deleting...
+                        </span>
                       </div>
                     )}
                   </div>
 
                   <div className="p-4">
                     <h3 className="font-semibold text-lg mb-2 line-clamp-1">
-                      {item.sub_operation_name || "Untitled image"}
+                      {item.sub_operation_name || "Untitled Image"}
                     </h3>
 
                     <div className="text-sm text-gray-600 space-y-2">
                       <div className="flex justify-between">
                         <span className="font-medium">File:</span>
-                        <span className="text-xs font-mono truncate max-w-[120px]">
+                        <span
+                          className="text-xs font-mono truncate max-w-[120px]"
+                          title={fileName}
+                        >
                           {fileName}
                         </span>
                       </div>
@@ -225,6 +401,14 @@ const ImageGallery = () => {
                         <div className="flex justify-between">
                           <span className="font-medium">Size:</span>
                           <span>{formatFileSize(item.file_size)}</span>
+                        </div>
+                      )}
+                      {item.file_type && (
+                        <div className="flex justify-between">
+                          <span className="font-medium">Type:</span>
+                          <span className="text-xs uppercase">
+                            {item.file_type.split("/")[1] || item.file_type}
+                          </span>
                         </div>
                       )}
                     </div>
@@ -235,22 +419,32 @@ const ImageGallery = () => {
                       </div>
 
                       <div className="flex gap-2">
+                        {/* <button
+                          onClick={() => handleDownload(item)}
+                          className="flex items-center gap-1 text-green-600 hover:text-green-800 transition-colors text-sm px-2 py-1 rounded hover:bg-green-50"
+                          title="Download"
+                        >
+                          <FaDownload className="text-sm" />
+                        </button> */}
+
                         <button
-                          onClick={() => handleFileAction(item)}
+                          onClick={() => handleViewImage(item)}
                           className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
+                          title="View Full Size"
                         >
                           <FaExternalLinkAlt className="text-sm" />
-                          View
                         </button>
 
                         {userRole === "Admin" && (
                           <button
-                            onClick={() => handleDelete(item.so_img_id, fileName)}
+                            onClick={() =>
+                              handleDelete(item.so_img_id, fileName)
+                            }
                             disabled={deletingId === item.so_img_id}
                             className="flex items-center gap-1 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm px-2 py-1 rounded hover:bg-red-50"
+                            title="Delete"
                           >
                             <FaTrash size={12} />
-                            Delete
                           </button>
                         )}
                       </div>

@@ -173,21 +173,59 @@ const FolderDocumentsUploader = ({
     try {
       const formData = new FormData();
 
-      // Append the metadata
+      // Append the metadata - ADD subOpId HERE!
       formData.append("styleId", uploadingData.style_id || 1);
       formData.append("styleNo", uploadingData.styleNo);
       formData.append("moId", uploadingData.moId);
       formData.append("sopId", uploadingData.sopId);
       formData.append("sopName", uploadingData.sopName);
+      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // ADD THIS LINE
       formData.append("totalFiles", selectedFiles.length);
       formData.append("folderName", `Style_${uploadingData.styleNo}_Documents`);
 
-      // Append each file
+      // Calculate total file size for validation
+      const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+      const maxTotalSize = 100 * 1024 * 1024; // 100MB total
+      const maxIndividualSize = 20 * 1024 * 1024; // 20MB per file
+
+      // Validate individual file sizes
+      const oversizedFiles = selectedFiles.filter(
+        (file) => file.size > maxIndividualSize
+      );
+      if (oversizedFiles.length > 0) {
+        throw new Error(
+          `Some files exceed 20MB limit: ${oversizedFiles
+            .map((f) => f.name)
+            .join(", ")}`
+        );
+      }
+
+      // Validate total size
+      if (totalSize > maxTotalSize) {
+        throw new Error(
+          `Total upload size (${(totalSize / (1024 * 1024)).toFixed(
+            2
+          )}MB) exceeds 100MB limit`
+        );
+      }
+
+      formData.append("totalSize", totalSize);
+
+      // Append each file - field name should be "documents" or check what backend expects
       selectedFiles.forEach((file, index) => {
-        formData.append("documents", file);
+        formData.append("documents", file); // or "files" based on your backend
+        console.log(
+          `📤 Appending file ${index + 1}: ${file.name} (${(
+            file.size / 1024
+          ).toFixed(2)}KB)`
+        );
       });
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+      console.log(
+        `📦 Starting upload of ${selectedFiles.length} files to Backblaze B2...`
+      );
 
       const response = await axios.post(
         `${apiUrl}/api/subOperationMedia/uploadFolder`,
@@ -203,9 +241,10 @@ const FolderDocumentsUploader = ({
                 (progressEvent.loaded * 100) / progressEvent.total
               );
               setUploadProgress(percentCompleted);
+              console.log(`📊 Upload progress: ${percentCompleted}%`);
             }
           },
-          timeout: 120000, // 2 minutes for multiple files
+          timeout: 300000, // Increased to 5 minutes for multiple files
         }
       );
 
@@ -217,30 +256,62 @@ const FolderDocumentsUploader = ({
           let successTitle = "Success!";
           let successText = `Folder documents uploaded successfully! (${selectedFiles.length} files)`;
           let iconType = "success";
-          let timerDuration = 4000;
+          let timerDuration = 5000;
 
           // Check for processing results
           if (response.data.uploadResults) {
             const results = response.data.uploadResults;
             if (results.filesProcessed) {
-              successText = `${results.filesProcessed} out of ${selectedFiles.length} files processed successfully`;
+              successText = `${results.filesProcessed} out of ${selectedFiles.length} files uploaded to cloud storage`;
 
-              if (results.failedFiles && results.failedFiles.length > 0) {
+              if (results.failedFiles && results.failedFiles > 0) {
                 successTitle = "Partial Upload";
                 iconType = "warning";
-                successText += `. ${results.failedFiles.length} files failed`;
+                successText += `. ${results.failedFiles} files failed`;
+
+                // Show details of failed files
+                if (response.data.failedFiles) {
+                  console.log(
+                    "❌ Failed files details:",
+                    response.data.failedFiles
+                  );
+                }
+              }
+
+              // Add size info if available
+              if (results.totalSize) {
+                successText += ` (Total: ${(
+                  results.totalSize /
+                  (1024 * 1024)
+                ).toFixed(2)}MB)`;
               }
             }
           }
 
-          // Check storage type
-          if (response.data.storageType === "local" || response.data.warning) {
-            successTitle = "Uploaded with Note";
-            successText =
-              response.data.warning ||
-              "Documents saved to local storage (network unavailable)";
-            iconType = "warning";
+          // Check if it's Backblaze B2 storage
+          if (
+            response.data.storage &&
+            response.data.storage.type === "backblaze_b2"
+          ) {
+            successTitle = "Uploaded to Cloud!";
+            successText = `Files uploaded to cloud storage successfully!`;
+            iconType = "success";
             timerDuration = 5000;
+
+            console.log("☁️ Stored in Backblaze B2:", {
+              bucket: response.data.storage.bucket,
+              region: response.data.storage.region,
+              filesProcessed: response.data.uploadResults?.filesProcessed,
+              totalSize: response.data.uploadResults?.totalSize,
+            });
+          }
+
+          // Check for any warnings
+          else if (response.data.warnings || response.data.warning) {
+            successTitle = "Uploaded with Note";
+            successText = response.data.warnings || response.data.warning;
+            iconType = "warning";
+            timerDuration = 6000;
           }
 
           Swal.fire({
@@ -253,12 +324,38 @@ const FolderDocumentsUploader = ({
           });
 
           console.log("✅ Folder documents upload successful:", response.data);
+          console.log(
+            "📁 Storage provider:",
+            response.data.storage?.type ||
+              response.data.storageProvider ||
+              "Backblaze B2"
+          );
+
+          // Log successful files details
+          if (response.data.data && Array.isArray(response.data.data)) {
+            console.log(
+              "📦 Uploaded files details:",
+              response.data.data.map((file) => ({
+                id: file.id,
+                originalName: file.originalName,
+                savedName: file.savedName,
+                size: (file.size / 1024).toFixed(2) + "KB",
+                b2FileId: file.b2FileId,
+                filePath: file.filePath,
+              }))
+            );
+          }
 
           // Reset states after successful upload
           setSelectedFiles([]);
           setUploading(false);
           setUploadProgress(0);
           setValidationError("");
+
+          // Optionally trigger a refresh of folder files list
+          if (typeof onUploadSuccess === "function") {
+            onUploadSuccess(response.data.data);
+          }
         } else if (response.data.success === false) {
           console.error("❌ Server returned failure:", response.data);
           throw new Error(
@@ -290,8 +387,15 @@ const FolderDocumentsUploader = ({
           "Server error occurred";
 
         if (error.response.status === 400) {
-          errorTitle = "Invalid Files";
-          if (errorMessage?.includes("too large")) {
+          errorTitle = "Invalid Request";
+          if (errorMessage?.includes("Missing required fields")) {
+            // More specific error for missing subOpId
+            if (errorMessage?.includes("subOpId")) {
+              errorMessage = "Please provide sub-operation ID";
+            } else {
+              errorMessage = "Please fill all required fields";
+            }
+          } else if (errorMessage?.includes("too large")) {
             errorMessage =
               "Some files are too large. Maximum size is 20MB per file";
           } else if (errorMessage?.includes("Invalid file format")) {
@@ -305,9 +409,16 @@ const FolderDocumentsUploader = ({
         } else if (error.response.status === 415) {
           errorTitle = "Unsupported Formats";
           errorMessage = "Some file formats are not supported";
+        } else if (
+          error.response.status === 502 ||
+          error.response.status === 503
+        ) {
+          errorTitle = "Cloud Storage Error";
+          errorMessage = "Unable to upload to cloud storage. Please try again.";
+          timerDuration = 6000;
         } else if (error.response.status >= 500) {
           errorTitle = "Server Error";
-          errorMessage = "Server is not accessible. Please try again later";
+          errorMessage = "Server encountered an error. Please try again later.";
           timerDuration = 6000;
         }
       } else if (error.request) {
@@ -318,6 +429,9 @@ const FolderDocumentsUploader = ({
         errorTitle = "Timeout Error";
         errorMessage =
           "Upload took too long. Please try again with fewer/smaller files.";
+      } else if (error.message.includes("exceeds")) {
+        errorTitle = "File Size Error";
+        errorMessage = error.message;
       } else {
         errorTitle = "Upload Error";
         errorMessage = error.message || "An unexpected error occurred";
