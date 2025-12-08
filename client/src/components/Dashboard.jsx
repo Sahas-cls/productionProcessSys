@@ -78,7 +78,7 @@ const Dashboard = () => {
       });
       const count = subCount.data;
       setSubCounts({
-        features: 80,
+        features: count.mainOp,
         operations: count.subOp,
         videos: count.videos,
         images: count.images,

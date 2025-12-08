@@ -100,13 +100,13 @@ const Login = () => {
     },
     validationSchema,
     onSubmit: async (values) => {
-      console.log("Form submitted:", values);
+      // console.log("Form submitted:", values);
       try {
         const result = await axios.post(`${apiUrl}/api/user/login`, values, {
           withCredentials: true,
         });
-        console.log(result);
-        console.log(result);
+        // console.log(result);
+        // console.log(result);
         if (result.status === 200) {
           setServerMessages({
             status: "success",
@@ -153,7 +153,7 @@ const Login = () => {
       // Handle login logic here
     },
   });
-  console.log("server message", serverMessages);
+  // console.log("server message", serverMessages);
   // const handleSubmit = (e) => {
   //   e.preventDefault();
   //   setSubmitAttempted(true);

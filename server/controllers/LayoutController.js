@@ -6,6 +6,7 @@ const {
   SubOperation,
   Style,
   Machine,
+  Season,
 } = require("../models");
 
 // to retrive data from layout tbl
@@ -68,35 +69,139 @@ exports.getSubOperations = async (req, res, next) => {
 };
 
 // to create new layout
+// exports.createLayout = async (req, res, next) => {
+//   //
+//   if (req?.user?.userRole !== "Admin") {
+//     const error = new Error("You don't have permission to perform this action");
+//     error.status = 401;
+//     throw error;
+//   }
+//   //   return;
+//   const { styleNo, styleDescriptoin, style, season, workstationCount } =
+//     req.body;
+
+//   try {
+//     const { createL, createWorkStation, subOperations } =
+//       await sequelize.transaction(async (t) => {
+//         // 1. Create layout
+//         const createL = await Layout.create(
+//           {
+//             style_id: styleNo,
+//             season_id: season,
+//             workstation_count: workstationCount,
+//           },
+//           { transaction: t }
+//         );
+
+//         // 2. Create workstations
+//         const workstationBulk = [];
+//         for (let i = 1; i <= workstationCount; i++) {
+//           workstationBulk.push({
+//             layout_id: createL.layout_id,
+//           });
+//         }
+
+//         const createWorkStation = await Workstation.bulkCreate(
+//           workstationBulk,
+//           {
+//             transaction: t,
+//             returning: true,
+//           }
+//         );
+
+//         // 3. Fetch sub operations related to the style via MainOperation
+//         const mainOperations = await MainOperation.findAll({
+//           where: { style_no: styleNo }, // assuming it's style_id in DB
+//           include: [
+//             {
+//               model: SubOperation,
+//               as: "subOperations", // must match the alias in your association
+//               include: { model: Machine, as: "machines" },
+//             },
+//           ],
+//           transaction: t,
+//         });
+
+//         // console.log("mo: ", mainOperations);
+//         // 4. Flatten the sub operations
+//         const subOperations = mainOperations.flatMap((mo) => mo.subOperations);
+//         // console.log("sub operations: ", subOperations);
+//         console.log("sub op: ", subOperations);
+//         return { createL, createWorkStation, subOperations };
+//       });
+
+//     res.status(201).json({
+//       status: "success",
+//       message: "Layout creation success",
+//       data: {
+//         workStations: createWorkStation,
+//         subOperations: subOperations,
+//       },
+//     });
+//   } catch (error) {
+//     return next(error);
+//   }
+// };
+
 exports.createLayout = async (req, res, next) => {
-  //
-  if (req?.user?.userRole !== "Admin") {
+  // 1. Validate user permissions
+  console.log("create layotu body: ", req.body);
+  if (!req?.user || req?.user?.userRole !== "Admin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
-    throw error;
+    return next(error);
   }
-  //   return;
+
+  // 2. Validate required fields
   const { styleNo, styleDescriptoin, style, season, workstationCount } =
     req.body;
+
+  if (!styleNo || !season || !workstationCount) {
+    const error = new Error(
+      "Missing required fields: styleNo, season, and workstationCount are required"
+    );
+    error.status = 400;
+    return next(error);
+  }
+
+  // 3. Validate workstationCount is a positive integer
+  const workstationCountInt = parseInt(workstationCount);
+  if (isNaN(workstationCountInt) || workstationCountInt <= 0) {
+    const error = new Error("workstationCount must be a positive integer");
+    error.status = 400;
+    return next(error);
+  }
 
   try {
     const { createL, createWorkStation, subOperations } =
       await sequelize.transaction(async (t) => {
-        // 1. Create layout
+        // 4. Validate style and season exist before creating layout
+        const styleExists = await Style.findByPk(styleNo, { transaction: t });
+        if (!styleExists) {
+          throw new Error(`Style with ID ${styleNo} not found`);
+        }
+
+        const seasonExists = await Season.findByPk(season, { transaction: t });
+        if (!seasonExists) {
+          throw new Error(`Season with ID ${season} not found`);
+        }
+
+        // 5. Create layout
         const createL = await Layout.create(
           {
             style_id: styleNo,
             season_id: season,
-            workstation_count: workstationCount,
+            workstation_count: workstationCountInt,
           },
           { transaction: t }
         );
 
-        // 2. Create workstations
+        // 6. Create workstations with workstation_no
         const workstationBulk = [];
-        for (let i = 1; i <= workstationCount; i++) {
+        for (let i = 1; i <= workstationCountInt; i++) {
           workstationBulk.push({
             layout_id: createL.layout_id,
+            workstation_no: `WS${i.toString().padStart(3, "0")}`, // Fixed: Added required workstation_no field
           });
         }
 
@@ -108,36 +213,51 @@ exports.createLayout = async (req, res, next) => {
           }
         );
 
-        // 3. Fetch sub operations related to the style via MainOperation
+        // 7. Fetch sub operations related to the style via MainOperation
         const mainOperations = await MainOperation.findAll({
-          where: { style_no: styleNo }, // assuming it's style_id in DB
+          where: { style_no: styleNo },
           include: [
             {
               model: SubOperation,
-              as: "subOperations", // must match the alias in your association
+              as: "subOperations",
               include: { model: Machine, as: "machines" },
             },
           ],
           transaction: t,
         });
 
-        // console.log("mo: ", mainOperations);
-        // 4. Flatten the sub operations
-        const subOperations = mainOperations.flatMap((mo) => mo.subOperations);
-        // console.log("sub operations: ", subOperations);
-        console.log("sub op: ", subOperations);
+        // 8. Flatten the sub operations
+        const subOperations = mainOperations.flatMap(
+          (mo) => mo.subOperations || []
+        );
+
         return { createL, createWorkStation, subOperations };
       });
 
+    // 9. Send success response
     res.status(201).json({
       status: "success",
-      message: "Layout creation success",
+      message: "Layout creation successful",
       data: {
+        layoutId: createL.layout_id,
         workStations: createWorkStation,
         subOperations: subOperations,
       },
     });
   } catch (error) {
+    // 10. Handle specific error cases
+    if (
+      error.name === "SequelizeUniqueConstraintError" ||
+      error.name === "SequelizeValidationError"
+    ) {
+      error.status = 400;
+      error.message = error.errors?.[0]?.message || "Validation error";
+    } else if (error.message.includes("not found")) {
+      error.status = 404;
+    } else if (!error.status) {
+      error.status = 500;
+    }
+
     return next(error);
   }
 };
