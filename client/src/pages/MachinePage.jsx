@@ -27,11 +27,11 @@ const MachinePage = () => {
 
   // Debug: Check if sidebar should be visible
   useEffect(() => {
-    console.log("Sidebar state:", {
-      toggleSidebar,
-      screenWidth: window.innerWidth,
-      isMediumScreen: window.innerWidth >= 768
-    });
+    // console.log("Sidebar state:", {
+    //   toggleSidebar,
+    //   screenWidth: window.innerWidth,
+    //   isMediumScreen: window.innerWidth >= 768
+    // });
   }, [toggleSidebar]);
 
   if (loading) {
@@ -49,7 +49,7 @@ const MachinePage = () => {
         toggleSidebar={toggleSidebar}
         setToggleSidebar={setToggleSidebar}
       />
-      
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <Header

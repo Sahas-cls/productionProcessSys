@@ -10,8 +10,8 @@ const {
   SubOperation,
   Machine,
   NeedleLooper,
-  NeedleTread,
-  NeedleType,
+  Thread,
+  NeedleTypeN,
   SubOperationMedia,
 } = require("../models");
 const ExcelJS = require("exceljs");
@@ -233,9 +233,9 @@ exports.getStylesMo = async (req, res, next) => {
               as: "subOperations",
               include: [
                 { model: Machine, as: "machines" },
-                { model: NeedleType, as: "needle_types" },
-                { model: NeedleTread, as: "needle_treads" },
-                { model: NeedleLooper, as: "needle_loopers" },
+                { model: NeedleTypeN, as: "needle_type" },
+                { model: Thread, as: "thread" },
+                { model: Thread, as: "looper" },
                 { model: SubOperationMedia, as: "medias" },
               ],
             },

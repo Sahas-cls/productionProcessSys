@@ -445,7 +445,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         </motion.div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto overflow-x-auto pb-2 lg:pb-0">
+        <div className="flex gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto overflow-x-auto md:overflow-hidden pb-2 lg:pb-0">
           <motion.button
             type="button"
             className="bg-green-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
@@ -788,7 +788,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         </p>
       </div>
 
-      <div className="rounded-xl pb-6 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-md pb-6 bg-white shadow-sm overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full">
             <thead className="bg-gradient-to-r from-blue-700 to-blue-600/80 text-white text-xs sm:text-sm lg:text-base sticky top-0">
@@ -808,9 +808,9 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                 <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
                   Machine Location
                 </th>
-                <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
+                {/* <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
                   Existing Style
-                </th>
+                </th> */}
                 {userRole === "Admin" && (
                   <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
                     Actions
@@ -857,11 +857,11 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                         {machine.machine_location}
                       </span>
                     </td>
-                    <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                    {/* <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
                       <span className="truncate max-w-[120px] sm:max-w-none block">
                         {getStyleNames(machine)}
                       </span>
-                    </td>
+                    </td> */}
                     {userRole === "Admin" && (
                       <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
                         <div className="flex justify-start sm:justify-center gap-2 sm:gap-3">

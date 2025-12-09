@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import useSubOpVideos from "../hooks/useSubOpVideos";
 import {
   FaArrowLeft,
@@ -10,6 +10,7 @@ import {
   FaFolder,
   FaDownload,
   FaExternalLinkAlt,
+  FaCloud,
 } from "react-icons/fa";
 import { BeatLoader } from "react-spinners";
 import axios from "axios";
@@ -21,19 +22,33 @@ import { MdOutlineArrowDropDownCircle } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 
 const MediaGallery = () => {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const userRole = user?.userRole;
   const location = useLocation();
   const navigate = useNavigate();
+  const params = useParams();
+
+  // Get media type from URL or params
+  const getMediaTypeFromPath = () => {
+    const path = location.pathname;
+    if (path.includes("/videos")) return "videos";
+    if (path.includes("/images")) return "images";
+    if (path.includes("/tech_packs")) return "techPacks";
+    if (path.includes("/documents") || path.includes("/folders"))
+      return "folders";
+    return "all"; // Default to all media types
+  };
+
+  const currentMediaType = getMediaTypeFromPath();
 
   // State management
   const [deletingId, setDeletingId] = useState(null);
   const [deletingType, setDeletingType] = useState(null);
   const [openSections, setOpenSections] = useState({
-    videos: false,
-    images: false,
-    techPacks: false,
-    folders: false,
+    videos: false, // Changed from condition to false
+    images: false, // Changed from condition to false
+    techPacks: false, // Changed from condition to false
+    folders: false, // Changed from condition to false
   });
   const [mediaData, setMediaData] = useState({
     videos: [],
@@ -47,93 +62,163 @@ const MediaGallery = () => {
     techPacks: false,
     folders: false,
   });
+  const [subOpId, setSubOpId] = useState(null);
 
-  const {
-    isLoading: videosLoading,
-    videosList,
-    refreshVideos,
-  } = useSubOpVideos(location.state.subOpId);
+  // Initialize from params or location state
+  useEffect(() => {
+    const id =
+      params.subOpId ||
+      location.state?.subOpId ||
+      new URLSearchParams(location.search).get("subOpId");
+
+    if (id) {
+      setSubOpId(id);
+      fetchAllMedia(id);
+    } else {
+      Swal.fire({
+        title: "Missing Parameter",
+        text: "Sub-operation ID is required to view media",
+        icon: "error",
+        confirmButtonText: "Go Back",
+      }).then(() => navigate(-1));
+    }
+  }, [location, params]);
 
   // Fetch all media types
-  useEffect(() => {
-    if (location.state?.subOpId) {
-      fetchAllMedia();
-    }
-  }, [location.state?.subOpId]);
-
-  const fetchAllMedia = async () => {
-    const subOpId = location.state.subOpId;
-
+  const fetchAllMedia = async (id) => {
     try {
-      setLoadingStates((prev) => ({
-        ...prev,
+      setLoadingStates({
+        videos: true,
         images: true,
         techPacks: true,
         folders: true,
-      }));
-
-      // Fetch videos
-      const videoResponse = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getVideos/${subOpId}`,
-        { withCredentials: true }
-      );
-
-      // Fetch images
-      const imagesResponse = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getImages/${subOpId}`,
-        { withCredentials: true }
-      );
-
-      // Fetch tech packs
-      const techPacksResponse = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getTechPacks/${subOpId}`,
-        { withCredentials: true }
-      );
-
-      // Fetch folders
-      const foldersResponse = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getFolderDocuments/${subOpId}`,
-        { withCredentials: true }
-      );
-
-      setMediaData({
-        videos: videoResponse.data?.data || [],
-        images: imagesResponse.data?.data || [],
-        techPacks: techPacksResponse.data?.data || [],
-        folders: foldersResponse.data?.data || [],
       });
+
+      // If only showing specific media type, only fetch that
+      if (currentMediaType !== "all") {
+        await fetchSpecificMedia(id, currentMediaType);
+      } else {
+        // Fetch all media types in parallel
+        await Promise.all([
+          fetchSpecificMedia(id, "videos"),
+          fetchSpecificMedia(id, "images"),
+          fetchSpecificMedia(id, "techPacks"),
+          fetchSpecificMedia(id, "folders"),
+        ]);
+      }
     } catch (error) {
       console.error("Error fetching media:", error);
       Swal.fire({
         title: "Error",
-        text: "Failed to load media files",
+        text: "Failed to load media files from cloud storage",
         icon: "error",
         confirmButtonText: "OK",
       });
+    }
+  };
+
+  // Fetch specific media type
+  // Fetch specific media type
+  const fetchSpecificMedia = async (id, type) => {
+    try {
+      let endpoint = "";
+      switch (type) {
+        case "videos":
+          endpoint = `getVideos/${id}`;
+          break;
+        case "images":
+          endpoint = `getImages/${id}`;
+          break;
+        case "techPacks":
+          endpoint = `getTechPacks/${id}`;
+          break;
+        case "folders":
+          endpoint = `getFolderFiles/${id}`; // Changed from getFolderDocuments
+          break;
+        default:
+          return;
+      }
+
+      console.log(`📡 Fetching ${type} from endpoint: ${endpoint}`);
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/${endpoint}`,
+        { withCredentials: true }
+      );
+
+      console.log(`📋 ${type} response structure:`, {
+        hasData: !!response.data.data,
+        dataLength: response.data.data?.length || 0,
+        status: response.data.status,
+        success: response.data.success,
+        message: response.data.message,
+      });
+
+      // Check for videos response structure
+      if (type === "videos") {
+        if (response.data.status === "success") {
+          setMediaData((prev) => ({
+            ...prev,
+            [type]: response.data.data || [],
+          }));
+          console.log(
+            `✅ Loaded ${
+              response.data.data?.length || 0
+            } ${type} from Backblaze B2`
+          );
+        } else {
+          throw new Error(response.data.message || `Failed to load ${type}`);
+        }
+      }
+      // Check for other media types response structure
+      else {
+        if (response.data.success || response.data.status === "success") {
+          setMediaData((prev) => ({
+            ...prev,
+            [type]: response.data.data || [],
+          }));
+          console.log(
+            `✅ Loaded ${
+              response.data.data?.length || 0
+            } ${type} from Backblaze B2`
+          );
+        } else {
+          throw new Error(response.data.message || `Failed to load ${type}`);
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching ${type}:`, error.message);
+      console.error(`❌ Error details:`, {
+        endpoint: error.config?.url,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+
+      // Set empty array for this type on error
+      setMediaData((prev) => ({
+        ...prev,
+        [type]: [],
+      }));
+
+      // Only show error for videos since they're the main focus
+      if (type === "videos") {
+        Swal.fire({
+          title: "Error",
+          text: `Failed to load ${type}: ${error.message}`,
+          icon: "error",
+          timer: 3000,
+          showConfirmButton: false,
+        });
+      }
     } finally {
       setLoadingStates((prev) => ({
         ...prev,
-        images: false,
-        techPacks: false,
-        folders: false,
+        [type]: false,
       }));
     }
   };
 
-  // Update videos when videosList changes
-  useEffect(() => {
-    setMediaData((prev) => ({ ...prev, videos: videosList || [] }));
-  }, [videosList]);
-
-  // Toggle section visibility
+  // Toggle section visibility (only for "all" view)
   const toggleSection = (section) => {
     setOpenSections((prev) => ({
       ...prev,
@@ -141,38 +226,68 @@ const MediaGallery = () => {
     }));
   };
 
-  // Get file URL based on type
+  // Get file URL based on type (updated for B2)
+  // Get file URL based on type (updated for B2)
   const getFileUrl = (item, type) => {
-    const baseUrl = import.meta.env.VITE_API_URL;
-
-    switch (type) {
-      case "videos":
-        return `${baseUrl}/videos/${item.media_url}`;
-      case "images":
-        return `${baseUrl}/subop-images/${item.image_url}`;
-      case "techPacks":
-        return `${baseUrl}/techpacks/${item.tech_pack_url}`;
-      case "folders":
-        return `${baseUrl}/documents/${item.folder_url}`;
-      default:
-        return "";
+    // For videos, use video_url_proxy if available
+    if (type === "videos") {
+      if (item.video_url_proxy) {
+        return `${import.meta.env.VITE_API_URL}${item.video_url_proxy}`;
+      }
+      if (item.media_url) {
+        return `${import.meta.env.VITE_API_URL}/api/b2-files/${item.media_url}`;
+      }
     }
+
+    // For other types, use the existing logic
+    // Priority: proxy_url -> preview_url -> public_url -> direct_url -> legacy
+    if (item.proxy_url) {
+      return `${import.meta.env.VITE_API_URL}${item.proxy_url}`;
+    } else if (item.preview_url) {
+      return `${import.meta.env.VITE_API_URL}${item.preview_url}`;
+    } else if (item.public_url) {
+      return item.public_url;
+    } else if (item.direct_url) {
+      return item.direct_url;
+    } else {
+      // Legacy fallback
+      const baseUrl = import.meta.env.VITE_API_URL;
+      const path =
+        item.media_url ||
+        item.image_url ||
+        item.tech_pack_url ||
+        item.folder_url;
+
+      if (path && path.startsWith("http")) {
+        return path;
+      } else if (path) {
+        // Use B2 proxy endpoint
+        return `${baseUrl}/api/b2-files/${path}`;
+      }
+    }
+
+    return "";
+  };
+
+  // Get download URL (direct B2 link)
+  const getDownloadUrl = (item) => {
+    if (item.public_url) {
+      return item.public_url;
+    }
+    if (item.direct_url) {
+      return item.direct_url;
+    }
+    return getFileUrl(item);
   };
 
   // Get file name based on type
   const getFileName = (item, type) => {
-    switch (type) {
-      case "videos":
-        return item.media_url;
-      case "images":
-        return item.image_url;
-      case "techPacks":
-        return item.tech_pack_url;
-      case "folders":
-        return item.folder_url;
-      default:
-        return "Unknown file";
-    }
+    if (item.file_name) return item.file_name;
+    if (item.original_filename) return item.original_filename;
+
+    const path =
+      item.media_url || item.image_url || item.tech_pack_url || item.folder_url;
+    return path?.split("/").pop() || "file";
   };
 
   // Handle file download/view
@@ -185,8 +300,9 @@ const MediaGallery = () => {
       window.open(fileUrl, "_blank");
     } else {
       // For documents and tech packs, trigger download
+      const downloadUrl = getDownloadUrl(item);
       const link = document.createElement("a");
-      link.href = fileUrl;
+      link.href = downloadUrl || fileUrl;
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
@@ -232,7 +348,7 @@ const MediaGallery = () => {
           endpoint = `deleteTechPack/${id}`;
           break;
         case "folders":
-          endpoint = `deleteFolderDocument/${id}`;
+          endpoint = `deleteFolderFile/${id}`;
           break;
         default:
           return;
@@ -243,24 +359,38 @@ const MediaGallery = () => {
         { withCredentials: true }
       );
 
-      if (response.status === 200) {
+      if (response.data.success) {
         // Refresh the specific media type
-        await fetchAllMedia();
+        await fetchSpecificMedia(subOpId, type);
+
+        let successMessage = `${
+          typeNames[type].charAt(0).toUpperCase() + typeNames[type].slice(1)
+        } has been deleted from cloud storage.`;
+        if (response.data.warning) {
+          successMessage += ` (Note: ${response.data.warning})`;
+        }
+
         Swal.fire({
           title: "Deleted!",
-          text: `${
-            typeNames[type].charAt(0).toUpperCase() + typeNames[type].slice(1)
-          } has been deleted.`,
+          text: successMessage,
           icon: "success",
-          timer: 2000,
+          timer: 3000,
           showConfirmButton: false,
         });
+      } else {
+        throw new Error(response.data.message || "Delete failed");
       }
     } catch (error) {
       console.error("Delete error:", error);
+
+      let errorMessage = `Failed to delete ${typeNames[type]}. Please try again.`;
+      if (error.response?.data?.warning) {
+        errorMessage = error.response.data.warning;
+      }
+
       Swal.fire({
         title: "Error",
-        text: `Failed to delete ${typeNames[type]}. Please try again.`,
+        text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -293,15 +423,40 @@ const MediaGallery = () => {
 
   // Get file icon based on type and extension
   const getFileIcon = (item, type) => {
+    const fileName = getFileName(item, type).toLowerCase();
+
     if (type === "images")
       return <FaImage className="text-2xl text-blue-500" />;
-    if (type === "techPacks")
+    if (type === "techPacks") {
+      if (fileName.includes(".pdf"))
+        return <FaFileExcel className="text-2xl text-red-500" />;
       return <FaFileExcel className="text-2xl text-green-500" />;
-    if (type === "folders")
+    }
+    if (type === "folders") {
+      if (fileName.includes(".pdf"))
+        return <FaFileExcel className="text-2xl text-red-500" />;
+      if (fileName.includes(".doc"))
+        return <FaFileExcel className="text-2xl text-blue-600" />;
       return <FaFolder className="text-2xl text-orange-500" />;
-
-    // For videos, use play icon
+    }
+    // For videos
     return <FaPlay className="text-2xl text-red-500" />;
+  };
+
+  // Get emoji icon for empty state
+  const getEmojiIcon = (type) => {
+    switch (type) {
+      case "videos":
+        return "🎥";
+      case "images":
+        return "🖼️";
+      case "techPacks":
+        return "📊";
+      case "folders":
+        return "📁";
+      default:
+        return "📄";
+    }
   };
 
   // Get action icon based on file type
@@ -327,7 +482,9 @@ const MediaGallery = () => {
         <div className="flex justify-center items-center py-12">
           <div className="text-center">
             <BeatLoader color="#3b82f6" size={15} />
-            <p className="mt-4 text-gray-600">Loading {type}...</p>
+            <p className="mt-4 text-gray-600">
+              Loading {type} from cloud storage...
+            </p>
           </div>
         </div>
       );
@@ -336,25 +493,25 @@ const MediaGallery = () => {
     if (!items || items.length === 0) {
       const emptyStates = {
         videos: {
-          icon: "🎥",
+          icon: getEmojiIcon("videos"),
           title: "No videos available",
           description:
             "There are no videos uploaded for this sub-operation yet.",
         },
         images: {
-          icon: "🖼️",
+          icon: getEmojiIcon("images"),
           title: "No images available",
           description:
             "There are no images uploaded for this sub-operation yet.",
         },
         techPacks: {
-          icon: "📊",
+          icon: getEmojiIcon("techPacks"),
           title: "No tech packs available",
           description:
             "There are no tech packs uploaded for this sub-operation yet.",
         },
         folders: {
-          icon: "📁",
+          icon: getEmojiIcon("folders"),
           title: "No documents available",
           description:
             "There are no documents uploaded for this sub-operation yet.",
@@ -372,6 +529,12 @@ const MediaGallery = () => {
           <p className="text-gray-500 max-w-md">
             {emptyStates[type].description}
           </p>
+          <button
+            onClick={() => fetchSpecificMedia(subOpId, type)}
+            className="mt-4 text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Refresh
+          </button>
         </div>
       );
     }
@@ -379,79 +542,164 @@ const MediaGallery = () => {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {items.map((item) => {
-          const fileUrl = getFileUrl(item, type);
           const fileName = getFileName(item, type);
+          const itemId =
+            item[
+              `so_${
+                type === "videos"
+                  ? "media"
+                  : type === "images"
+                  ? "img"
+                  : type === "techPacks"
+                  ? "tech"
+                  : "folder"
+              }_id`
+            ];
 
           return (
-            <div
-              key={
-                item[
-                  `so_${
-                    type === "videos"
-                      ? "media"
-                      : type === "images"
-                      ? "img"
-                      : type === "techPacks"
-                      ? "tech"
-                      : "folder"
-                  }_id`
-                ]
-              }
+            <motion.div
+              key={itemId}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
               className="bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
             >
               {/* Media Preview */}
-              <div className="relative w-full aspect-video bg-gray-100 group">
+              <div className="relative w-full aspect-video bg-gradient-to-br from-gray-50 to-gray-100 group">
                 {type === "videos" ? (
-                  <Plyr
-                    source={{
-                      type: "video",
-                      title: item.sub_operation_name || "Video",
-                      sources: [
-                        {
-                          src: fileUrl,
-                          type: "video/webm",
+                  <div className="w-full h-full">
+                    <Plyr
+                      source={{
+                        type: "video",
+                        title: item.sub_operation_name || "Video",
+                        sources: [
+                          {
+                            src: getFileUrl(item, type),
+                            type: "video/mp4",
+                          },
+                        ],
+                      }}
+                      options={{
+                        controls: [
+                          "play-large", // Large play button in center
+                          //"rewind", // rewind button
+                          //"play",
+                          //"fast-forward", // fast forward button
+                          "progress", // Progress bar - made more prominent
+                          "current-time",
+                          "duration",
+                          "mute",
+                          // "volume",
+                          //"settings", // Quality, speed, etc.
+                          "pip", // Picture-in-picture
+                          //"airplay", // AirPlay support if available
+                          "fullscreen",
+                        ],
+
+                        // Better progress/seeking settings
+                        seekTime: 5, // Reduce seek time to 5 seconds for finer control
+                        keyboard: {
+                          focused: true,
+                          global: true,
+                          seekStep: 5, // Keyboard arrow keys will seek 5 seconds
                         },
-                      ],
-                    }}
-                    options={{
-                      controls: [
-                        "play-large",
-                        "play",
-                        "progress",
-                        "current-time",
-                        "duration",
-                        "mute",
-                        "volume",
-                        "settings",
-                        "pip",
-                        "fullscreen",
-                        "rewind",
-                        "fast-forward",
-                      ],
-                      ratio: "16:9",
-                      clickToPlay: true,
-                      tooltips: { controls: true, seek: true },
-                      keyboard: { global: true },
-                      seekTime: 10,
-                      disableContextMenu: true,
-                    }}
-                  />
+
+                        // Display settings
+                        ratio: "16:9",
+                        clickToPlay: true,
+                        hideControls: false, // Keep controls visible
+                        resetOnEnd: false, // Don't reset when video ends
+
+                        // Tooltip improvements
+                        tooltips: {
+                          controls: true,
+                          seek: true,
+                        },
+
+                        // Captions settings (if you have captions)
+                        captions: {
+                          active: false,
+                          language: "auto",
+                          update: false,
+                        },
+
+                        // Quality settings (if you have multiple qualities)
+                        quality: {
+                          default: 0, // Auto
+                          options: [0], // Only auto for now
+                          forced: false,
+                          onChange: null,
+                        },
+
+                        // Storage for user preferences
+                        storage: { enabled: true, key: "plyr" },
+
+                        // Speed control options
+                        speed: {
+                          selected: 1,
+                          options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+                        },
+
+                        // Vimeo/YouTube settings (if applicable)
+                        vimeo: {
+                          byline: false,
+                          portrait: false,
+                          title: false,
+                          speed: true,
+                          transparent: false,
+                        },
+
+                        // YouTube settings (if applicable)
+                        youtube: {
+                          noCookie: true,
+                          rel: 0,
+                          showinfo: 0,
+                          iv_load_policy: 3,
+                          modestbranding: 1,
+                        },
+
+                        // Prevent context menu
+                        disableContextMenu: true,
+
+                        // Custom listeners for better UX
+                        listeners: {
+                          seek: (event) => {
+                            console.log(
+                              "Seeking to:",
+                              event.detail.plyr.currentTime
+                            );
+                          },
+                          playing: () => {
+                            console.log("Video playing");
+                          },
+                          pause: () => {
+                            console.log("Video paused");
+                          },
+                        },
+                      }}
+                    />
+                  </div>
                 ) : type === "images" ? (
                   // Clickable image preview
                   <button
                     onClick={() => handleFileAction(item, type)}
-                    className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all"
+                    className="w-full h-full flex items-center justify-center hover:from-gray-100 hover:to-gray-200 transition-all"
                   >
                     <img
-                      src={fileUrl}
+                      src={getFileUrl(item, type)}
                       alt={item.sub_operation_name || "Image"}
-                      className="w-full h-full object-scale-down group-hover:scale-110 duration-150"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
                       onError={(e) => {
                         e.target.style.display = "none";
-                        e.target.nextSibling.style.display = "flex";
+                        // Show fallback icon
+                        const fallback =
+                          e.target.parentElement.querySelector(
+                            ".image-fallback"
+                          );
+                        if (fallback) fallback.classList.remove("hidden");
                       }}
                     />
-                    <div className="hidden flex-col items-center justify-center text-gray-400">
+                    <div className="image-fallback hidden flex-col items-center justify-center text-gray-400">
                       {getFileIcon(item, type)}
                       <span className="text-xs mt-2">Click to view</span>
                     </div>
@@ -460,33 +708,28 @@ const MediaGallery = () => {
                   // Document/File preview
                   <button
                     onClick={() => handleFileAction(item, type)}
-                    className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all"
+                    className="w-full h-full flex flex-col items-center justify-center hover:from-gray-100 hover:to-gray-200 transition-all"
                   >
                     {getFileIcon(item, type)}
-                    <span className="text-xs text-gray-500 mt-2 text-center px-2">
-                      {getActionText(type)} {fileName}
+                    <span className="text-xs text-gray-500 mt-2 text-center px-2 line-clamp-2">
+                      {fileName}
                     </span>
+
+                    {/* Cloud storage indicator */}
+                    <div className="mt-2 text-xs bg-black bg-opacity-70 text-white px-2 py-1 rounded-full flex items-center gap-1">
+                      <FaCloud className="text-xs" />
+                      <span>B2</span>
+                    </div>
                   </button>
                 )}
 
                 {/* Loading indicator for deletion */}
-                {deletingId ===
-                  item[
-                    `so_${
-                      type === "videos"
-                        ? "media"
-                        : type === "images"
-                        ? "img"
-                        : type === "techPacks"
-                        ? "tech"
-                        : "folder"
-                    }_id`
-                  ] &&
-                  deletingType === type && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
-                      <BeatLoader color="#ffffff" size={10} />
-                    </div>
-                  )}
+                {deletingId === itemId && deletingType === type && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
+                    <BeatLoader color="#ffffff" size={10} />
+                    <span className="ml-2 text-white text-sm">Deleting...</span>
+                  </div>
+                )}
               </div>
 
               {/* Media details */}
@@ -498,14 +741,28 @@ const MediaGallery = () => {
                 <div className="text-sm text-gray-600 space-y-2">
                   <div className="flex justify-between">
                     <span className="font-medium">File:</span>
-                    <span className="text-xs font-mono truncate max-w-[120px]">
+                    <span
+                      className="text-xs font-mono truncate max-w-[120px]"
+                      title={fileName}
+                    >
                       {fileName}
                     </span>
                   </div>
-                  {(item.file_size || type === "folders") && (
+                  {item.file_size && (
                     <div className="flex justify-between">
                       <span className="font-medium">Size:</span>
-                      <span>{formatFileSize(item.file_size)}</span>
+                      <span>
+                        {item.file_size_formatted ||
+                          formatFileSize(item.file_size)}
+                      </span>
+                    </div>
+                  )}
+                  {item.file_type && (
+                    <div className="flex justify-between">
+                      <span className="font-medium">Type:</span>
+                      <span className="text-xs uppercase">
+                        {item.file_type.split("/")[1] || item.file_type}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -521,69 +778,61 @@ const MediaGallery = () => {
                     <button
                       onClick={() => handleFileAction(item, type)}
                       className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
+                      title={getActionText(type)}
                     >
                       {getActionIcon(type)}
-                      {getActionText(type)}
                     </button>
+
+                    {/* Download button for non-viewable files */}
+                    {(type === "techPacks" || type === "folders") && (
+                      <button
+                        onClick={() => {
+                          const downloadUrl = getDownloadUrl(item);
+                          const link = document.createElement("a");
+                          link.href = downloadUrl || getFileUrl(item, type);
+                          link.download = fileName;
+                          document.body.appendChild(link);
+                          link.click();
+                          document.body.removeChild(link);
+                        }}
+                        className="flex items-center gap-1 text-green-600 hover:text-green-800 transition-colors text-sm px-2 py-1 rounded hover:bg-green-50"
+                        title="Download"
+                      >
+                        <FaDownload className="text-sm" />
+                      </button>
+                    )}
 
                     {/* Delete button (Admin only) */}
                     {userRole === "Admin" && (
                       <button
-                        onClick={() =>
-                          handleDelete(
-                            item[
-                              `so_${
-                                type === "videos"
-                                  ? "media"
-                                  : type === "images"
-                                  ? "img"
-                                  : type === "techPacks"
-                                  ? "tech"
-                                  : "folder"
-                              }_id`
-                            ],
-                            type,
-                            fileName
-                          )
-                        }
+                        onClick={() => handleDelete(itemId, type, fileName)}
                         disabled={
-                          deletingId ===
-                            item[
-                              `so_${
-                                type === "videos"
-                                  ? "media"
-                                  : type === "images"
-                                  ? "img"
-                                  : type === "techPacks"
-                                  ? "tech"
-                                  : "folder"
-                              }_id`
-                            ] && deletingType === type
+                          deletingId === itemId && deletingType === type
                         }
                         className="flex items-center gap-1 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm px-2 py-1 rounded hover:bg-red-50"
+                        title="Delete"
                       >
                         <FaTrash size={12} />
-                        Delete
                       </button>
                     )}
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
     );
   };
 
-  // Section component
+  // Section component for "all" view
   const MediaSection = ({ title, type, icon, count }) => (
     <div className="mb-8">
       <div className="w-full flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           {icon}
           <h1 className="text-xl font-semibold">{title}</h1>
-          <span className="bg-blue-100 text-blue-800 after: text-sm px-2 py-1 rounded-full ">
+          <span className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded-full">
             {count}
           </span>
         </div>
@@ -615,6 +864,108 @@ const MediaGallery = () => {
     </div>
   );
 
+  // If showing only one media type, render single section
+  if (currentMediaType !== "all") {
+    const typeConfig = {
+      videos: {
+        title: "Videos",
+        icon: <FaPlay className="text-red-500" />,
+        type: "videos",
+      },
+      images: {
+        title: "Images",
+        icon: <FaImage className="text-blue-500" />,
+        type: "images",
+      },
+      techPacks: {
+        title: "Tech Packs",
+        icon: <FaFileExcel className="text-green-500" />,
+        type: "techPacks",
+      },
+      folders: {
+        title: "Documents",
+        icon: <FaFolder className="text-orange-500" />,
+        type: "folders",
+      },
+    };
+
+    const config = typeConfig[currentMediaType];
+
+    return (
+      <div className="px-4 md:px-8 lg:px-16 xl:px-32 min-h-screen bg-gray-50 py-8">
+        {/* Page header */}
+        <div className="mb-8 flex items-center justify-between">
+          <button
+            className="text-blue-600 font-medium flex items-center gap-2 hover:text-blue-800 transition-colors p-2 rounded-lg hover:bg-blue-50"
+            onClick={() => navigate(-1)}
+          >
+            <FaArrowLeft />
+            <span>Go back</span>
+          </button>
+
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
+              <FaCloud className="text-blue-500" />
+              <span>
+                Total {config.title}: {mediaData[config.type].length}
+              </span>
+              {mediaData[config.type].length > 0 && (
+                <span className="text-xs text-gray-400">
+                  (
+                  {formatFileSize(
+                    mediaData[config.type].reduce(
+                      (sum, item) => sum + (item.file_size || 0),
+                      0
+                    )
+                  )}
+                  )
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={() => fetchSpecificMedia(subOpId, config.type)}
+              disabled={loadingStates[config.type]}
+              className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 px-3 py-1 rounded hover:bg-blue-50 flex items-center gap-2"
+            >
+              {loadingStates[config.type] ? (
+                <BeatLoader size={5} color="#3b82f6" />
+              ) : (
+                "Refresh"
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Single media section */}
+        <div className="mb-8">
+          <div className="w-full flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              {config.icon}
+              <h1 className="text-2xl font-bold">{config.title} Gallery</h1>
+              <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
+                {mediaData[config.type].length}{" "}
+                {mediaData[config.type].length === 1 ? "file" : "files"}
+              </span>
+              {subOpId && (
+                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  SubOp ID: {subOpId}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {renderMediaGrid(
+            mediaData[config.type],
+            config.type,
+            loadingStates[config.type]
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Show all media types
   return (
     <div className="px-4 md:px-8 lg:px-16 xl:px-32 min-h-screen bg-gray-50 py-8">
       {/* Page header */}
@@ -627,12 +978,13 @@ const MediaGallery = () => {
           <span>Go back</span>
         </button>
 
-        <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm">
-          Total: {Object.values(mediaData).flat().length} files
+        <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
+          <FaCloud className="text-blue-500" />
+          <span>Total: {Object.values(mediaData).flat().length} files</span>
         </div>
       </div>
 
-      {/* Media Sections */}
+      {/* All Media Sections */}
       <MediaSection
         title="Videos"
         type="videos"

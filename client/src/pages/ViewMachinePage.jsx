@@ -1,42 +1,148 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { useLocation } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { MdOutlineArrowBack } from "react-icons/md";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
+import { BeatLoader } from "react-spinners";
+import Swal from "sweetalert2";
 
 const ViewMachine = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { state: machine } = location;
-  
-  // Helper function to get distinct style names
-  const getStyleNames = () => {
-    if (!machine?.sub_operations || machine.sub_operations.length === 0) {
-      return "N/A";
+  const params = useParams();
+
+  const [machine, setMachine] = useState(location.state || null);
+  const [loading, setLoading] = useState(!location.state);
+  const [error, setError] = useState(null);
+
+  const machineId = params.id || location.state?.machine_id;
+
+  useEffect(() => {
+    if (!machine && machineId) {
+      fetchMachineData(machineId);
+    } else if (machine) {
+      setLoading(false);
     }
-    
-    const styleNames = new Set();
-    machine.sub_operations.forEach(op => {
-      if (op.style?.style_name) {
-        styleNames.add(op.style.style_name);
+  }, [machineId, machine]);
+
+  const fetchMachineData = async (id) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}/api/machine/getMachine/${id}`,
+        { withCredentials: true }
+      );
+
+      if (response.data.status === "success") {
+        setMachine(response.data.data);
+      } else {
+        throw new Error(
+          response.data.message || "Failed to fetch machine data"
+        );
       }
-    });
-    
-    return Array.from(styleNames).join(" | ") || "N/A";
+    } catch (error) {
+      console.error("❌ Error fetching machine data:", error);
+      setError(error.message);
+
+      Swal.fire({
+        title: "Error",
+        text: error.response?.data?.message || "Failed to load machine details",
+        icon: "error",
+        confirmButtonText: "OK",
+      }).then(() => navigate(-1));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Helper function to format date
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "N/A";
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (e) {
+      return "N/A";
+    }
   };
+
+  // Get unique styles from sub_operations -> mainOperation -> style
+  const getUniqueStyles = () => {
+    if (!machine?.sub_operations) return [];
+
+    const stylesMap = new Map();
+
+    machine.sub_operations.forEach((subOp) => {
+      const style = subOp.mainOperation?.style;
+      if (style && style.style_id) {
+        stylesMap.set(style.style_id, style);
+      }
+    });
+
+    return Array.from(stylesMap.values());
+  };
+
+  const styles = getUniqueStyles();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <BeatLoader color="#3b82f6" size={15} />
+          <p className="mt-4 text-gray-600">Loading machine details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-red-500 text-4xl mb-4">⚠️</div>
+          <h2 className="text-xl font-bold text-red-600 mb-2">
+            Error Loading Machine
+          </h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!machine) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-gray-400 text-4xl mb-4">🔍</div>
+          <h2 className="text-xl font-bold text-gray-600 mb-2">
+            Machine Not Found
+          </h2>
+          <p className="text-gray-500 mb-4">
+            The requested machine could not be found.
+          </p>
+          <button
+            onClick={() => navigate(-1)}
+            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -45,10 +151,10 @@ const ViewMachine = () => {
       exit={{ opacity: 0 }}
       className="p-4 md:p-8"
     >
-      <div className="max-w-6xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md overflow-hidden">
         {/* Header with back button */}
         <div className="bg-gradient-to-r from-blue-700 to-blue-600 p-4 flex items-center justify-between text-white">
-          <button 
+          <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 hover:bg-blue-800 p-2 rounded-full transition"
           >
@@ -56,84 +162,86 @@ const ViewMachine = () => {
             <span className="hidden sm:inline">Back</span>
           </button>
           <h1 className="text-xl md:text-2xl font-bold text-center">
-            Machine Details: {machine?.machine_name || 'N/A'}
+            Machine Details: {machine.machine_name}
           </h1>
-          <div className="w-8"></div> {/* Spacer for alignment */}
+          <div className="w-8"></div>
         </div>
 
         {/* Main content */}
-        <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="p-4 md:p-6">
           {/* Machine Basic Info */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold border-b pb-2">Basic Information</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-500">Machine ID</p>
-                <p className="font-medium">{machine?.machine_id || 'N/A'}</p>
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold border-b pb-2 mb-4">
+              Machine Information
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <InfoCard label="Machine Name" value={machine.machine_name} />
+              <InfoCard label="Machine Number" value={machine.machine_no} />
+              <InfoCard label="Type" value={machine.machine_type} />
+              <InfoCard label="Brand" value={machine.machine_brand} />
+              <InfoCard label="Location" value={machine.machine_location} />
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-500">Status</p>
+                <StatusBadge status={machine.machine_status} />
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Machine Number</p>
-                <p className="font-medium">{machine?.machine_no || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Type</p>
-                <p className="font-medium">{machine?.machine_type || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Brand</p>
-                <p className="font-medium">{machine?.machine_brand || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Location</p>
-                <p className="font-medium">{machine?.machine_location || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Needle Count</p>
-                <p className="font-medium">{machine?.needle_count || 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Created At</p>
-                <p className="font-medium">{formatDate(machine?.createdAt)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">Last Updated</p>
-                <p className="font-medium">{formatDate(machine?.updatedAt)}</p>
-              </div>
+
+              <InfoCard label="Machine ID" value={machine.machine_id} />
+              <InfoCard
+                label="Purchase Date"
+                value={formatDate(machine.purchase_date)}
+              />
+              <InfoCard
+                label="Last Service Date"
+                value={formatDate(machine.service_date)}
+              />
             </div>
           </div>
 
-          {/* Styles and Operations */}
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold border-b pb-2">Styles & Operations</h2>
-            <div>
-              <p className="text-sm text-gray-500">Related Styles</p>
-              <p className="font-medium">{getStyleNames()}</p>
-            </div>
+          {/* Styles Section */}
+          <div>
+            <h2 className="text-lg font-semibold border-b pb-2 mb-4">
+              Associated Styles ({styles.length})
+            </h2>
 
-            <div>
-              <p className="text-sm text-gray-500 mb-2">Sub-Operations</p>
-              <div className="space-y-3">
-                {machine?.sub_operations?.length > 0 ? (
-                  machine.sub_operations.map((op) => (
-                    <div key={op.sub_operation_id} className="border rounded p-3">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{op.sub_operation_name}</span>
-                        <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          #{op.sub_operation_number}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-sm">
-                        <p>SMV: {op.smv || 'N/A'}</p>
-                        {op.style && (
-                          <p>Style: {op.style.style_name} ({op.style.style_no})</p>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500">No sub-operations found</p>
-                )}
+            {styles.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {styles.map((style) => (
+                  <StyleCard
+                    key={style.style_id}
+                    style={style}
+                    formatDate={formatDate}
+                  />
+                ))}
               </div>
+            ) : (
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <div className="text-gray-400 text-4xl mb-3">📂</div>
+                <p className="text-gray-500 italic">
+                  No styles associated with this machine
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Additional Info */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+              <div>
+                <span className="text-gray-500">Created At:</span>{" "}
+                {formatDate(machine.createdAt)}
+              </div>
+              <div>
+                <span className="text-gray-500">Last Updated:</span>{" "}
+                {formatDate(machine.updatedAt)}
+              </div>
+              {machine.supplier && (
+                <div>
+                  <span className="text-gray-500">Supplier:</span>{" "}
+                  {machine.supplier}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -141,5 +249,69 @@ const ViewMachine = () => {
     </motion.div>
   );
 };
+
+// Helper Components
+const InfoCard = ({ label, value }) => (
+  <div className="bg-gray-50 p-4 rounded-lg">
+    <p className="text-sm text-gray-500">{label}</p>
+    <p className="font-medium">{value || "N/A"}</p>
+  </div>
+);
+
+const StatusBadge = ({ status }) => {
+  const getStatusClasses = () => {
+    switch (status) {
+      case "Available":
+        return "bg-green-100 text-green-800";
+      case "Not Assigned":
+        return "bg-yellow-100 text-yellow-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium mt-1 ${getStatusClasses()}`}
+    >
+      {status || "Unknown"}
+    </span>
+  );
+};
+
+const StyleCard = ({ style, formatDate }) => (
+  <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white">
+    <div className="flex justify-between items-start mb-3">
+      <div>
+        <h3 className="font-bold text-lg text-gray-800">{style.style_name}</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          Style No: <span className="font-medium">{style.style_no}</span>
+        </p>
+      </div>
+      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+        ID: {style.style_id}
+      </span>
+    </div>
+
+    <div className="space-y-2 text-sm">
+      <div className="flex justify-between">
+        <span className="text-gray-500">PO Number:</span>
+        <span className="font-medium">{style.po_number || "N/A"}</span>
+      </div>
+
+      <div className="flex justify-between">
+        <span className="text-gray-500">Description:</span>
+        <span className="font-medium text-right">
+          {style.style_description || "N/A"}
+        </span>
+      </div>
+
+      <div className="flex justify-between">
+        <span className="text-gray-500">Created:</span>
+        <span>{formatDate(style.createdAt)}</span>
+      </div>
+    </div>
+  </div>
+);
 
 export default ViewMachine;

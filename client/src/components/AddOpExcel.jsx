@@ -424,8 +424,8 @@ const AddOpExcel = () => {
   const selectionStats = getSelectionStats();
 
   return (
-    <div className="bg-white w-full h-full py-2 px-2">
-      <div className="w-full border rounded-lg p-6">
+    <div className="bg-white w-full h-full py-2 md:px-2">
+      <div className="w-full border rounded-lg md:p-6">
         {/* Enhanced Style Search */}
         <div className="pb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -747,7 +747,7 @@ const AddOpExcel = () => {
                       <span className="ml-2 text-xs text-gray-500">
                         ({mainOp.SubOperations.length} sub-operations)
                       </span>
-                      <span className="ml-2 text-xs px-2 py-1 rounded bg-blue-100 text-blue-800">
+                      <span className="ml-2 text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 hidden md:blockl">
                         Feature
                       </span>
                     </div>
@@ -777,7 +777,7 @@ const AddOpExcel = () => {
                               className="h-4 w-4 text-green-600 rounded focus:ring-green-500 mr-3"
                             />
                             <div>
-                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded mr-2">
+                              <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded mr-2 hidden md:block">
                                 #{subOp.OperationNo}
                               </span>
                               <span className="text-sm text-gray-700">

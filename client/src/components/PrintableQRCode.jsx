@@ -17,7 +17,7 @@ export default function PrintableQRCode({ value }) {
       }
     };
 
-    console.log("fadf ",value);
+    // console.log("fadf ",value);
 
     handleResize();
     window.addEventListener("resize", handleResize);

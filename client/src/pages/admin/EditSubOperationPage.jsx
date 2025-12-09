@@ -36,6 +36,7 @@ const EditSubOperationPage = () => {
   const [showMachineTypeSuggestions, setShowMachineTypeSuggestions] =
     useState(false);
   const [showMachineSuggestions, setShowMachineSuggestions] = useState(false);
+  console.log("machine suggestion show?: ", showMachineSuggestions);
   const [showNeedleSuggestions, setShowNeedleSuggestions] = useState(false);
   const [showThreadSuggestions, setShowThreadSuggestions] = useState(false);
   const [showLooperSuggestions, setShowLooperSuggestions] = useState(false);
@@ -406,7 +407,7 @@ const EditSubOperationPage = () => {
                       {/* Needle Count */}
                       <div className="flex flex-col">
                         <label className="font-semibold text-gray-700 mb-2 text-sm">
-                          Needle Count
+                          Needle Size
                         </label>
                         <Field
                           name="needle_count"

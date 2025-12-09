@@ -179,7 +179,7 @@ const AddSeason = ({ userRole }) => {
     },
     validationSchema: validationSchema,
     onSubmit: async (values) => {
-      console.log(values);
+      // console.log(values);
       // return;
       try {
         setLoading(true);
@@ -277,10 +277,10 @@ const AddSeason = ({ userRole }) => {
 
   // Edit season from form
   const handleEditSeason = (index, season) => {
-    console.log("index", index);
+    // console.log("index", index);
     formik.setFieldValue("currentSeason", formik.values.seasons[index].name);
     setEditingIndex(index);
-    console.log("season", season);
+    // console.log("season", season);
   };
 
   // Delete season from form

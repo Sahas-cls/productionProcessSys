@@ -16,7 +16,7 @@ function useStyles() {
 
       if (response.status === 200) {
         setStyles(response.data?.data);
-        console.log("styles", response.data.data);
+        // console.log("styles", response.data.data);
       }
     } catch (error) {
       console.error("Error fetching styles:", error);

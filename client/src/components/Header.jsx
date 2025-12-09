@@ -9,7 +9,7 @@ import axios from "axios";
 const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const { user: loggedUser, loading } = useAuth();
   const { user, logout } = useUser(); // assuming logout() is defined in context
-  console.log("user name from factory page: ", user);
+  // console.log("user name from factory page: ", user);
   const [showOptions, setShowOptions] = useState(false);
   const dropdownRef = useRef(null);
   const userName = localStorage.getItem("userName");

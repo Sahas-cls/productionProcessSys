@@ -4,9 +4,9 @@ const UserContext = createContext();
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  console.log("user ", user);
+  // console.log("user ", user);
   const loginUser = (userData) => {
-    console.log("use context user data", userData);
+    // console.log("use context user data", userData);
     setUser(userData);
   };
 

@@ -296,23 +296,28 @@ exports.createMainOperation = async (req, res, next) => {
 
 // to create sub operation based on main opeartion
 exports.createSubOp = async (req, res, next) => {
+  console.log("request body: ", req.body);
+
   if (req?.user?.userRole !== "Admin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
   }
+
   const {
     subOperationNo,
     smv,
     subOperationName,
-    machineNo,
+    machineType,
+    machineNo, // This is now machine_id from frontend
+    machineName,
     needleCount,
-    needles,
-    needleTypes: needleTypesInput = [], // Default to empty array if undefined
-    needleTreads: needleTreadsInput = [], // Default to empty array if undefined
-    needleLoopers: needleLoopersInput = [], // Default to empty array if undefined
+    needleType, // This is now needle_type_id from frontend
+    bobbinThread, // This is now thread_id for looper from frontend
+    needleThreads, // This is now thread_id for thread from frontend
+    spi,
     remark,
-    mainOperation_id, // holds the main operation id
+    mainOperation_id,
   } = req.body;
 
   try {
@@ -320,18 +325,17 @@ exports.createSubOp = async (req, res, next) => {
       // 1. Check main operation exists
       const mainOp = await MainOperation.findByPk(mainOperation_id, {
         transaction: t,
-        lock: t.LOCK.UPDATE, // Add locking for concurrent operations
+        lock: t.LOCK.UPDATE,
       });
 
       if (!mainOp) {
         const error = new Error("Main operation not found");
-        error.status = 404; // 404 is more appropriate for "not found"
-        throw error; // Use throw instead of return next() in transaction
+        error.status = 404;
+        throw error;
       }
 
-      // 2. Validate machine exists first before creating sub-operation
-      const machine = await Machine.findOne({
-        where: { machine_no: machineNo },
+      // 2. Validate machine exists (now using machine_id from machineNo)
+      const machine = await Machine.findByPk(machineNo, {
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -342,7 +346,49 @@ exports.createSubOp = async (req, res, next) => {
         throw error;
       }
 
-      // 3. Create sub-operation
+      // 3. Validate needle type exists if provided
+      let needleTypeRecord = null;
+      if (needleType) {
+        needleTypeRecord = await NeedleTypeN.findByPk(needleType, {
+          transaction: t,
+        });
+
+        if (!needleTypeRecord) {
+          const error = new Error("Needle type not found");
+          error.status = 404;
+          throw error;
+        }
+      }
+
+      // 4. Validate bobbin thread (looper) exists if provided
+      let bobbinThreadRecord = null;
+      if (bobbinThread) {
+        bobbinThreadRecord = await Thread.findByPk(bobbinThread, {
+          transaction: t,
+        });
+
+        if (!bobbinThreadRecord) {
+          const error = new Error("Bobbin thread/looper not found");
+          error.status = 404;
+          throw error;
+        }
+      }
+
+      // 5. Validate needle thread exists if provided
+      let needleThreadRecord = null;
+      if (needleThreads) {
+        needleThreadRecord = await Thread.findByPk(needleThreads, {
+          transaction: t,
+        });
+
+        if (!needleThreadRecord) {
+          const error = new Error("Needle thread not found");
+          error.status = 404;
+          throw error;
+        }
+      }
+
+      // 6. Create sub-operation with single foreign key references
       const subOperation = await SubOperation.create(
         {
           main_operation_id: mainOperation_id,
@@ -351,11 +397,17 @@ exports.createSubOp = async (req, res, next) => {
           smv,
           remark,
           needle_count: needleCount,
+          machine_type: machineType,
+          spi: spi || null,
+          needle_type_id: needleType || null,
+          looper_id: bobbinThread || null, // bobbinThread is looper_id
+          thread_id: needleThreads || null, // needleThreads is thread_id
+          created_by: req.user?.userId || null, // Add created_by from user session
         },
         { transaction: t }
       );
 
-      // 4. Link machine to sub-operation
+      // 7. Link machine to sub-operation through junction table
       await SubOperationMachine.create(
         {
           sub_operation_id: subOperation.sub_operation_id,
@@ -364,38 +416,8 @@ exports.createSubOp = async (req, res, next) => {
         { transaction: t }
       );
 
-      // 5. Process all needle-related data in parallel for better performance
-      await Promise.all([
-        // Needle types
-        NeedleType.bulkCreate(
-          needleTypesInput.map((nt) => ({
-            sub_operation_id: subOperation.sub_operation_id,
-            type: nt,
-            machine_id: machine.machine_id,
-          })),
-          { transaction: t }
-        ),
-
-        // Needle threads
-        NeedleTread.bulkCreate(
-          needleTreadsInput.map((nt) => ({
-            sub_operation_id: subOperation.sub_operation_id,
-            tread: nt,
-            machine_id: machine.machine_id,
-          })),
-          { transaction: t }
-        ),
-
-        // Needle loopers
-        NeedleLooper.bulkCreate(
-          needleLoopersInput.map((nt) => ({
-            sub_operation_id: subOperation.sub_operation_id,
-            looper: nt,
-            machine_id: machine.machine_id,
-          })),
-          { transaction: t }
-        ),
-      ]);
+      // Note: Removed the bulkCreate for needleTypes, needleTreads, and needleLoopers
+      // since we're now using single foreign key references directly in SubOperation
     });
 
     res.status(201).json({
@@ -404,7 +426,29 @@ exports.createSubOp = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Error creating sub-operation:", error);
-    next(error); // Make sure to pass the error to the error handler
+
+    // Handle validation errors
+    if (error.name === "SequelizeValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validation error",
+        errors: error.errors.map((err) => ({
+          field: err.path,
+          message: err.message,
+        })),
+      });
+    }
+
+    // Handle foreign key constraint errors
+    if (error.name === "SequelizeForeignKeyConstraintError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reference data provided",
+        error: error.parent?.detail || error.message,
+      });
+    }
+
+    next(error);
   }
 };
 
@@ -417,10 +461,10 @@ exports.editMainOperation = async (req, res, next) => {
     throw error;
   }
   const { style_no, operation_name, operationId } = req.body;
-  console.log("Operation name ", operation_name);
-  console.log("parameter :", req.params);
+  // console.log("Operation name ", operation_name);
+  // console.log("parameter :", req.params);
   const moId = req.params.id;
-  console.log("MO Id", moId);
+  // console.log("MO Id", moId);
   try {
     await sequelize.transaction(async (t) => {
       const Rstyle = await Style.findOne({
@@ -464,9 +508,9 @@ exports.createBulkOperations = async (req, res, next) => {
     throw error;
   }
 
-  console.log("request body: ", req.body);
-  console.log("req.user: ", req.user);
-  console.log("looper: ", req.body.operations[0].bobbinTreadLoopers);
+  // console.log("request body: ", req.body);
+  // console.log("req.user: ", req.user);
+  // console.log("looper: ", req.body.operations[0].bobbinTreadLoopers);
   // return;
   try {
     const { styleNumber, mainOperation, operations, mainOperationName } =
@@ -508,9 +552,9 @@ exports.createBulkOperations = async (req, res, next) => {
 
       // 4. Loop through operations
       for (const op of operations) {
-        console.log("thread id: ", op.needleTreads);
-        console.log("looper id: ", op.bobbinTreadLoopers);
-        console.log("needle type id: ", op.needleTypeId);
+        // console.log("thread id: ", op.needleTreads);
+        // console.log("looper id: ", op.bobbinTreadLoopers);
+        // console.log("needle type id: ", op.needleTypeId);
 
         if (!op.operationName || !op.operationNumber || !op.machineNo) {
           throw new Error(
@@ -613,8 +657,8 @@ exports.editOperation = async (req, res, next) => {};
 
 // to update one single sub operation
 exports.updateSubOperation = async (req, res, next) => {
-  console.log("Frontend parameters:- ", req.params);
-  console.log("Frontend data set:- ", req.body);
+  // console.log("Frontend parameters:- ", req.params);
+  // console.log("Frontend data set:- ", req.body);
 
   try {
     const { id } = req.params;
@@ -780,7 +824,7 @@ exports.deleteOperation = async (req, res, next) => {
       await Promise.all(
         subOperations.map(async (subOp) => {
           const subId = subOp.sub_operation_id; // or subOp.subOperationId depending on your schema
-          console.log("sub operation id ======================= ", subId);
+          // console.log("sub operation id ======================= ", subId);
           // Delete associated needle records
           await NeedleType.destroy({
             where: { sub_operation_id: subId },
@@ -905,7 +949,7 @@ exports.createHelperOps = async (req, res, next) => {
         "The requested style is not existing in style data table"
       );
       error.status = 403;
-      console.log("requested style cannot find in style data table");
+      // console.log("requested style cannot find in style data table");
       return next(error);
     }
 
@@ -919,13 +963,13 @@ exports.createHelperOps = async (req, res, next) => {
       mc_smv: smv,
       comments: remarks,
     });
-    console.log("Helper operation create success....");
+    // console.log("Helper operation create success....");
     res.status(201).json({
       status: "success",
       message: "Helper operation creation success",
     });
   } catch (error) {
-    console.log(error);
+    // console.log(error);
     return next(error);
   }
 };
@@ -942,7 +986,7 @@ exports.createHelperOps = async (req, res, next) => {
       });
     }
 
-    console.log(`📁 Processing uploaded file: ${req.file.originalname}`);
+    // console.log(`📁 Processing uploaded file: ${req.file.originalname}`);
 
     // Process the Excel file using our utility function
     const result = await processExcelFile(req.file.path);
@@ -951,7 +995,7 @@ exports.createHelperOps = async (req, res, next) => {
     try {
       if (fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
-        console.log(`✅ Temporary file cleaned up: ${req.file.path}`);
+        // console.log(`✅ Temporary file cleaned up: ${req.file.path}`);
       }
     } catch (cleanupError) {
       console.warn("⚠️ Could not delete temporary file:", cleanupError.message);
@@ -1041,7 +1085,7 @@ exports.saveOperations = async (req, res, next) => {
     const styleNo = styleId.startsWith(":") ? styleId.slice(1) : styleId;
     const { operations, fileName, selectionStats } = req.body;
 
-    console.log("Style number:", styleNo);
+    // console.log("Style number:", styleNo);
 
     // Find the style to get the style_id
     const style = await Style.findOne({
@@ -1057,7 +1101,7 @@ exports.saveOperations = async (req, res, next) => {
       });
     }
 
-    console.log(`Found style: ${style.style_no}, Style ID: ${style.style_id}`);
+    // console.log(`Found style: ${style.style_no}, Style ID: ${style.style_id}`);
 
     const DEFAULT_OPERATION_TYPE_ID = 1;
     const savedMainOperations = [];
@@ -1072,7 +1116,7 @@ exports.saveOperations = async (req, res, next) => {
       } = operationData;
 
       if (required === "false") {
-        console.log(`Skipping main operation: ${operationName} (not required)`);
+        // console.log(`Skipping main operation: ${operationName} (not required)`);
         continue;
       }
 
@@ -1087,7 +1131,7 @@ exports.saveOperations = async (req, res, next) => {
         });
 
         if (existingMainOperation) {
-          console.log(`Skipping duplicate main operation: ${operationName}`);
+          // console.log(`Skipping duplicate main operation: ${operationName}`);
           skippedOperations.push(`Main: ${operationName}`);
           continue;
         }
@@ -1103,9 +1147,9 @@ exports.saveOperations = async (req, res, next) => {
         );
 
         savedMainOperations.push(mainOperation);
-        console.log(
-          `Created main operation: ${operationName} (ID: ${mainOperation.operation_id})`
-        );
+        // console.log(
+        //   `Created main operation: ${operationName} (ID: ${mainOperation.operation_id})`
+        // );
 
         // Process sub-operations...
         if (SubOperations && Array.isArray(SubOperations)) {
@@ -1137,9 +1181,9 @@ exports.saveOperations = async (req, res, next) => {
               });
 
               if (existingSubOperation) {
-                console.log(
-                  `Skipping duplicate sub-operation: ${subOperationName} (${subOperationNumber})`
-                );
+                // console.log(
+                //   `Skipping duplicate sub-operation: ${subOperationName} (${subOperationNumber})`
+                // );
                 skippedOperations.push(
                   `Sub: ${subOperationName} (${subOperationNumber})`
                 );
@@ -1159,9 +1203,9 @@ exports.saveOperations = async (req, res, next) => {
               );
 
               savedSubOperations.push(subOperation);
-              console.log(
-                `Created sub-operation: ${subOperationName} for main operation ${mainOperation.operation_id}`
-              );
+              // console.log(
+              //   `Created sub-operation: ${subOperationName} for main operation ${mainOperation.operation_id}`
+              // );
             } catch (subOpError) {
               console.error(
                 `Error creating sub-operation ${subOperationName}:`,
@@ -1180,10 +1224,10 @@ exports.saveOperations = async (req, res, next) => {
 
     await transaction.commit();
 
-    console.log(
-      `Successfully saved ${savedMainOperations.length} main operations and ${savedSubOperations.length} sub-operations`
-    );
-    console.log(`Skipped ${skippedOperations.length} duplicate operations`);
+    // console.log(
+    //   `Successfully saved ${savedMainOperations.length} main operations and ${savedSubOperations.length} sub-operations`
+    // );
+    // console.log(`Skipped ${skippedOperations.length} duplicate operations`);
 
     return res.status(201).json({
       success: true,
@@ -1248,9 +1292,9 @@ async function handleMachineAssociations(
       { transaction }
     );
 
-    console.log(
-      `Associated machine ${machineType} with sub-operation ${subOperation.sub_operation_id}`
-    );
+    // console.log(
+    //   `Associated machine ${machineType} with sub-operation ${subOperation.sub_operation_id}`
+    // );
   } catch (machineError) {
     console.error(
       `Error handling machine associations for ${machineType}:`,

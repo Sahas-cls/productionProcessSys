@@ -116,6 +116,7 @@ const App = () => {
           <Route path="/reports" element={<Reports />} />
 
           {/* to watch videos on component */}
+          <Route path="/sub-operation/allMedia" element={<WatchVideos />} />
           <Route path="/sub-operation/videos" element={<VideoGallery />} />
           <Route path="/sub-operation/images" element={<ImageGallery />} />
           <Route

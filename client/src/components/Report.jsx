@@ -5,6 +5,12 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import Plyr from "plyr-react";
 import "plyr-react/plyr.css";
+import { FaPlay, FaImage, FaFileExcel, FaFolder } from "react-icons/fa";
+import { useAuth } from "../hooks/useAuth";
+import { MdOutlineDeleteForever } from "react-icons/md";
+import { BsFillCloudUploadFill } from "react-icons/bs";
+import { useNavigate } from "react-router-dom";
+import { MdPermMedia } from "react-icons/md";
 
 const Report = () => {
   const [selectedStyle, setSelectedStyle] = useState(null);
@@ -14,9 +20,14 @@ const Report = () => {
   const [operations, setOperations] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expandedOperations, setExpandedOperations] = useState({});
-
+  const { user, loading: userLoading } = useAuth();
+  const userRole = user?.userRole;
+  console.log("expanded operations", operations);
   // Memoize API URL
   const memoizedApiUrl = useMemo(() => apiUrl, [apiUrl]);
+
+  // navigator
+  const navigate = useNavigate();
 
   // Debounce function for API calls
   const useDebounce = (value, delay) => {
@@ -558,10 +569,6 @@ const Report = () => {
                                 ></path>
                               </svg>
                             </div>
-                            <p className="text-xs md:text-sm text-gray-600 mb-3">
-                              SMV: {subOp.smv} | Needle Count:{" "}
-                              {subOp.needle_count}
-                            </p>
 
                             {expandedOperations[`${opIndex}-${subIndex}`] && (
                               <div className="space-y-3">
@@ -582,6 +589,74 @@ const Report = () => {
                                             {machine.machine_type})
                                           </span>
                                         ))}
+                                        <div className="mt-2 bg-blue-100 w-full border-l-2 border-blue-600 p-2 md:p-4">
+                                          <p className="text-xs md:text-sm text-gray-600 mb-3">
+                                            SMV: {subOp.smv} | Needle Size:{" "}
+                                            {subOp.needle_count}
+                                          </p>
+
+                                          <p className="text-xs md:text-sm text-gray-600 mb-3">
+                                            Machine Type: {subOp.machine_type}
+                                          </p>
+
+                                          <p className="text-xs md:text-sm text-gray-600 mb-3">
+                                            Thread:{" "}
+                                            {subOp?.thread.thread_category} |
+                                            Looper:{" "}
+                                            {subOp?.looper.thread_category}
+                                          </p>
+                                        </div>
+                                        {/* media navigators */}
+                                        <div className="">
+                                          {userRole === "Admin" ? (
+                                            <div className="space-x-2 flex">
+                                              {/* Videos Button */}
+                                              <button
+                                                type="button"
+                                                className="bg-blue-500 text-black/60 rounded p-2 group hover:shadow-md"
+                                                title="You can watch videos and other uploaded assets from here"
+                                                onClick={() =>
+                                                  navigate(
+                                                    "/sub-operation/allMedia",
+                                                    {
+                                                      state: {
+                                                        subOpId:
+                                                          subOp.sub_operation_id,
+                                                      },
+                                                    }
+                                                  )
+                                                }
+                                              >
+                                                <div className="flex items-center gap-x-2 text-white">
+                                                  <MdPermMedia className="text-xl hover:scale-125 group-hover:scale-110" />
+                                                  <p>Go to Assets</p>
+                                                </div>
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="space-x-2 flex">
+                                              {/* Videos Button - User */}
+                                              <button
+                                                type="button"
+                                                className="bg-blue-200 p-1 text-black/60 rounded"
+                                                title="Watch videos"
+                                                onClick={() =>
+                                                  navigate(
+                                                    "/sub-operation/allMedia",
+                                                    {
+                                                      state: {
+                                                        subOpId:
+                                                          subOp.sub_operation_id,
+                                                      },
+                                                    }
+                                                  )
+                                                }
+                                              >
+                                                <FaPlay className="text-xl text-black/60 hover:scale-125" />
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   )}
@@ -629,12 +704,6 @@ const Report = () => {
                                     <span className="font-medium">Remark:</span>{" "}
                                     {subOp.remark}
                                   </p>
-                                )}
-
-                                {subOp.medias && subOp.medias.length > 0 && (
-                                  <div className="grid grid-cols-1 gap-4 mt-4">
-                                    {subOp.medias.map(renderVideoPlayer)}
-                                  </div>
                                 )}
                               </div>
                             )}

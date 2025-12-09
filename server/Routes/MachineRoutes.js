@@ -27,6 +27,9 @@ const upload = multer({
 // to get machine details
 router.get("/getMachiens", controlers.getMachineData);
 
+// to get specific machine details
+router.get("/getMachine/:id", controlers.getSMachineData);
+
 // get machine data with limit
 router.get("/getMachiensLimited", controlers.getMachineDataLimited);
 

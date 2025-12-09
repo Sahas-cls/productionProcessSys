@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-export function useMachine() {
+export function useAllMachine() {
   const apiUrl = import.meta.env.VITE_API_URL; // Check your Vite env variable naming
   const [machines, setMachies] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -9,9 +9,7 @@ export function useMachine() {
   const getMachine = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get(
-        `${apiUrl}/api/machine/getMachine/${location.state.machine_id}`
-      );
+      const response = await axios.get(`${apiUrl}/api/machine/getMachiens`);
       if (response.status === 200) {
         setMachies(response.data.data);
       } else {
@@ -36,4 +34,4 @@ export function useMachine() {
   };
 }
 
-export default useMachine;
+export default useAllMachine;

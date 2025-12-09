@@ -150,6 +150,136 @@ exports.getMachineData = async (req, res, next) => {
     return next(error);
   }
 };
+
+// to get specific machine details
+exports.getSMachineData = async (req, res, next) => {
+  console.log("machine requested: ", req.params);
+  try {
+    const { id } = req.params;
+    console.log("🔍 Fetching machine data for ID:", id);
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid machine ID is required",
+      });
+    }
+
+    const machine = await Machine.findByPk(id, {
+      include: [
+        {
+          model: SubOperation,
+          as: "sub_operations",
+          attributes: [
+            "sub_operation_id",
+            "sub_operation_name",
+            "sub_operation_number",
+            "smv",
+            "machine_type",
+            "spi",
+          ],
+          through: { attributes: [] }, // Exclude junction table attributes
+          include: [
+            {
+              model: MainOperation,
+              as: "mainOperation",
+              attributes: ["operation_id", "operation_name"],
+              include: [
+                {
+                  model: Style,
+                  as: "style",
+                  attributes: [
+                    "style_id",
+                    "style_no",
+                    "style_name",
+                    "po_number",
+                    "customer_id",
+                    "factory_id",
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        // Include needle types if needed
+        {
+          model: NeedleType,
+          as: "needleTypes",
+          attributes: ["needle_type_id", "needle_type_name"],
+          required: false,
+        },
+        {
+          model: NeedleTread,
+          as: "needleTreads",
+          attributes: ["needle_tread_id", "tread_name"],
+          required: false,
+        },
+        {
+          model: NeedleLooper,
+          as: "needleLoopers",
+          attributes: ["needle_looper_id", "looper_name"],
+          required: false,
+        },
+      ],
+    });
+
+    if (!machine) {
+      return res.status(404).json({
+        status: "error",
+        message: "Machine not found",
+      });
+    }
+
+    const machineData = machine.toJSON();
+
+    // Extract unique styles from sub_operations
+    const styleMap = new Map();
+    const subOperationsWithStyles = [];
+
+    machineData.sub_operations?.forEach((subOp) => {
+      if (subOp.mainOperation?.style) {
+        const style = subOp.mainOperation.style;
+        styleMap.set(style.style_id, style);
+
+        // Add style info to sub-operation for frontend display
+        subOperationsWithStyles.push({
+          ...subOp,
+          style: style,
+        });
+      } else {
+        subOperationsWithStyles.push(subOp);
+      }
+    });
+
+    // Convert map to array of unique styles
+    const uniqueStyles = Array.from(styleMap.values());
+
+    // Prepare response data
+    const responseData = {
+      ...machineData,
+      styles: uniqueStyles,
+      style_count: uniqueStyles.length,
+      sub_operations: subOperationsWithStyles,
+    };
+
+    // Remove duplicate nested data if needed
+    delete responseData.sub_operations?.forEach?.((op) => {
+      if (op.mainOperation?.style) {
+        delete op.mainOperation.style; // Already included in styles array
+      }
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Machine data retrieved successfully",
+      data: responseData,
+    });
+  } catch (error) {
+    console.error("❌ Error in getSMachineData:", error);
+    return next(error);
+  }
+};
+
 // to create new machine
 exports.createMachine = async (req, res, next) => {
   // console.log("Creating new machine...");

@@ -129,7 +129,7 @@ const AddStyle = ({ userRole }) => {
   // Handle style edit
   // Handle style edit
   const handleEditStyle = (style) => {
-    console.log("editing style: ", style);
+    // console.log("editing style: ", style);
     setEditingStyle(style);
     setIsAddStyle(true);
     setIsSubmitting(false);
