@@ -295,7 +295,7 @@ exports.createMainOperation = async (req, res, next) => {
   }
 };
 
-// to create sub operation based on main opeartion
+// to create sub operation based on main operation
 exports.createSubOp = async (req, res, next) => {
   console.log("request body: ", req.body);
 
