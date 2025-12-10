@@ -207,6 +207,8 @@ const Dashboard = () => {
         </section>
       </div>
 
+      {/* bar chart to display styles => count of main operations */}
+
       {/* Search Section - Responsive */}
       <div className="border-2 border-purple-100 mt-6 mb-4 rounded-xl p-4 bg-gradient-to-r from-purple-50 to-pink-50 shadow-md">
         <legend className="px-2 font-bold text-lg mb-4 text-purple-800">

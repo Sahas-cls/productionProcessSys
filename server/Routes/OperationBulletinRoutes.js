@@ -105,7 +105,11 @@ routes.post(
 routes.post("/create/sub-operation", authMiddleware, controller.createSubOp);
 
 // to edit specific sub operation
-routes.put("/edit-sub-operation/:id", controller.updateSubOperation);
+routes.put(
+  "/edit-sub-operation/:id",
+  authMiddleware,
+  controller.updateSubOperation
+);
 
 // to delete specific sub operation with it's needle layout
 routes.delete(

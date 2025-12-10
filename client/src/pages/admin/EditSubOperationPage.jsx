@@ -7,6 +7,7 @@ import useThreads from "../../hooks/useTreads";
 import useNeedles from "../../hooks/useNeedles";
 import useMachineTypes from "../../hooks/useMachineTypes";
 import useMachine from "../../hooks/useMachine";
+import useAllMachine from "../../hooks/useAllMachines";
 
 const EditSubOperationPage = () => {
   const location = useLocation();
@@ -28,7 +29,7 @@ const EditSubOperationPage = () => {
     isLoading: machineLoading,
     machineList,
     refresh: machineRefresh,
-  } = useMachine();
+  } = useAllMachine();
   const { isLoading: threadLoading, threadList, refreshThreads } = useThreads();
   const { isLoading: needlesLoading, needleList, refreshNeedle } = useNeedles();
 
@@ -54,7 +55,9 @@ const EditSubOperationPage = () => {
   const [selectedThread, setSelectedThread] = useState(null);
   const [selectedLooper, setSelectedLooper] = useState(null);
 
-  console.log("SubOperation Data:", subOperation);
+  console.log("SubOperation Data: ", subOperation);
+
+  const mainOperation = subOperation.main_operation_id || null;
 
   const handleGoBack = () => {
     navigate(-1);
@@ -165,6 +168,7 @@ const EditSubOperationPage = () => {
   }, [machineTList, machineTypeSearch]);
 
   // Filter machines based on search - always show if there's a search
+  console.log("machine list: ", machineList);
   const filteredMachines = useMemo(() => {
     if (!machineSearch || !Array.isArray(machineList)) {
       return [];
@@ -179,6 +183,8 @@ const EditSubOperationPage = () => {
           .includes(machineSearch.toLowerCase())
     );
   }, [machineList, machineSearch]);
+
+  console.log("filtered machines list: ", filteredMachines);
 
   // Filter needles
   const filteredNeedles = useMemo(() => {
@@ -228,6 +234,7 @@ const EditSubOperationPage = () => {
   const formatSubmitData = (values) => {
     return {
       sub_operation_name: values.sub_operation_name,
+      main_operation_id: mainOperation,
       smv: parseFloat(values.smv) || 0,
       remark: values.remark,
       sub_operation_number: values.sub_operation_number,
@@ -300,7 +307,8 @@ const EditSubOperationPage = () => {
 
                 const formattedData = formatSubmitData(values);
                 console.log("Formatted data for API:", formattedData);
-
+                console.log("formatted ata: ", formattedData);
+                // return;
                 const response = await axios.put(
                   `${apiUrl}/api/operationBulleting/edit-sub-operation/${subOperationId}`,
                   formattedData,

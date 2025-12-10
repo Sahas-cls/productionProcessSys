@@ -14,6 +14,7 @@ const {
   NeedleTypeN,
   Helper,
   SubOperationMachine,
+  SubOperationLog,
   Thread,
   StyleMedia,
 } = require("../models");
@@ -657,8 +658,8 @@ exports.editOperation = async (req, res, next) => {};
 
 // to update one single sub operation
 exports.updateSubOperation = async (req, res, next) => {
-  // console.log("Frontend parameters:- ", req.params);
-  // console.log("Frontend data set:- ", req.body);
+  // Start transaction
+  const t = await sequelize.transaction();
 
   try {
     const { id } = req.params;
@@ -678,68 +679,108 @@ exports.updateSubOperation = async (req, res, next) => {
 
     // Basic validation
     if (!id || !sub_operation_name) {
+      await t.rollback();
       return res.status(400).json({
         error: "Missing required fields",
         details: "SubOperation ID and name are required",
       });
     }
 
-    // Start transaction
-    const result = await sequelize.transaction(async (t) => {
-      // Build update object
-      const updateData = {
-        sub_operation_name,
-        smv: smv ? parseFloat(smv) : null,
-        remark: remark || "-",
-        sub_operation_number: sub_operation_number || null,
-        needle_count: needle_count ? parseFloat(needle_count) : null,
-        spi: spi ? parseFloat(spi) : null,
-        machine_type: machine_type || null,
-        needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
-        thread_id: thread_id ? parseInt(thread_id) : null,
-        looper_id: looper_id ? parseInt(looper_id) : null,
-      };
+    // 1. FIRST: Get current data BEFORE update (for logging)
+    const currentSubOperation = await SubOperation.findByPk(id, {
+      transaction: t,
+      include: [
+        {
+          model: Machine,
+          as: "machines",
+          through: { attributes: [] },
+        },
+      ],
+    });
 
-      // Update the SubOperation
-      const [updatedRows] = await SubOperation.update(updateData, {
+    if (!currentSubOperation) {
+      await t.rollback();
+      return res.status(404).json({
+        error: "Not found",
+        details: "SubOperation not found",
+      });
+    }
+
+    // 2. LOG: Insert old data into log table BEFORE updating
+    await SubOperationLog.create(
+      {
+        sub_operation_id: currentSubOperation.sub_operation_id,
+        main_operation_id: currentSubOperation.main_operation_id,
+        thread_id: currentSubOperation.thread_id,
+        sub_operation_number: currentSubOperation.sub_operation_number,
+        performed_action: "Update",
+        sub_operation_name: currentSubOperation.sub_operation_name,
+        smv: currentSubOperation.smv,
+        remark: currentSubOperation.remark,
+        needle_count: currentSubOperation.needle_count,
+        machine_type: currentSubOperation.machine_type,
+        spi: currentSubOperation.spi,
+        needle_type_id: currentSubOperation.needle_type_id,
+        looper_id: currentSubOperation.looper_id,
+        created_by: currentSubOperation.created_by,
+      },
+      { transaction: t }
+    );
+
+    // 3. THEN: Update the SubOperation
+    const updateData = {
+      sub_operation_name,
+      smv: smv ? parseFloat(smv) : null,
+      remark: remark || "-",
+      sub_operation_number: sub_operation_number || null,
+      needle_count: needle_count ? parseFloat(needle_count) : null,
+      spi: spi ? parseFloat(spi) : null,
+      machine_type: machine_type || null,
+      needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
+      thread_id: thread_id ? parseInt(thread_id) : null,
+      looper_id: looper_id ? parseInt(looper_id) : null,
+    };
+
+    const [updatedRows] = await SubOperation.update(updateData, {
+      where: { sub_operation_id: id },
+      transaction: t,
+    });
+
+    if (updatedRows === 0) {
+      await t.rollback();
+      throw new Error("SubOperation not found");
+    }
+
+    // 4. Update machine association if machine_id is provided
+    if (machine_id) {
+      const machineId = parseInt(machine_id);
+
+      // Check if machine exists
+      const machine = await Machine.findByPk(machineId, { transaction: t });
+      if (!machine) {
+        await t.rollback();
+        throw new Error(`Machine with ID ${machineId} not found`);
+      }
+
+      // Clear existing machine associations
+      await sequelize.models.SubOperationMachine.destroy({
         where: { sub_operation_id: id },
         transaction: t,
       });
 
-      if (updatedRows === 0) {
-        throw new Error("SubOperation not found");
-      }
+      // Create new association
+      await sequelize.models.SubOperationMachine.create(
+        {
+          sub_operation_id: id,
+          machine_id: machineId,
+        },
+        { transaction: t }
+      );
+    }
 
-      // Update machine association if machine_id is provided
-      if (machine_id) {
-        const machineId = parseInt(machine_id);
+    await t.commit();
 
-        // Check if machine exists
-        const machine = await Machine.findByPk(machineId, { transaction: t });
-        if (!machine) {
-          throw new Error(`Machine with ID ${machineId} not found`);
-        }
-
-        // Clear existing machine associations
-        await sequelize.models.SubOperationMachine.destroy({
-          where: { sub_operation_id: id },
-          transaction: t,
-        });
-
-        // Create new association
-        await sequelize.models.SubOperationMachine.create(
-          {
-            sub_operation_id: id,
-            machine_id: machineId,
-          },
-          { transaction: t }
-        );
-      }
-
-      return { success: true };
-    });
-
-    // Fetch updated data
+    // Fetch updated data for response
     const updatedSubOperation = await SubOperation.findByPk(id, {
       include: [
         {
@@ -766,8 +807,13 @@ exports.updateSubOperation = async (req, res, next) => {
       success: true,
       message: "SubOperation updated successfully",
       data: updatedSubOperation,
+      log_created: true,
     });
   } catch (error) {
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+
     console.error("Update failed:", error);
 
     // Specific error handling
@@ -878,14 +924,58 @@ exports.deleteOperation = async (req, res, next) => {
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
   const t = await sequelize.transaction();
-  // console.log(req.user.userRole);
-  // return;
+
+  // Check permissions
   if (req?.user?.userRole !== "Admin") {
+    await t.rollback();
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
   }
+
   try {
+    // 1. FIRST: Get the sub-operation data BEFORE deletion (for logging)
+    const subOperationToDelete = await SubOperation.findByPk(subOpId, {
+      transaction: t,
+      include: [
+        {
+          model: Machine,
+          as: "machines",
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    if (!subOperationToDelete) {
+      await t.rollback();
+      return res.status(404).json({
+        status: "error",
+        message: "Sub-operation not found",
+      });
+    }
+
+    // 2. LOG: Insert data into log table BEFORE deleting
+    await SubOperationLog.create(
+      {
+        sub_operation_id: subOperationToDelete.sub_operation_id,
+        main_operation_id: subOperationToDelete.main_operation_id,
+        thread_id: subOperationToDelete.thread_id,
+        sub_operation_number: subOperationToDelete.sub_operation_number,
+        sub_operation_name: subOperationToDelete.sub_operation_name,
+        performed_action: "Delete",
+        smv: subOperationToDelete.smv,
+        remark: subOperationToDelete.remark,
+        needle_count: subOperationToDelete.needle_count,
+        machine_type: subOperationToDelete.machine_type,
+        spi: subOperationToDelete.spi,
+        needle_type_id: subOperationToDelete.needle_type_id,
+        looper_id: subOperationToDelete.looper_id,
+        created_by: subOperationToDelete.created_by,
+      },
+      { transaction: t }
+    );
+
+    // 3. THEN: Delete related records
     await NeedleLooper.destroy({
       where: { sub_operation_id: subOpId },
       transaction: t,
@@ -896,12 +986,19 @@ exports.deleteSubOperation = async (req, res, next) => {
       transaction: t,
     });
 
-    await NeedleType.destroy({
-      // Assuming you meant this
+    // Check if this is the correct table - if it's needle_type_n, don't delete
+    // await NeedleType.destroy({
+    //   where: { sub_operation_id: subOpId },
+    //   transaction: t,
+    // });
+
+    // Delete machine associations
+    await sequelize.models.SubOperationMachine.destroy({
       where: { sub_operation_id: subOpId },
       transaction: t,
     });
 
+    // 4. FINALLY: Delete the main sub-operation record
     await SubOperation.destroy({
       where: { sub_operation_id: subOpId },
       transaction: t,
@@ -909,14 +1006,25 @@ exports.deleteSubOperation = async (req, res, next) => {
 
     await t.commit();
 
-    console.log("Sub operation delete success with needle types");
+    console.log("Sub operation delete success with logging");
     res.status(200).json({
       status: "success",
-      message: "Sub-operation delete success",
+      message: "Sub-operation deleted successfully",
+      log_created: true,
     });
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    console.error("Delete failed:", error);
+
+    // Better error handling
+    if (error.name === "SequelizeForeignKeyConstraintError") {
+      return res.status(400).json({
+        status: "error",
+        message:
+          "Cannot delete sub-operation. It is referenced by other records.",
+      });
+    }
+
     return next(error);
   }
 };

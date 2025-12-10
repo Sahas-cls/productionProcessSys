@@ -7,52 +7,50 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         autoIncrement: true,
       },
-
       main_operation_id: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        references: {
+          model: "main_operation",
+          key: "main_operation_id",
+        },
       },
-
       thread_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        references: {
+          model: "thread",
+          key: "thread_id",
+        },
       },
-
       sub_operation_number: {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
-
       sub_operation_name: {
         type: DataTypes.STRING(255),
         allowNull: true,
       },
-
       smv: {
         type: DataTypes.FLOAT,
         allowNull: true,
       },
-
       remark: {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-
       needle_count: {
         type: DataTypes.FLOAT,
         allowNull: true,
       },
-
       machine_type: {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-
       spi: {
         type: DataTypes.FLOAT,
         allowNull: true,
       },
-
       needle_type_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -81,7 +79,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "sub_operation",
       timestamps: true,
-      underscored: false, // recommended for SQL snake_case
+      underscored: false,
     }
   );
 
@@ -92,13 +90,13 @@ module.exports = (sequelize, DataTypes) => {
       as: "thread",
     });
 
-    // created by - user
+    // Created by - user
     SubOperation.belongsTo(models.User, {
       foreignKey: "created_by",
       as: "creator",
     });
 
-    // looper
+    // Looper
     SubOperation.belongsTo(models.Thread, {
       foreignKey: "looper_id",
       as: "looper",
