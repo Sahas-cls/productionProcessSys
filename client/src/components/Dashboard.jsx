@@ -475,9 +475,9 @@ const Dashboard = () => {
             <MdOutlineDashboard className="text-indigo-600" />
             Dashboard
           </h1>
-          <p className="text-gray-600 mt-1">
+          {/* <p className="text-gray-600 mt-1">
             Production analytics and insights
-          </p>
+          </p> */}
         </div>
 
         <div className="flex items-center gap-3 mt-4 md:mt-0">

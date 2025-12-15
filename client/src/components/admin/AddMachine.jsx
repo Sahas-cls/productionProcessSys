@@ -458,51 +458,52 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             <span>Download</span>
           </motion.button>
 
-          {userRole === "Admin" && (
-            <>
-              <motion.button
-                type="button"
-                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
-                variants={buttonVariants}
-                whileHover="hover"
-                whileTap="tap"
-                onClick={() => {
-                  resetForms();
-                  setIsAddStyle(!isAddStyle);
-                }}
-              >
-                <div>
-                  {isAddStyle ? (
-                    <IoClose className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
-                  ) : (
-                    <IoMdAdd className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
-                  )}
-                </div>
-                <span>{isAddStyle ? "Close" : "Add"}</span>
-              </motion.button>
+          {userRole === "Admin" ||
+            (userRole === "SuperAdmin" && (
+              <>
+                <motion.button
+                  type="button"
+                  className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  onClick={() => {
+                    resetForms();
+                    setIsAddStyle(!isAddStyle);
+                  }}
+                >
+                  <div>
+                    {isAddStyle ? (
+                      <IoClose className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                    ) : (
+                      <IoMdAdd className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                    )}
+                  </div>
+                  <span>{isAddStyle ? "Close" : "Add"}</span>
+                </motion.button>
 
-              <motion.button
-                type="button"
-                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
-                variants={buttonVariants}
-                whileHover="hover"
-                whileTap="tap"
-                onClick={() => {
-                  resetForms();
-                  setIsUploadExcel(!isUploadExcel);
-                }}
-              >
-                <div>
-                  {isUploadExcel ? (
-                    <IoClose className="text-base sm:text-lg group-hover:scale-125 duration-200" />
-                  ) : (
-                    <RiFileExcel2Line className="text-base sm:text-lg group-hover:scale-125 duration-200" />
-                  )}
-                </div>
-                <span>{isUploadExcel ? "Close" : "Upload Excel"}</span>
-              </motion.button>
-            </>
-          )}
+                <motion.button
+                  type="button"
+                  className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                  variants={buttonVariants}
+                  whileHover="hover"
+                  whileTap="tap"
+                  onClick={() => {
+                    resetForms();
+                    setIsUploadExcel(!isUploadExcel);
+                  }}
+                >
+                  <div>
+                    {isUploadExcel ? (
+                      <IoClose className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                    ) : (
+                      <RiFileExcel2Line className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                    )}
+                  </div>
+                  <span>{isUploadExcel ? "Close" : "Upload Excel"}</span>
+                </motion.button>
+              </>
+            ))}
         </div>
       </motion.div>
 
@@ -811,11 +812,12 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                 {/* <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
                   Existing Style
                 </th> */}
-                {userRole === "Admin" && (
-                  <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
-                    Actions
-                  </th>
-                )}
+                {userRole === "Admin" ||
+                  (userRole === "SuperAdmin" && (
+                    <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
+                      Actions
+                    </th>
+                  ))}
               </tr>
             </thead>
             <tbody className="text-xs sm:text-sm lg:text-base divide-y divide-gray-200">
@@ -862,35 +864,38 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                         {getStyleNames(machine)}
                       </span>
                     </td> */}
-                    {userRole === "Admin" && (
-                      <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
-                        <div className="flex justify-start sm:justify-center gap-2 sm:gap-3">
-                          <TbEyeSpark
-                            onClick={() =>
-                              navigate("/view-machine", { state: machine })
-                            }
-                            className="text-lg sm:text-xl text-gray-600 hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
-                            title="View Machine"
-                          />
-                          <MdModeEditOutline
-                            onClick={() => handleEdit(machine)}
-                            className="text-lg sm:text-xl text-gray-600 hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
-                            title="Edit Machine"
-                          />
-                          <MdDeleteForever
-                            onClick={() => handleDelete(machine.machine_id)}
-                            className="text-lg sm:text-xl text-gray-600 hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
-                            title="Delete Machine"
-                          />
-                        </div>
-                      </td>
-                    )}
+                    {userRole === "Admin" ||
+                      (userRole === "SuperAdmin" && (
+                        <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                          <div className="flex justify-start sm:justify-center gap-2 sm:gap-3">
+                            <TbEyeSpark
+                              onClick={() =>
+                                navigate("/view-machine", { state: machine })
+                              }
+                              className="text-lg sm:text-xl text-gray-600 hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
+                              title="View Machine"
+                            />
+                            <MdModeEditOutline
+                              onClick={() => handleEdit(machine)}
+                              className="text-lg sm:text-xl text-gray-600 hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
+                              title="Edit Machine"
+                            />
+                            <MdDeleteForever
+                              onClick={() => handleDelete(machine.machine_id)}
+                              className="text-lg sm:text-xl text-gray-600 hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
+                              title="Delete Machine"
+                            />
+                          </div>
+                        </td>
+                      ))}
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={userRole === "Admin" ? 7 : 6}
+                    colSpan={
+                      userRole === "Admin" || userRole === "SuperAdmin" ? 7 : 6
+                    }
                     className="text-center py-8 text-sm sm:text-base"
                   >
                     {searchLoading ? (

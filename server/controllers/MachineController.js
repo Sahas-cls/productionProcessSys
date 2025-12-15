@@ -123,6 +123,7 @@ exports.countMachines = async (req, res, next) => {
 // to get all machine details
 exports.getMachineData = async (req, res, next) => {
   //
+  console.log("providing all machine data.....!");
   try {
     const machineSet = await Machine.findAll({
       include: [
@@ -283,7 +284,7 @@ exports.getSMachineData = async (req, res, next) => {
 // to create new machine
 exports.createMachine = async (req, res, next) => {
   // console.log("Creating new machine...");
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -355,7 +356,7 @@ exports.createMachine = async (req, res, next) => {
 // to edit new machine
 exports.editMachine = async (req, res, next) => {
   //
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -413,7 +414,7 @@ exports.editMachine = async (req, res, next) => {
 // to delete new machine
 exports.deleteMachine = async (req, res, next) => {
   //
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;

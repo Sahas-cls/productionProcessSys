@@ -362,7 +362,7 @@ const AddCustomer = ({ userRole }) => {
         </motion.div>
 
         {/* Add Customer Button */}
-        {userRole === "Admin" ? (
+        {userRole === "Admin" || userRole === "SuperAdmin" ? (
           <motion.button
             className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
             onClick={isAddFormOpen ? handleCancel : handleOpenAddForm}
@@ -559,7 +559,7 @@ const AddCustomer = ({ userRole }) => {
                 <th className="px-6 py-4 text-left text-xs font-medium text-white uppercase tracking-wider">
                   Customer Name
                 </th>
-                {userRole === "Admin" ? (
+                {userRole === "Admin" || userRole === "SuperAdmin" ? (
                   <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
                     Actions
                   </th>
@@ -590,7 +590,7 @@ const AddCustomer = ({ userRole }) => {
                         {customer.customer_name}
                       </div>
                     </td>
-                    {userRole === "Admin" ? (
+                    {userRole === "Admin" || userRole === "SuperAdmin" ? (
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex justify-center space-x-4">
                           <motion.button

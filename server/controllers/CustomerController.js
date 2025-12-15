@@ -28,7 +28,7 @@ exports.getCustomers = async (req, res, next) => {
 exports.createCustomer = async (req, res, next) => {
   // console.log(req.body);
   console.log("user ====== ", req.user);
-  if (req.user.userRole !== "Admin") {
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -59,7 +59,7 @@ exports.createCustomer = async (req, res, next) => {
 exports.editCustomer = async (req, res, next) => {
   // console.log(req.body);
   const cusId = req.params.id;
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -93,7 +93,7 @@ exports.editCustomer = async (req, res, next) => {
 // to delete existing customer
 exports.deleteCustomer = async (req, res, next) => {
   // console.log(req.body);
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;

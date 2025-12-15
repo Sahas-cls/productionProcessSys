@@ -21,7 +21,8 @@ exports.getFactories = async (req, res, next) => {
 
 // to create new factory
 exports.createFactory = async (req, res, next) => {
-  if (req.user.userRole !== "Admin") {
+  console.log(req.user.userRole);
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
     const error = new Error("Forbidden: Only Admins can create factories");
     error.status = 403;
     throw error;
@@ -63,7 +64,7 @@ exports.createFactory = async (req, res, next) => {
 
 // edit factory
 exports.updateFactory = async (req, res, next) => {
-  if (req.user.userRole !== "Admin") {
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
     const error = new Error("Not enough permission to perform this action");
     error.status = 403;
     throw error;
@@ -124,7 +125,7 @@ exports.updateFactory = async (req, res, next) => {
 exports.deleteFactory = async (req, res, next) => {
   try {
     // 🛡️ Permission check
-    if (req?.user?.userRole !== "Admin") {
+    if (req?.user?.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
       const error = new Error(
         "You don't have permission to perform this action"
       );

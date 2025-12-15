@@ -253,7 +253,7 @@ exports.getStylesMo = async (req, res, next) => {
 
 // for add new style
 exports.addStyle = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     return next(error);
@@ -374,10 +374,10 @@ exports.addStyle = async (req, res, next) => {
 // const b2Storage = require("../utils/b2Storage"); // Add this import
 
 exports.editStyle = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
-    throw error;
+    return next(error);
   }
 
   console.log("edit route called");
@@ -521,7 +521,7 @@ exports.editStyle = async (req, res, next) => {
 
 // for delete existing style
 exports.deleteStyle = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     return next(error);

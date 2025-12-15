@@ -30,7 +30,12 @@ const AddOperationBulletingPage = () => {
         text: "Please login to continue",
         icon: "error",
       }).then(() => navigate("/"));
-    } else if (!loading && user && user.userRole !== "Admin") {
+    } else if (
+      !loading &&
+      user &&
+      user.userRole !== "Admin" &&
+      user.userRole !== "SuperAdmin"
+    ) {
       navigate(-1);
     }
   }, [user, loading, navigate]);

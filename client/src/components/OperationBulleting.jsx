@@ -16,6 +16,8 @@ import useMachineTypes from "../hooks/useMachineTypes";
 import { useMemo } from "react";
 import useThreads from "../hooks/useTreads";
 import useNeedles from "../hooks/useNeedles";
+import useAllMachine from "../hooks/useAllMachines";
+import { useNavigate } from "react-router-dom";
 
 const OperationBulleting = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -26,6 +28,7 @@ const OperationBulleting = () => {
   const [editingIndex, setEditingIndex] = useState(null);
   const { stylesList, isLoading: styleLoading } = useStyles();
   const [isMachineFocused, setIsMachineFocused] = useState(false);
+  const navigate = useNavigate();
   const {
     isLoading: threadLoading,
     refreshThreads: refreshThreads,
@@ -190,6 +193,15 @@ const OperationBulleting = () => {
           });
         }
       } catch (error) {
+        if (error.status === 401) {
+          await Swal.fire({
+            title: "Unauthorized",
+            text: "Please login to system again",
+            icon: "error",
+            showCancelButton: "false",
+          });
+          navigate("/");
+        }
         console.error(error);
       }
 
@@ -396,6 +408,16 @@ const OperationBulleting = () => {
         icon: "success",
       });
     } catch (error) {
+      alert(error.status);
+      if (error.status === 401) {
+        await Swal.fire({
+          title: "Unauthorized",
+          text: "Please login to system again",
+          icon: "error",
+          showCancelButton: "false",
+        });
+        navigate("/");
+      }
       console.error("Bulk save failed:", error);
       console.error("Error details:", {
         message: error.message,
@@ -785,7 +807,7 @@ const FullForm = ({
   threadList,
   needleList,
 }) => {
-  const { machineList } = useMachine();
+  const { machineList } = useAllMachine();
   const { machineTList } = useMachineTypes();
   const [isMachineFocused, setIsMachineFocused] = useState(false);
   const [isMachineTypeFocused, setIsMachineTypeFocused] = useState(false);
@@ -816,9 +838,10 @@ const FullForm = ({
 
   // to filter machine list according to selected machine type
   const filteredMachineList = useMemo(() => {
-    if (selectedMachineT === null || selectedMachineT === "") {
-      return [];
-    }
+    if (!Array.isArray(machineList)) return [];
+
+    if (!selectedMachineT) return [];
+
     return machineList.filter((mch) => mch.machine_type === selectedMachineT);
   }, [selectedMachineT, machineList]);
 

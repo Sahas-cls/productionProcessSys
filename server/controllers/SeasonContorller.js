@@ -25,6 +25,13 @@ exports.getSeasons = async (req, res, next) => {
 // to create new season set M:1
 exports.createSeason = async (req, res, next) => {
   console.log(req.body);
+  // console.log(req.user);
+  // return;
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
+    const error = new Error("You have not authorize to perform this action");
+    error.status = 400;
+    return;
+  }
   //   return;
   try {
     const { customerId, seasons } = req.body;
@@ -54,6 +61,11 @@ exports.createSeason = async (req, res, next) => {
 
 // to edit existing season
 exports.exitSeason = async (req, res, next) => {
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
+    const error = new Error("You have not authorize to perform this action");
+    error.status = 400;
+    return;
+  }
   console.log(req.body);
   const { customerId, season, seasonId } = req.body;
   console.log(seasonId);
@@ -76,6 +88,11 @@ exports.exitSeason = async (req, res, next) => {
 
 //  to delete existing season
 exports.deleteSeason = async (req, res, next) => {
+  if (req.user.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
+    const error = new Error("You have not authorize to perform this action");
+    error.status = 400;
+    return;
+  }
   console.log(req.params);
   const seasonId = req.params.id;
   console.log(seasonId);

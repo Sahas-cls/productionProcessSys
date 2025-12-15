@@ -24,7 +24,6 @@ const SubOperationSchema = Yup.object().shape({
   machineName: Yup.string().required("Machine Name is required"),
   needleCount: Yup.number()
     .required("Needle Count is required")
-    .integer("Needle Count must be an integer")
     .min(1, "Minimum 1 needle required")
     .max(10, "Maximum 10 needles allowed")
     .typeError("Needle Count must be a number"),
@@ -563,10 +562,11 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                 </div>
 
                 <div className="grid grid-cols-1">
-                  <label htmlFor="needleCount">Needle Count</label>
+                  <label htmlFor="needleCount">Needle Size</label>
                   <Field
                     name="needleCount"
                     type="number"
+                    step="any"
                     min="1"
                     max="10"
                     className={`border-2 px-2 py-2 rounded-md shadow-sm ${
@@ -574,7 +574,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                         ? "border-red-500"
                         : ""
                     }`}
-                    placeholder="Number of needles"
+                    placeholder="Size of the needle"
                   />
                   <ErrorMessage
                     name="needleCount"

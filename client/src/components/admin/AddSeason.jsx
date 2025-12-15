@@ -370,7 +370,7 @@ const AddSeason = ({ userRole }) => {
         </motion.div>
 
         {/* Add Season Button */}
-        {userRole === "Admin" ? (
+        {userRole === "Admin" || userRole === "SuperAdmin" ? (
           <motion.button
             className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
             onClick={() => {
@@ -511,7 +511,7 @@ const AddSeason = ({ userRole }) => {
                           <th className="px-4 py-2 bg-blue-500 text-white border">
                             Season List
                           </th>
-                          {userRole === "Admin" ? (
+                          {userRole === "Admin" || userRole === "SuperAdmin" ? (
                             <th className="px-4 py-2 bg-blue-500 text-white border">
                               Actions
                             </th>
@@ -541,7 +541,8 @@ const AddSeason = ({ userRole }) => {
                               <td className="text-center border py-2 px-4">
                                 {season.name}
                               </td>
-                              {userRole === "Admin" ? (
+                              {userRole === "Admin" ||
+                              userRole === "SuperAdmin" ? (
                                 <td className="text-center border py-2 px-4">
                                   <div className="flex justify-center gap-4">
                                     <button
@@ -648,7 +649,7 @@ const AddSeason = ({ userRole }) => {
               <th className="px-6 py-4 text-left font-medium text-white uppercase tracking-wider">
                 Season
               </th>
-              {userRole === "Admin" ? (
+              {userRole === "Admin" || userRole === "SuperAdmin" ? (
                 <th className="px-6 py-4 text-center text-xs font-medium text-white uppercase tracking-wider">
                   Actions
                 </th>
@@ -685,7 +686,7 @@ const AddSeason = ({ userRole }) => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-700">{season.season}</div>
                   </td>
-                  {userRole === "Admin" ? (
+                  {userRole === "Admin" || userRole === "SuperAdmin" ? (
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="flex justify-center space-x-4">
                         <motion.button

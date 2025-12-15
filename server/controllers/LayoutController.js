@@ -145,8 +145,7 @@ exports.getSubOperations = async (req, res, next) => {
 
 exports.createLayout = async (req, res, next) => {
   // 1. Validate user permissions
-  console.log("create layotu body: ", req.body);
-  if (!req?.user || req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     return next(error);
@@ -265,6 +264,11 @@ exports.createLayout = async (req, res, next) => {
 // to delete layout
 exports.deleteLayout = async (req, res, next) => {
   //
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
+    const error = new Error("You don't have permission to perform this action");
+    error.status = 401;
+    return next(error);
+  }
   const { layoutId } = req.params;
   try {
     const deleteLayout = await Layout.findByPk(layoutId);

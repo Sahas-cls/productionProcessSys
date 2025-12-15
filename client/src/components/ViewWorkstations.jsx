@@ -472,7 +472,7 @@ const ViewWorkstations = () => {
           </div>
 
           <div className="">
-            {userRole === "Admin" ? (
+            {userRole === "Admin" || userRole === "SuperAdmin" ? (
               <button
                 type="button"
                 className="bg-blue-500 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150 group"
@@ -586,16 +586,17 @@ const ViewWorkstations = () => {
                                   {workstation.workstation_no
                                     ? workstation.workstation_no
                                     : "Not assigned yet"}
-                                  {userRole === "Admin" && (
-                                    <button
-                                      onClick={() =>
-                                        startEditingWorkstation(workstation)
-                                      }
-                                      className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
-                                    >
-                                      <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
-                                    </button>
-                                  )}
+                                  {userRole === "Admin" ||
+                                    (userRole === "SuperAdmin" && (
+                                      <button
+                                        onClick={() =>
+                                          startEditingWorkstation(workstation)
+                                        }
+                                        className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                                      >
+                                        <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                                      </button>
+                                    ))}
                                 </div>
                               )}
                             </h5>
@@ -607,28 +608,29 @@ const ViewWorkstations = () => {
                           <span className="text-xs text-gray-500">
                             Created: {formatDate(workstation.createdAt)}
                           </span>
-                          {userRole === "Admin" && (
-                            <div className="flex gap-x-2">
-                              <button
-                                className="bg-green-300/40 p-1 text-green-700 rounded"
-                                onClick={() =>
-                                  openAddSubOperationModal(workstation)
-                                }
-                              >
-                                <BiPlus className="text-2xl hover:scale-150" />
-                              </button>
-                              <button
-                                className="bg-red-300/40 p-1 text-red-700 rounded"
-                                onClick={() =>
-                                  handleWorkstationDelete(
-                                    workstation.workstation_id
-                                  )
-                                }
-                              >
-                                <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
-                              </button>
-                            </div>
-                          )}
+                          {userRole === "Admin" ||
+                            (userRole === "SuperAdmin" && (
+                              <div className="flex gap-x-2">
+                                <button
+                                  className="bg-green-300/40 p-1 text-green-700 rounded"
+                                  onClick={() =>
+                                    openAddSubOperationModal(workstation)
+                                  }
+                                >
+                                  <BiPlus className="text-2xl hover:scale-150" />
+                                </button>
+                                <button
+                                  className="bg-red-300/40 p-1 text-red-700 rounded"
+                                  onClick={() =>
+                                    handleWorkstationDelete(
+                                      workstation.workstation_id
+                                    )
+                                  }
+                                >
+                                  <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
+                                </button>
+                              </div>
+                            ))}
                         </div>
                       </div>
                     </div>
@@ -677,7 +679,8 @@ const ViewWorkstations = () => {
                                     {subOp.suboperatoin?.smv || "0.00"}
                                   </td>
                                   <td className="px-4 py-3 text-gray-500 w-24">
-                                    {userRole === "Admin" ? (
+                                    {userRole === "Admin" ||
+                                    userRole === "SuperAdmin" ? (
                                       <div className="space-x-2 flex">
                                         {/* Delete Sub-operation Button */}
                                         <button

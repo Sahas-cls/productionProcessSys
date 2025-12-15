@@ -313,14 +313,15 @@ const ViewStyleDetails = () => {
             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
               Operations ({style.operations?.length || 0})
             </h2>
-            {userRole === "Admin" && (
-              <button
-                onClick={() => setIsAddingMO(true)}
-                className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm"
-              >
-                Add Operation
-              </button>
-            )}
+            {userRole === "Admin" ||
+              (userRole === "SuperAdmin" && (
+                <button
+                  onClick={() => setIsAddingMO(true)}
+                  className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm"
+                >
+                  Add Operation
+                </button>
+              ))}
           </div>
 
           {style.operations?.length > 0 ? (
@@ -386,17 +387,18 @@ const ViewStyleDetails = () => {
                           Sub-Operations ({operation.subOperations?.length || 0}
                           )
                         </h4>
-                        {userRole === "Admin" && (
-                          <button
-                            onClick={() => {
-                              setMainOperationId(operation);
-                              setIsAddingSubOP(true);
-                            }}
-                            className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs sm:text-sm font-medium transition-colors duration-200"
-                          >
-                            Add Sub-Operation
-                          </button>
-                        )}
+                        {userRole === "Admin" ||
+                          (userRole === "SuperAdmin" && (
+                            <button
+                              onClick={() => {
+                                setMainOperationId(operation);
+                                setIsAddingSubOP(true);
+                              }}
+                              className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs sm:text-sm font-medium transition-colors duration-200"
+                            >
+                              Add Sub-Operation
+                            </button>
+                          ))}
                       </div>
 
                       {operation.subOperations?.length > 0 ? (
@@ -435,38 +437,39 @@ const ViewStyleDetails = () => {
                                     </p> */}
                                   </div>
                                 </div>
-                                {userRole === "Admin" && (
-                                  <div className="flex gap-2 self-end lg:self-auto">
-                                    <button
-                                      onClick={() =>
-                                        navigate(
-                                          `/operations/edit-sub-operation`,
-                                          {
-                                            state: {
-                                              subOperation: subOp,
-                                              operationId:
-                                                operation.operation_id,
-                                            },
-                                          }
-                                        )
-                                      }
-                                      className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium transition-colors duration-200"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button
-                                      onClick={() =>
-                                        handleDeleteSubOperation(
-                                          subOp.sub_operation_id,
-                                          operation.operation_id
-                                        )
-                                      }
-                                      className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition-colors duration-200"
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                )}
+                                {userRole === "Admin" ||
+                                  (userRole === "SuperAdmin" && (
+                                    <div className="flex gap-2 self-end lg:self-auto">
+                                      <button
+                                        onClick={() =>
+                                          navigate(
+                                            `/operations/edit-sub-operation`,
+                                            {
+                                              state: {
+                                                subOperation: subOp,
+                                                operationId:
+                                                  operation.operation_id,
+                                              },
+                                            }
+                                          )
+                                        }
+                                        className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium transition-colors duration-200"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteSubOperation(
+                                            subOp.sub_operation_id,
+                                            operation.operation_id
+                                          )
+                                        }
+                                        className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition-colors duration-200"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  ))}
                               </div>
 
                               {/* Machines and Configurations */}

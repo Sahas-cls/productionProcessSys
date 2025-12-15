@@ -18,6 +18,7 @@ const {
   SubOperationMachine,
   SubOperationLog,
   Notification,
+  UserCategory,
   Thread,
   StyleMedia,
 } = require("../models");
@@ -276,7 +277,7 @@ exports.createOperation = async (req, res, next) => {
 // to create one main operation based on style
 exports.createMainOperation = async (req, res, next) => {
   //
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -303,7 +304,7 @@ exports.createMainOperation = async (req, res, next) => {
 exports.createSubOp = async (req, res, next) => {
   console.log("request body: ", req.body);
 
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -460,7 +461,7 @@ exports.createSubOp = async (req, res, next) => {
 // edit main operation data
 exports.editMainOperation = async (req, res, next) => {
   // console.log(req.body);
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -507,17 +508,22 @@ exports.editMainOperation = async (req, res, next) => {
 
 // to create bulk operations including, Main Operation, SubOperations, Machines, NeedleTypes, NeedleTreads, NeedleLoopers
 exports.createBulkOperations = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
-    const error = new Error("You don't have permission to perform this action");
-    error.status = 401;
-    throw error;
-  }
-
   // console.log("request body: ", req.body);
   // console.log("req.user: ", req.user);
   // console.log("looper: ", req.body.operations[0].bobbinTreadLoopers);
   // return;
   try {
+    console.log("user data: ", req.user);
+    if (
+      req?.user?.userRole !== "Admin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      const error = new Error(
+        "You don't have permission to perform this action"
+      );
+      error.status = 401;
+      throw error;
+    }
     const { styleNumber, mainOperation, operations, mainOperationName } =
       req.body;
 
@@ -821,19 +827,55 @@ exports.updateSubOperation = async (req, res, next) => {
       modifiedUser.user_name +
       `(${modifiedUser.department.department_name})`;
 
-    const notifications = await Notification.create({
-      user_id: 5,
-      title: "Operation Update Alert",
-      operation_id: currentSubOperation.sub_operation_id,
-      message: message,
-      type: "ALERT",
+    // Find all SuperAdmin users to send notifications to
+    const superAdminCategory = await UserCategory.findOne({
+      where: { category_name: "SuperAdmin" },
+      attributes: ["category_id"],
     });
+
+    if (!superAdminCategory) {
+      console.error("SuperAdmin category not found");
+      return res.status(200).json({
+        success: true,
+        message:
+          "SubOperation updated successfully but SuperAdmin category not found",
+        data: updatedSubOperation,
+        log_created: true,
+      });
+    }
+
+    // Find all users with SuperAdmin category
+    const superAdminUsers = await User.findAll({
+      where: { user_category: superAdminCategory.category_id },
+      attributes: ["user_id"],
+    });
+
+    // Create notifications for all SuperAdmin users
+    if (superAdminUsers.length > 0) {
+      const notificationPromises = superAdminUsers.map((user) =>
+        Notification.create({
+          user_id: user.user_id,
+          title: "Operation Update Alert",
+          operation_id: currentSubOperation.sub_operation_id,
+          message: message,
+          type: "ALERT",
+        })
+      );
+
+      await Promise.all(notificationPromises);
+      console.log(
+        `Notifications sent to ${superAdminUsers.length} SuperAdmin users`
+      );
+    } else {
+      console.log("No SuperAdmin users found to send notifications");
+    }
 
     res.status(200).json({
       success: true,
       message: "SubOperation updated successfully",
       data: updatedSubOperation,
       log_created: true,
+      notifications_sent: superAdminUsers.length,
     });
   } catch (error) {
     if (t && !t.finished) {
@@ -872,7 +914,7 @@ exports.updateSubOperation = async (req, res, next) => {
 
 // to delete operation
 exports.deleteOperation = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
@@ -949,17 +991,18 @@ exports.deleteOperation = async (req, res, next) => {
 // to delete sub operation
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
-  const t = await sequelize.transaction();
+  let t;
 
   // Check permissions
-  if (req?.user?.userRole !== "Admin") {
-    await t.rollback();
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;
   }
 
   try {
+    t = await sequelize.transaction();
+
     // 1. FIRST: Get the sub-operation data BEFORE deletion (for logging)
     const subOperationToDelete = await SubOperation.findByPk(subOpId, {
       transaction: t,
@@ -1012,31 +1055,61 @@ exports.deleteSubOperation = async (req, res, next) => {
       transaction: t,
     });
 
-    // Check if this is the correct table - if it's needle_type_n, don't delete
-    // await NeedleType.destroy({
-    //   where: { sub_operation_id: subOpId },
-    //   transaction: t,
-    // });
+    // Get modified user info before creating notifications
     const modifiedUser = await User.findByPk(req.user.userId, {
       include: [{ model: Department, as: "department" }],
+      transaction: t,
     });
 
+    // Create notification message
     const message =
-      SubOperation.sub_operation_name +
+      subOperationToDelete.sub_operation_name +
       " has been deleted by user " +
       modifiedUser.user_name +
       `(${modifiedUser.department.department_name})`;
 
-    const notifications = await Notification.create(
-      {
-        user_id: 5,
-        title: "Operation Delete Alert",
-        operation_id: subOperationToDelete.sub_operation_id,
-        message: message,
-        type: "ALERT",
-      },
-      { transaction: t }
-    );
+    // Find SuperAdmin category to get all SuperAdmin users
+    const superAdminCategory = await UserCategory.findOne({
+      where: { category_name: "SuperAdmin" },
+      attributes: ["category_id"],
+      transaction: t,
+    });
+
+    let notificationsSent = 0;
+    if (superAdminCategory) {
+      // Find all users with SuperAdmin category
+      const superAdminUsers = await User.findAll({
+        where: { user_category: superAdminCategory.category_id },
+        attributes: ["user_id"],
+        transaction: t,
+      });
+
+      // Create notifications for all SuperAdmin users
+      if (superAdminUsers.length > 0) {
+        const notificationPromises = superAdminUsers.map((user) =>
+          Notification.create(
+            {
+              user_id: user.user_id,
+              title: "Operation Delete Alert",
+              operation_id: subOperationToDelete.sub_operation_id,
+              message: message,
+              type: "ALERT",
+            },
+            { transaction: t }
+          )
+        );
+
+        await Promise.all(notificationPromises);
+        notificationsSent = superAdminUsers.length;
+        console.log(
+          `Delete notifications sent to ${superAdminUsers.length} SuperAdmin users`
+        );
+      } else {
+        console.log("No SuperAdmin users found to send delete notifications");
+      }
+    } else {
+      console.log("SuperAdmin category not found for delete notification");
+    }
 
     // Delete machine associations
     await sequelize.models.SubOperationMachine.destroy({
@@ -1053,15 +1126,20 @@ exports.deleteSubOperation = async (req, res, next) => {
     await t.commit();
 
     console.log("modified user: ", modifiedUser);
-
     console.log("Sub operation delete success with logging");
+
     res.status(200).json({
       status: "success",
       message: "Sub-operation deleted successfully",
       log_created: true,
+      notifications_sent: notificationsSent,
     });
   } catch (error) {
-    await t.rollback();
+    // Only rollback if transaction exists and hasn't been committed
+    if (t && !t.finished) {
+      await t.rollback();
+    }
+
     console.error("Delete failed:", error);
 
     // Better error handling
@@ -1073,7 +1151,13 @@ exports.deleteSubOperation = async (req, res, next) => {
       });
     }
 
-    return next(error);
+    // Handle other errors
+    return res.status(500).json({
+      status: "error",
+      message: "Internal server error",
+      details:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
 
@@ -1083,7 +1167,7 @@ exports.deleteSubOperation = async (req, res, next) => {
 exports.createHelperOps = async (req, res, next) => {
   // console.log(req.body);
 
-  if (req?.user?.userRole !== "Admin") {
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     throw error;

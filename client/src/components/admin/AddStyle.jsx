@@ -526,18 +526,19 @@ const AddStyle = ({ userRole }) => {
             Download
           </motion.button>
 
-          {userRole === "Admin" && (
-            <motion.button
-              type="button"
-              className="bg-blue-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 min-w-[120px]"
-              variants={buttonVariants}
-              whileHover="hover"
-              whileTap="tap"
-              onClick={handleIsAddingStyle}
-            >
-              {isAddStyle ? "Close" : "Add Style"}
-            </motion.button>
-          )}
+          {userRole === "Admin" ||
+            (userRole === "SuperAdmin" && (
+              <motion.button
+                type="button"
+                className="bg-blue-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 min-w-[120px]"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={handleIsAddingStyle}
+              >
+                {isAddStyle ? "Close" : "Add Style"}
+              </motion.button>
+            ))}
         </div>
       </motion.div>
 
@@ -973,7 +974,7 @@ const AddStyle = ({ userRole }) => {
               <th className="px-6 py-3 text-left font-medium text-white uppercase tracking-wider">
                 Description
               </th>
-              {userRole === "Admin" ? (
+              {userRole === "Admin" || userRole === "SuperAdmin" ? (
                 <th className="px-6 py-3 text-center font-medium text-white uppercase tracking-wider">
                   Actions
                 </th>
@@ -1053,7 +1054,7 @@ const AddStyle = ({ userRole }) => {
                         {style.style_description || "N/A"}
                       </div>
                     </td>
-                    {userRole === "Admin" ? (
+                    {userRole === "Admin" || userRole === "SuperAdmin" ? (
                       <td className="px-6 py-4 whitespace-nowrap text-center">
                         <div className="flex justify-center space-x-4">
                           <motion.button
