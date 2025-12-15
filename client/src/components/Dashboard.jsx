@@ -8,12 +8,14 @@ import {
   MdPeople,
   MdTrendingUp,
 } from "react-icons/md";
+
 import { FaTshirt, FaRegChartBar } from "react-icons/fa";
 import { GiHanger } from "react-icons/gi";
 import { GiSewingNeedle, GiSewingMachine } from "react-icons/gi";
 import { CiVideoOn } from "react-icons/ci";
 import { IoMdImages } from "react-icons/io";
 import { PiMicrosoftExcelLogoDuotone } from "react-icons/pi";
+import { useNavigate } from "react-router-dom";
 import {
   FaRegFolderOpen,
   FaSearch,
@@ -46,6 +48,7 @@ import {
 
 const Dashboard = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
+  const navigate = useNavigate();
 
   // State for all data
   const [baseCounts, setBaseCounts] = useState({
@@ -422,7 +425,10 @@ const Dashboard = () => {
           </p>
         </div>
         <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>
-          <Icon className="text-2xl" style={{ color: color }} />
+          <Icon
+            className="text-2xl group-hover:scale-150 duration-300"
+            style={{ color: color }}
+          />
         </div>
       </div>
       <div
@@ -485,14 +491,14 @@ const Dashboard = () => {
             />
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </button>
-          <div className="relative">
+          {/* <div className="relative">
             <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder="Search seasons..."
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm"
             />
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -504,13 +510,18 @@ const Dashboard = () => {
           icon={MdGroups2}
           color={COLORS.primary}
           gradient="bg-gradient-to-br from-indigo-50 to-purple-50"
-          onClick={() => setSelectedCustomer(null)}
+          onClick={() => {
+            setSelectedCustomer(null), navigate("/customer");
+          }}
         />
         <StatCard
           title="Total Machines"
           value={baseCounts.machines}
           icon={GiSewingMachine}
           color={COLORS.success}
+          onClick={() => {
+            navigate("/machine");
+          }}
           gradient="bg-gradient-to-br from-emerald-50 to-teal-50"
         />
         <StatCard
@@ -519,6 +530,9 @@ const Dashboard = () => {
           icon={FaTshirt}
           color={COLORS.warning}
           gradient="bg-gradient-to-br from-amber-50 to-orange-50"
+          onClick={() => {
+            navigate("/style");
+          }}
         />
       </div>
 
@@ -596,12 +610,10 @@ const Dashboard = () => {
       </div>
 
       {/* Season Summary Section */}
-      
 
       {/* Season Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Season Distribution Pie Chart */}
-        
 
         {/* Season Styles Bar Chart */}
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
@@ -753,7 +765,6 @@ const Dashboard = () => {
       {/* Seasonal Trends and Customer Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Seasonal Trends Chart */}
-        
       </div>
 
       {/* Selected Season Details */}
@@ -888,9 +899,7 @@ const Dashboard = () => {
               <div className="text-sm text-gray-600">Operations</div>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            
-          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200"></div>
         </div>
       </div>
     </div>
