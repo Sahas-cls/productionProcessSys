@@ -1,6 +1,7 @@
 const express = require("express");
 const routes = express.Router();
 const userController = require("../controllers/UserController");
+const authMiddleWare = require("../middlewares/AuthUser");
 const {
   registerValidation,
   LoginValidation,
@@ -28,6 +29,20 @@ routes.post(
 
 // to logout
 routes.post("/logout", userController.logoutUser);
+
+// to get notifications user wise
+routes.get(
+  "/get_notifications",
+  authMiddleWare,
+  userController.getNotifications
+);
+
+// to get detailed view of specific notification
+routes.get(
+  "/get_notification/:ntfId",
+  authMiddleWare,
+  userController.getNotificationDetails
+);
 
 // auth user
 routes.get("/authCheck", userController.authCheck);

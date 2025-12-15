@@ -84,6 +84,14 @@ module.exports = (sequelize, DataTypes) => {
       onUpdate: "CASCADE",
     });
 
+    // notification
+    User.hasMany(models.Notification, {
+      foreignKey: "user_id",
+      as: "notifications",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
+
     // Has created factories
     // User.hasMany(models.Factory, {
     //   foreignKey: "created_by",

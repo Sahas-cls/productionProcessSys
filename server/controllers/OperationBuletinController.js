@@ -7,17 +7,21 @@ const {
   Style,
   MainOperation,
   SubOperation,
+  User,
   Machine,
   NeedleType,
   NeedleTread,
   NeedleLooper,
   NeedleTypeN,
+  Department,
   Helper,
   SubOperationMachine,
   SubOperationLog,
+  Notification,
   Thread,
   StyleMedia,
 } = require("../models");
+const { title } = require("process");
 
 exports.getBOList = async (req, res, next) => {
   try {
@@ -722,7 +726,7 @@ exports.updateSubOperation = async (req, res, next) => {
         spi: currentSubOperation.spi,
         needle_type_id: currentSubOperation.needle_type_id,
         looper_id: currentSubOperation.looper_id,
-        created_by: currentSubOperation.created_by,
+        created_by: req.user.userId,
       },
       { transaction: t }
     );
@@ -801,6 +805,28 @@ exports.updateSubOperation = async (req, res, next) => {
           as: "looper",
         },
       ],
+    });
+
+    console.log("updated userId: ", updatedSubOperation.created_by);
+
+    const modifiedUser = await User.findByPk(req.user.userId, {
+      include: [{ model: Department, as: "department" }],
+    });
+
+    console.log("modified user: ", modifiedUser);
+
+    const message =
+      currentSubOperation.sub_operation_name +
+      " has been modified by user " +
+      modifiedUser.user_name +
+      `(${modifiedUser.department.department_name})`;
+
+    const notifications = await Notification.create({
+      user_id: 5,
+      title: "Operation Update Alert",
+      operation_id: currentSubOperation.sub_operation_id,
+      message: message,
+      type: "ALERT",
     });
 
     res.status(200).json({
@@ -970,7 +996,7 @@ exports.deleteSubOperation = async (req, res, next) => {
         spi: subOperationToDelete.spi,
         needle_type_id: subOperationToDelete.needle_type_id,
         looper_id: subOperationToDelete.looper_id,
-        created_by: subOperationToDelete.created_by,
+        created_by: req.user.userId,
       },
       { transaction: t }
     );
@@ -991,6 +1017,26 @@ exports.deleteSubOperation = async (req, res, next) => {
     //   where: { sub_operation_id: subOpId },
     //   transaction: t,
     // });
+    const modifiedUser = await User.findByPk(req.user.userId, {
+      include: [{ model: Department, as: "department" }],
+    });
+
+    const message =
+      SubOperation.sub_operation_name +
+      " has been deleted by user " +
+      modifiedUser.user_name +
+      `(${modifiedUser.department.department_name})`;
+
+    const notifications = await Notification.create(
+      {
+        user_id: 5,
+        title: "Operation Delete Alert",
+        operation_id: subOperationToDelete.sub_operation_id,
+        message: message,
+        type: "ALERT",
+      },
+      { transaction: t }
+    );
 
     // Delete machine associations
     await sequelize.models.SubOperationMachine.destroy({
@@ -1005,6 +1051,8 @@ exports.deleteSubOperation = async (req, res, next) => {
     });
 
     await t.commit();
+
+    console.log("modified user: ", modifiedUser);
 
     console.log("Sub operation delete success with logging");
     res.status(200).json({

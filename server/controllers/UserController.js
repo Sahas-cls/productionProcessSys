@@ -1,10 +1,15 @@
 const db = require("../models");
 const bcrypt = require("bcrypt");
 const User = db.User;
+const Notification = db.Notification;
 const UserCategory = db.UserCategory;
 const userCategories = db.UserCategory;
+const SubOperation = db.SubOperation;
+const SubOperationLog = db.SubOperationLog;
+const MainOperation = db.MainOperation;
 const Factory = db.Factory;
 const Department = db.Department;
+const Style = db.Style;
 const jwt = require("jsonwebtoken");
 const { where } = require("sequelize");
 
@@ -187,5 +192,66 @@ exports.logoutUser = async (req, res, next) => {
     });
   } catch (error) {
     next(error); // Pass any error to the error handler
+  }
+};
+
+// to fetch notifications
+exports.getNotifications = async (req, res) => {
+  console.log("");
+  try {
+    const notifications = await Notification.findAll({
+      where: { user_id: req.user.userId },
+      order: [["createdAt", "DESC"]],
+    });
+
+    return res.status(200).json({ data: notifications });
+  } catch (err) {
+    console.error("Error fetching notifications:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// to get notification detailed view
+exports.getNotificationDetails = async (req, res, next) => {
+  const { ntfId } = req.params;
+  console.log("req params, ", req.params);
+  try {
+    // 1. Find notification
+    const notification = await Notification.findByPk(ntfId);
+
+    if (!notification) {
+      const error = new Error("Can't find that notification in the database");
+      error.status = 400;
+      throw error;
+    }
+
+    // make notification reade when getting details preview
+    await notification.update({ isRead: true });
+
+    // 2. Fetch new values (current sub operation)
+    const newValues = await SubOperation.findByPk(notification.operation_id, {
+      include: [
+        {
+          model: MainOperation,
+          as: "mainOperation",
+          include: [{ model: Style, as: "style" }],
+        },
+      ],
+    });
+
+    // 3. Fetch the most recent log (old values)
+    const oldValues = await SubOperationLog.findOne({
+      where: { sub_operation_id: notification.operation_id },
+      order: [["createdAt", "DESC"]],
+    });
+
+    // 4. Send response
+    res.status(200).json({
+      newData: newValues || null,
+      oldData: oldValues || null,
+    });
+  } catch (error) {
+    console.error(error);
+    next(error);
   }
 };
