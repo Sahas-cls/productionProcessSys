@@ -20,7 +20,7 @@ const AddLayoutPage = () => {
           text: "Please login to continue",
           icon: "error",
         }).then(() => navigate("/"));
-      } else if (user.userRole !== "Admin") {
+      } else if (user.userRole !== "Admin" && user.userRole !== "SuperAdmin") {
         Swal.fire({
           title: "Unauthorized",
           text: "You are not allowed to access this page",
