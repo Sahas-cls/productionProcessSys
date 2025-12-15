@@ -1,18 +1,53 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { MdGroups2 } from "react-icons/md";
-import { FaTshirt } from "react-icons/fa";
+import {
+  MdGroups2,
+  MdOutlineDashboard,
+  MdOutlineRefresh,
+  MdInfoOutline,
+  MdCalendarToday,
+  MdPeople,
+  MdTrendingUp,
+} from "react-icons/md";
+import { FaTshirt, FaRegChartBar } from "react-icons/fa";
 import { GiHanger } from "react-icons/gi";
 import { GiSewingNeedle, GiSewingMachine } from "react-icons/gi";
 import { CiVideoOn } from "react-icons/ci";
 import { IoMdImages } from "react-icons/io";
 import { PiMicrosoftExcelLogoDuotone } from "react-icons/pi";
-import { FaRegFolderOpen } from "react-icons/fa";
+import {
+  FaRegFolderOpen,
+  FaSearch,
+  FaChartBar,
+  FaFilter,
+  FaChartPie,
+  FaChartLine,
+} from "react-icons/fa";
 import CountUp from "react-countup";
 import axios from "axios";
-import { TiFilter } from "react-icons/ti";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  LineChart,
+  Line,
+  ComposedChart,
+  Scatter,
+} from "recharts";
 
 const Dashboard = () => {
   const apiUrl = import.meta.env.VITE_API_URL;
+
+  // State for all data
   const [baseCounts, setBaseCounts] = useState({
     customers: 0,
     machines: 0,
@@ -31,6 +66,55 @@ const Dashboard = () => {
   const [selectedStyle, setSelectedStyle] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // New state for season data
+  const [seasonData, setSeasonData] = useState({
+    seasonWiseData: [],
+    barChartData: [],
+    pieChartData: [],
+    stackedBarData: [],
+    summary: {},
+    loading: false,
+  });
+
+  const [seasonalTrends, setSeasonalTrends] = useState({
+    trends: [],
+    summary: {},
+    loading: false,
+  });
+
+  const [customerDistribution, setCustomerDistribution] = useState({
+    data: [],
+    loading: false,
+  });
+
+  const [selectedSeason, setSelectedSeason] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  // Enhanced color scheme
+  const COLORS = {
+    primary: "#6366F1",
+    secondary: "#8B5CF6",
+    success: "#10B981",
+    warning: "#F59E0B",
+    danger: "#EF4444",
+    info: "#3B82F6",
+    dark: "#1F2937",
+    light: "#F3F4F6",
+  };
+
+  // Gradient colors for charts
+  const GRADIENTS = [
+    ["#6366F1", "#8B5CF6"],
+    ["#3B82F6", "#60A5FA"],
+    ["#10B981", "#34D399"],
+    ["#F59E0B", "#FBBF24"],
+    ["#EF4444", "#F87171"],
+    ["#8B5CF6", "#D946EF"],
+    ["#06B6D4", "#0891B2"],
+    ["#84CC16", "#65A30D"],
+  ];
 
   // Fetch all styles on component mount
   const getStyles = async () => {
@@ -47,7 +131,6 @@ const Dashboard = () => {
   // Filter styles based on search input
   const filteredStyles = useMemo(() => {
     if (!searchInput) return [];
-
     return styleList
       .filter((style) =>
         style.style_no.toLowerCase().includes(searchInput.toLowerCase())
@@ -90,6 +173,91 @@ const Dashboard = () => {
     }
   };
 
+  // Fetch season-wise styles data
+  const fetchSeasonWiseStyles = async () => {
+    setSeasonData((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/season-wise-styles`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setSeasonData({
+          ...response.data.data.chartData,
+          seasonWiseData: response.data.data.seasonWiseData,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching season-wise styles:", error);
+      setSeasonData((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Fetch seasonal trends
+  const fetchSeasonalTrends = async () => {
+    setSeasonalTrends((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/seasonal-trends`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setSeasonalTrends({
+          trends: response.data.data.trends,
+          summary: response.data.data.summary,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching seasonal trends:", error);
+      setSeasonalTrends((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Fetch customer distribution
+  const fetchCustomerDistribution = async () => {
+    setCustomerDistribution((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/customer-season-distribution`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setCustomerDistribution({
+          data: response.data.data,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching customer distribution:", error);
+      setCustomerDistribution((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Fetch styles by season
+  const fetchStylesBySeason = async (seasonId) => {
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/season/${seasonId}`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setSelectedSeason(response.data.data);
+      }
+    } catch (error) {
+      console.error("Error fetching styles by season:", error);
+    }
+  };
+
   // Handle search input change
   const handleSearchChange = (e) => {
     const value = e.target.value;
@@ -128,6 +296,24 @@ const Dashboard = () => {
     }
   };
 
+  const refreshAllData = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        getStyles(),
+        countBaseItems(),
+        countSubItems(),
+        fetchSeasonWiseStyles(),
+        fetchSeasonalTrends(),
+        fetchCustomerDistribution(),
+      ]);
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     filterSubData();
   }, [selectedStyle]);
@@ -137,14 +323,21 @@ const Dashboard = () => {
     setSearchInput("");
     setSelectedStyle("");
     setShowSuggestions(false);
-    // Reset to original counts when clearing
     countSubItems();
   };
 
   useEffect(() => {
-    getStyles();
-    countBaseItems();
-    countSubItems();
+    const loadData = async () => {
+      await Promise.all([
+        getStyles(),
+        countBaseItems(),
+        countSubItems(),
+        fetchSeasonWiseStyles(),
+        fetchSeasonalTrends(),
+        fetchCustomerDistribution(),
+      ]);
+    };
+    loadData();
   }, []);
 
   // Close suggestions when clicking outside
@@ -152,240 +345,551 @@ const Dashboard = () => {
     const handleClickOutside = () => {
       setShowSuggestions(false);
     };
-
     document.addEventListener("click", handleClickOutside);
     return () => document.removeEventListener("click", handleClickOutside);
   }, []);
 
-  return (
-    <div className="w-full min-h-screen px-3 sm:px-4 py-4 bg-white">
-      {/* Top Stats Grid - Responsive */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 items-center">
-        {/* section - customers */}
-        <section className="w-full h-[90px] sm:h-[100px] shadow-lg rounded-2xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-blue-200 to-indigo-50 border border-black/30 border-blue-100">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="text-2xl sm:text-3xl lg:text-4xl text-blue-600 bg-blue-100 p-2 rounded-xl">
-              <MdGroups2 />
-            </div>
-            <h4 className="font-semibold text-sm sm:text-base text-blue-800">
-              Total Customers
-            </h4>
-          </div>
-          <p className="text-xl sm:text-2xl text-blue-700 font-bold">
-            <CountUp start={0} end={baseCounts.customers} duration={2} />
-          </p>
-        </section>
+  // Chart data configurations
+  const featuresVsOperationsData = [
+    { name: "Features", value: subCounts.features, fill: GRADIENTS[0][0] },
+    { name: "Operations", value: subCounts.operations, fill: GRADIENTS[1][0] },
+  ];
 
-        {/* section - machines */}
-        <section className="w-full h-[90px] sm:h-[100px] shadow-lg rounded-2xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-green-200 to-emerald-50 border border-black/30 border-green-100">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="text-2xl sm:text-3xl lg:text-4xl text-green-600 bg-green-100 p-2 rounded-xl">
-              <GiSewingMachine />
-            </div>
-            <h4 className="font-semibold text-sm sm:text-base text-green-800">
-              Total Machines
-            </h4>
-          </div>
-          <p className="text-xl sm:text-2xl text-green-700 font-bold">
-            <CountUp start={0} end={baseCounts.machines} duration={2} />
-          </p>
-        </section>
+  const assetsData = [
+    { name: "Videos", value: subCounts.videos, fill: GRADIENTS[2][0] },
+    { name: "Images", value: subCounts.images, fill: GRADIENTS[3][0] },
+    { name: "Tech-packs", value: subCounts.techPacks, fill: GRADIENTS[4][0] },
+    { name: "Folders", value: subCounts.folders, fill: GRADIENTS[5][0] },
+  ];
 
-        {/* section - total styles */}
-        <section className="w-full h-[90px] sm:h-[100px] shadow-lg rounded-2xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-orange-100 to-amber-50 border border-black/30 border-orange-100">
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            <div className="text-2xl sm:text-3xl lg:text-4xl text-orange-600 bg-orange-200 p-2 rounded-xl">
-              <FaTshirt />
+  // Custom tooltip for charts
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
+          <p className="font-semibold text-gray-800">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {entry.name}: {entry.value}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Season Tooltip Component
+  const SeasonTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-4 rounded-lg shadow-xl border border-gray-200 min-w-[200px]">
+          <p className="font-bold text-gray-800 mb-2">{label}</p>
+          {payload.map((entry, index) => (
+            <div key={index} className="flex items-center justify-between mb-1">
+              <span className="text-sm" style={{ color: entry.color }}>
+                {entry.name}
+              </span>
+              <span className="font-semibold">{entry.value}</span>
             </div>
-            <h4 className="font-semibold text-sm sm:text-base text-orange-800">
-              Total Styles
-            </h4>
-          </div>
-          <p className="text-xl sm:text-2xl text-orange-700 font-bold">
-            <CountUp start={0} end={baseCounts.styles} duration={2} />
+          ))}
+          {payload[0]?.payload?.customer && (
+            <p className="text-xs text-gray-500 mt-2 pt-2 border-t">
+              Customer: {payload[0].payload.customer}
+            </p>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // StatCard Component
+  const StatCard = ({ title, value, icon: Icon, color, gradient, onClick }) => (
+    <div
+      onClick={onClick}
+      className={`relative group overflow-hidden rounded-2xl p-5 shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1 cursor-pointer ${gradient} border border-gray-100 duration-300`}
+    >
+      <div
+        className="absolute -top-6 -left-6 w-12 h-12 rounded-full group-hover:scale-150 duration-300 opacity-10"
+        style={{ backgroundColor: color }}
+      ></div>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
+          <p className="text-2xl font-bold text-gray-800">
+            <CountUp start={0} end={value} duration={2.5} separator="," />
           </p>
-        </section>
+        </div>
+        <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>
+          <Icon className="text-2xl" style={{ color: color }} />
+        </div>
       </div>
+      <div
+        className="absolute -bottom-8 -right-8 w-16 h-16 rounded-full opacity-10 group-hover:scale-150 duration-700"
+        style={{ backgroundColor: color }}
+      ></div>
+    </div>
+  );
 
-      {/* bar chart to display styles => count of main operations */}
+  // Season Card Component
+  const SeasonCard = ({ season }) => (
+    <div
+      className="bg-white rounded-xl p-4 shadow-md border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer hover:border-indigo-300"
+      onClick={() => fetchStylesBySeason(season.season_id)}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <MdCalendarToday className="text-indigo-600" />
+          <h4 className="font-bold text-gray-800">{season.season_name}</h4>
+        </div>
+        <span className="px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-semibold rounded-full">
+          {season.total_styles} styles
+        </span>
+      </div>
+      <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+        <MdPeople className="text-gray-400" />
+        <span>{season.customer_name}</span>
+      </div>
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="flex justify-between text-xs text-gray-500">
+          <span>Recent styles:</span>
+          <span>{season.styles?.length || 0}</span>
+        </div>
+      </div>
+    </div>
+  );
 
-      {/* Search Section - Responsive */}
-      <div className="border-2 border-purple-100 mt-6 mb-4 rounded-xl p-4 bg-gradient-to-r from-purple-50 to-pink-50 shadow-md">
-        <legend className="px-2 font-bold text-lg mb-4 text-purple-800">
-          Filter By Style
-        </legend>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="flex-1 w-full">
-            <h4 className="font-medium mb-2 text-sm sm:text-base text-gray-700">
-              Search with style number
-            </h4>
-            <div className="relative">
-              <input
-                type="text"
-                className="w-full border-2 border-purple-300 py-2 px-3 rounded-lg focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 text-sm sm:text-base transition-all"
-                placeholder="Enter style number"
-                value={searchInput}
-                onChange={handleSearchChange}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSuggestions(searchInput.length > 0);
-                }}
-              />
-
-              {/* Clear button */}
-              {searchInput && (
-                <button
-                  onClick={clearSearch}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-purple-500 hover:text-purple-700 text-lg bg-purple-100 w-6 h-6 rounded-full flex items-center justify-center"
-                >
-                  ✕
-                </button>
-              )}
-
-              {/* Suggestions dropdown */}
-              {showSuggestions && filteredStyles.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border-2 border-purple-200 rounded-lg shadow-xl max-h-48 sm:max-h-60 overflow-auto">
-                  {filteredStyles.map((style, index) => (
-                    <div
-                      key={style.style_no}
-                      className="px-3 py-2 cursor-pointer hover:bg-purple-100 transition-colors text-sm sm:text-base border-b border-purple-50 last:border-b-0"
-                      onClick={() => handleStyleSelect(style)}
-                    >
-                      {style.style_no}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* No results message */}
-              {showSuggestions &&
-                searchInput &&
-                filteredStyles.length === 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border-2 border-purple-200 rounded-lg shadow-xl">
-                    <div className="px-3 py-2 text-purple-600 text-sm sm:text-base">
-                      No styles found matching "{searchInput}"
-                    </div>
-                  </div>
-                )}
-            </div>
-          </div>
-
-          <button className="w-full sm:w-auto mt-2 sm:mt-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2 px-6 rounded-lg border-0 shadow-md flex justify-center items-center group hover:from-purple-600 hover:to-pink-600 transition-all transform hover:scale-105">
-            <TiFilter className="text-xl sm:text-2xl group-hover:scale-110 duration-200" />
-            <p className="ml-2 text-sm sm:text-base font-medium">Filter</p>
-          </button>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl md:text-3xl text-indigo-600 font-bold flex items-center gap-2">
+            <MdOutlineDashboard className="text-indigo-600" />
+            Dashboard
+          </h1>
+          <p className="text-gray-600 mt-1">
+            Production analytics and insights
+          </p>
         </div>
 
-        {/* Selected style display */}
-        {selectedStyle && (
-          <div className="mt-4 p-3 bg-gradient-to-r from-blue-100 to-cyan-100 border-2 border-blue-200 rounded-lg shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-blue-800 text-sm sm:text-base font-medium">
-                <span className="font-bold">Selected Style:</span>{" "}
-                {selectedStyle}
-              </p>
-              {isLoading && (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-              )}
+        <div className="flex items-center gap-3 mt-4 md:mt-0">
+          <button
+            onClick={refreshAllData}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors disabled:opacity-50 shadow-sm"
+          >
+            <MdOutlineRefresh
+              className={`${isRefreshing ? "animate-spin" : ""}`}
+            />
+            {isRefreshing ? "Refreshing..." : "Refresh"}
+          </button>
+          <div className="relative">
+            <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search seasons..."
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Top Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <StatCard
+          title="Total Customers"
+          value={baseCounts.customers}
+          icon={MdGroups2}
+          color={COLORS.primary}
+          gradient="bg-gradient-to-br from-indigo-50 to-purple-50"
+          onClick={() => setSelectedCustomer(null)}
+        />
+        <StatCard
+          title="Total Machines"
+          value={baseCounts.machines}
+          icon={GiSewingMachine}
+          color={COLORS.success}
+          gradient="bg-gradient-to-br from-emerald-50 to-teal-50"
+        />
+        <StatCard
+          title="Total Styles"
+          value={baseCounts.styles}
+          icon={FaTshirt}
+          color={COLORS.warning}
+          gradient="bg-gradient-to-br from-amber-50 to-orange-50"
+        />
+      </div>
+
+      {/* Search Filter Section */}
+      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              <FaFilter className="text-purple-600" />
+              Filter by Style
+            </h2>
+            <p className="text-gray-600 text-sm">
+              Select a style to view specific metrics
+            </p>
+          </div>
+
+          {selectedStyle && (
+            <div className="flex items-center gap-2 mt-2 md:mt-0">
+              <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium">
+                Active Filter: {selectedStyle}
+              </span>
+              <button
+                onClick={clearSearch}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ✕
+              </button>
             </div>
+          )}
+        </div>
+
+        <div className="relative">
+          <FaSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder="Type style number..."
+            className="w-full pl-12 pr-10 py-3 border-2 border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+          />
+
+          {searchInput && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          )}
+
+          {showSuggestions && filteredStyles.length > 0 && (
+            <div className="absolute z-50 w-full mt-2 bg-white border border-gray-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+              {filteredStyles.map((style, index) => (
+                <div
+                  key={style.style_no}
+                  onClick={() => handleStyleSelect(style)}
+                  className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors flex items-center justify-between"
+                >
+                  <span className="font-medium">{style.style_no}</span>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Select
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {isLoading && (
+          <div className="mt-4 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+            <span className="ml-2 text-gray-600">Loading data...</span>
           </div>
         )}
       </div>
 
-      {/* Bottom Stats Grid - Responsive */}
-      <div className="mt-6 sm:mt-8">
-        <div className="border-2 border-gray-100 p-4 rounded-xl shadow-lg bg-gradient-to-br from-gray-50 to-white group">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            {/* total features */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-teal-50 to-cyan-100 border border-teal-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-teal-600 bg-teal-100 p-2 rounded-lg">
-                  <GiHanger />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-teal-800">
-                  Total Features
-                </h4>
-              </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-teal-700 font-bold">
-                <CountUp start={0} end={subCounts.features} duration={2} />
-              </p>
-            </section>
+      {/* Season Summary Section */}
+      
 
-            {/* total operations */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-violet-50 to-purple-100 border border-violet-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-violet-600 bg-violet-100 p-2 rounded-lg">
-                  <GiSewingNeedle />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-violet-800">
-                  Total Operations
-                </h4>
-              </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-violet-700 font-bold">
-                <CountUp start={0} end={subCounts.operations} duration={2} />
-              </p>
-            </section>
+      {/* Season Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Season Distribution Pie Chart */}
+        
 
-            {/* total videos */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-red-50 to-rose-100 border border-red-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-red-600 bg-red-100 p-2 rounded-lg">
-                  <CiVideoOn />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-red-800">
-                  Total Videos
-                </h4>
+        {/* Season Styles Bar Chart */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <FaChartBar className="text-indigo-600" />
+              Styles by Season
+            </h3>
+            <MdInfoOutline
+              className="text-gray-400 cursor-help"
+              title="Number of styles per season"
+            />
+          </div>
+          <div className="h-64">
+            {seasonData.loading ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
               </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-red-700 font-bold">
-                <CountUp start={0} end={subCounts.videos} duration={2} />
-              </p>
-            </section>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={seasonData.barChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip content={<SeasonTooltip />} />
+                  <Bar
+                    dataKey="styles"
+                    name="Styles Count"
+                    radius={[4, 4, 0, 0]}
+                    animationDuration={1500}
+                  >
+                    {seasonData.barChartData?.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={`url(#barGradient-${index})`}
+                      />
+                    ))}
+                  </Bar>
+                  <defs>
+                    {seasonData.barChartData?.map((entry, index) => (
+                      <linearGradient
+                        key={index}
+                        id={`barGradient-${index}`}
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop offset="0%" stopColor="#6366F1" />
+                        <stop offset="100%" stopColor="#8B5CF6" />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
 
-            {/* total images */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-yellow-50 to-amber-100 border border-yellow-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-yellow-600 bg-yellow-100 p-2 rounded-lg">
-                  <IoMdImages />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-yellow-800">
-                  Total Images
-                </h4>
+        {/* Customer Distribution */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+              <MdPeople className="text-blue-600" />
+              Customer Distribution
+            </h3>
+            <MdInfoOutline
+              className="text-gray-400 cursor-help"
+              title="Styles distribution by customer"
+            />
+          </div>
+          <div className="h-64">
+            {customerDistribution.loading ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
               </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-yellow-700 font-bold">
-                <CountUp start={0} end={subCounts.images} duration={2} />
-              </p>
-            </section>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={customerDistribution.data.slice(0, 8)}
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" />
+                  <YAxis
+                    type="category"
+                    dataKey="customer_name"
+                    width={100}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Tooltip />
+                  <Legend />
+                  <Bar
+                    dataKey="total_styles"
+                    name="Total Styles"
+                    fill="#3B82F6"
+                    radius={[0, 4, 4, 0]}
+                  />
+                  <Bar
+                    dataKey="total_seasons"
+                    name="Total Seasons"
+                    fill="#10B981"
+                    radius={[0, 4, 4, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
 
-            {/* total tech packs */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-emerald-50 to-green-100 border border-emerald-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-emerald-600 bg-emerald-100 p-2 rounded-lg">
-                  <PiMicrosoftExcelLogoDuotone />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-emerald-800">
-                  Total Tech-packs
-                </h4>
-              </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-emerald-700 font-bold">
-                <CountUp start={0} end={subCounts.techPacks} duration={2} />
-              </p>
-            </section>
+        {/* Assets Distribution Pie Chart */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200">
+          <h3 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <FaChartBar className="text-purple-600" />
+            Assets Distribution
+          </h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={assetsData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }) =>
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
+                >
+                  {assetsData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={GRADIENTS[index][0]}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
 
-            {/* total folders */}
-            <section className="w-full h-[85px] sm:h-[100px] shadow-md rounded-xl p-3 sm:p-4 flex items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-100 border border-indigo-100">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="text-2xl sm:text-3xl lg:text-4xl text-indigo-600 bg-indigo-100 p-2 rounded-lg">
-                  <FaRegFolderOpen />
-                </div>
-                <h4 className="font-semibold text-xs sm:text-sm text-indigo-800">
-                  Total Folders
-                </h4>
-              </div>
-              <p className="text-lg sm:text-xl lg:text-2xl text-indigo-700 font-bold">
-                <CountUp start={0} end={subCounts.folders} duration={2} />
+      {/* Seasonal Trends and Customer Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Seasonal Trends Chart */}
+        
+      </div>
+
+      {/* Selected Season Details */}
+      {selectedSeason && (
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <MdCalendarToday className="text-indigo-600" />
+                {selectedSeason.season_name}
+              </h3>
+              <p className="text-gray-600 text-sm">
+                Customer: {selectedSeason.customer?.customer_name}
               </p>
-            </section>
+            </div>
+            <button
+              onClick={() => setSelectedSeason(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="mb-4">
+            <div className="flex items-center gap-4">
+              <div className="px-4 py-2 bg-indigo-100 text-indigo-800 rounded-lg">
+                <span className="font-bold">{selectedSeason.total_styles}</span>{" "}
+                Styles
+              </div>
+              <div className="px-4 py-2 bg-green-100 text-green-800 rounded-lg">
+                <span className="font-bold">
+                  {selectedSeason.styles?.length || 0}
+                </span>{" "}
+                Active
+              </div>
+            </div>
+          </div>
+          {selectedSeason.styles && selectedSeason.styles.length > 0 && (
+            <div className="mt-4">
+              <h4 className="font-semibold text-gray-700 mb-3">Style List</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                {selectedSeason.styles.slice(0, 6).map((style) => (
+                  <div
+                    key={style.style_id}
+                    className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-gray-800">
+                        {style.style_no}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {style.factory?.factory_name}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {style.style_name}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Summary Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Performance Summary */}
+        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-lg font-bold">Season Performance</h4>
+            <MdTrendingUp className="text-xl" />
+          </div>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-indigo-100">Total Seasons</span>
+              <span className="font-bold">
+                {seasonData.summary?.total_seasons || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-indigo-100">Total Styles</span>
+              <span className="font-bold">
+                {seasonData.summary?.total_styles || 0}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-indigo-100">Avg. Styles/Season</span>
+              <span className="font-bold">
+                {seasonData.summary?.average_styles_per_season || 0}
+              </span>
+            </div>
+            {seasonData.summary?.top_seasons && (
+              <div className="mt-4 pt-4 border-t border-indigo-400">
+                <p className="text-sm font-semibold mb-2">Top Seasons:</p>
+                {seasonData.summary.top_seasons.map((season, index) => (
+                  <div key={index} className="flex justify-between text-sm">
+                    <span className="truncate">{season.season}</span>
+                    <span className="font-bold">{season.styles}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+          <h4 className="text-lg font-bold text-gray-800 mb-4">Quick Stats</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="text-center p-3 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-700">
+                {customerDistribution.data.length || 0}
+              </div>
+              <div className="text-sm text-gray-600">Active Customers</div>
+            </div>
+            <div className="text-center p-3 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-700">
+                {seasonData.seasonWiseData?.length || 0}
+              </div>
+              <div className="text-sm text-gray-600">Total Seasons</div>
+            </div>
+            <div className="text-center p-3 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-700">
+                {subCounts.features}
+              </div>
+              <div className="text-sm text-gray-600">Features</div>
+            </div>
+            <div className="text-center p-3 bg-amber-50 rounded-lg">
+              <div className="text-2xl font-bold text-amber-700">
+                {subCounts.operations}
+              </div>
+              <div className="text-sm text-gray-600">Operations</div>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            
           </div>
         </div>
       </div>

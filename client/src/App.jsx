@@ -37,6 +37,7 @@ import ImageGallery from "./pages/ImageGallery";
 import TechPackGallery from "./pages/TechPackGallery";
 import DocumentGallery from "./pages/DocumentGallery";
 import NeedleThreatsPage from "./pages/NeedleThreatsPage";
+import NotificationPage from "./pages/NotificationPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -131,6 +132,8 @@ const App = () => {
             path="/sub-operation/documents"
             element={<DocumentGallery />}
           />
+
+          <Route path="/user/notifications" element={<NotificationPage />} />
         </Routes>
       </BrowserRouter>
     </UserProvider>

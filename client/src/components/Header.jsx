@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import axios from "axios";
+import { MdOutlineNotificationsActive } from "react-icons/md";
+import useNotifications from "../hooks/useNotifications";
 
 const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const { user: loggedUser, loading } = useAuth();
@@ -19,6 +21,11 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const handleSidebar = () => {
     setToggleSidebar(!toggleSidebar);
   };
+  const {
+    isLoading,
+    notificationsList,
+    refresh: refreshNotifications,
+  } = useNotifications();
 
   // Hide the dropdown when clicking outside
   useEffect(() => {
@@ -58,13 +65,34 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
       </div>
 
       {/* Right section */}
-      <div className="flex items-center gap-4 relative" ref={dropdownRef}>
+      <div className="flex items-center relative" ref={dropdownRef}>
         <button
           className="text-black hover:bg-gray-200 rounded-xl px-2 py-1 transition-colors flex items-center gap-2"
           onClick={() => setShowOptions(!showOptions)}
         >
           Hi {firstName || "Guest"}
           <FiUser size={20} />
+        </button>
+
+        <button
+          className="hover:bg-gray-300 p-1 rounded-md group relative"
+          title="Notifications"
+          onClick={() => {
+            navigate("/user/notifications", { state: { userId: 1 } });
+          }}
+        >
+          <MdOutlineNotificationsActive
+            size={20}
+            className="group-hover:scale-105 duration-150"
+          />
+          {/* Only show count if there are unread notifications */}
+          {notificationsList &&
+            notificationsList.filter((n) => !n.isRead).length > 0 && (
+              <div className="bg-red-600/80 text-white absolute rounded-full w-5 h-5 bottom-1 left-4 flex items-center justify-center text-xs font-bold">
+                {/* Count only unread notifications */}
+                {notificationsList.filter((n) => !n.isRead).length}
+              </div>
+            )}
         </button>
 
         {/* Dropdown */}
