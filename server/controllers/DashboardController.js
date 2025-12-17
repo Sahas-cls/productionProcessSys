@@ -688,6 +688,180 @@ exports.getSeasonStats = async (req, res) => {
   }
 };
 
+/**
+ * Get recent activity - latest styles and operations
+ */
+exports.getRecentActivity = async (req, res) => {
+  try {
+    const { limit = 5 } = req.query;
+
+    // Get recent styles
+    const recentStyles = await Style.findAll({
+      attributes: [
+        "style_id",
+        "style_no",
+        "style_name",
+        "po_number",
+        "createdAt",
+      ],
+      include: [
+        {
+          model: Customer,
+          as: "customer",
+          attributes: ["customer_name"],
+        },
+        {
+          model: Factory,
+          as: "factory",
+          attributes: ["factory_name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: parseInt(limit),
+    });
+
+    // Get recent main operations
+    const recentOperations = await MainOperation.findAll({
+      attributes: ["operation_id", "operation_name", "createdAt"],
+      include: [
+        {
+          model: Style,
+          as: "style",
+          attributes: ["style_no", "style_name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: parseInt(limit),
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        recentStyles: recentStyles.map((style) => ({
+          style_id: style.style_id,
+          style_no: style.style_no,
+          style_name: style.style_name,
+          po_number: style.po_number,
+          customer_name: style.customer?.customer_name || "Unknown",
+          factory_name: style.factory?.factory_name || "Unknown",
+          created_at: style.createdAt,
+        })),
+        recentOperations: recentOperations.map((op) => ({
+          operation_id: op.operation_id,
+          operation_name: op.operation_name,
+          style_no: op.style?.style_no || "Unknown",
+          style_name: op.style?.style_name || "Unknown",
+          created_at: op.createdAt,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching recent activity:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching recent activity",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Get production insights - operations per style, completion rates, etc.
+ */
+exports.getProductionInsights = async (req, res) => {
+  try {
+    // Get styles with operation counts
+    const stylesWithOps = await Style.findAll({
+      attributes: ["style_id", "style_no", "style_name"],
+      include: [
+        {
+          model: MainOperation,
+          as: "operations",
+          attributes: ["operation_id"],
+          required: false,
+          include: [
+            {
+              model: SubOperation,
+              as: "subOperations",
+              attributes: ["sub_operation_id"],
+              required: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Calculate insights
+    const insights = {
+      totalStyles: stylesWithOps.length,
+      stylesWithOperations: stylesWithOps.filter(
+        (s) => s.operations && s.operations.length > 0
+      ).length,
+      stylesWithoutOperations: stylesWithOps.filter(
+        (s) => !s.operations || s.operations.length === 0
+      ).length,
+      averageOperationsPerStyle: 0,
+      averageSubOperationsPerStyle: 0,
+      topStylesByOperations: [],
+    };
+
+    let totalOps = 0;
+    let totalSubOps = 0;
+    const styleOpCounts = [];
+
+    stylesWithOps.forEach((style) => {
+      const opCount = style.operations ? style.operations.length : 0;
+      let subOpCount = 0;
+
+      if (style.operations) {
+        style.operations.forEach((op) => {
+          if (op.subOperations) {
+            subOpCount += op.subOperations.length;
+          }
+        });
+      }
+
+      totalOps += opCount;
+      totalSubOps += subOpCount;
+
+      if (opCount > 0) {
+        styleOpCounts.push({
+          style_id: style.style_id,
+          style_no: style.style_no,
+          style_name: style.style_name,
+          operations: opCount,
+          subOperations: subOpCount,
+        });
+      }
+    });
+
+    insights.averageOperationsPerStyle =
+      insights.stylesWithOperations > 0
+        ? (totalOps / insights.stylesWithOperations).toFixed(1)
+        : 0;
+    insights.averageSubOperationsPerStyle =
+      insights.stylesWithOperations > 0
+        ? (totalSubOps / insights.stylesWithOperations).toFixed(1)
+        : 0;
+
+    insights.topStylesByOperations = styleOpCounts
+      .sort((a, b) => b.operations - a.operations)
+      .slice(0, 5);
+
+    res.status(200).json({
+      success: true,
+      data: insights,
+    });
+  } catch (error) {
+    console.error("Error fetching production insights:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching production insights",
+      error: error.message,
+    });
+  }
+};
+
 // Helper function to generate colors for seasons
 function getColorForSeason(seasonName) {
   const colors = [

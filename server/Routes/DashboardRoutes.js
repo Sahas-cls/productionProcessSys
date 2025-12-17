@@ -33,4 +33,10 @@ routes.get(
   controller.getCustomerSeasonDistribution
 );
 
+// Recent activity
+routes.get("/recent-activity", controller.getRecentActivity);
+
+// Production insights
+routes.get("/production-insights", controller.getProductionInsights);
+
 module.exports = routes;

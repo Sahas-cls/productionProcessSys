@@ -526,19 +526,18 @@ const AddStyle = ({ userRole }) => {
             Download
           </motion.button>
 
-          {userRole === "Admin" ||
-            (userRole === "SuperAdmin" && (
-              <motion.button
-                type="button"
-                className="bg-blue-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 min-w-[120px]"
-                variants={buttonVariants}
-                whileHover="hover"
-                whileTap="tap"
-                onClick={handleIsAddingStyle}
-              >
-                {isAddStyle ? "Close" : "Add Style"}
-              </motion.button>
-            ))}
+          {(userRole === "Admin" || userRole === "SuperAdmin") && (
+            <motion.button
+              type="button"
+              className="bg-blue-600 py-3 px-6 rounded-lg text-white font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700 min-w-[120px]"
+              variants={buttonVariants}
+              whileHover="hover"
+              whileTap="tap"
+              onClick={handleIsAddingStyle}
+            >
+              {isAddStyle ? "Close" : "Add Style"}
+            </motion.button>
+          )}
         </div>
       </motion.div>
 

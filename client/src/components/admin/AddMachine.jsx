@@ -458,52 +458,51 @@ const AddMachine = ({ onViewMachine, userRole }) => {
             <span>Download</span>
           </motion.button>
 
-          {userRole === "Admin" ||
-            (userRole === "SuperAdmin" && (
-              <>
-                <motion.button
-                  type="button"
-                  className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                  onClick={() => {
-                    resetForms();
-                    setIsAddStyle(!isAddStyle);
-                  }}
-                >
-                  <div>
-                    {isAddStyle ? (
-                      <IoClose className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
-                    ) : (
-                      <IoMdAdd className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
-                    )}
-                  </div>
-                  <span>{isAddStyle ? "Close" : "Add"}</span>
-                </motion.button>
+          {(userRole === "Admin" || userRole === "SuperAdmin") && (
+            <>
+              <motion.button
+                type="button"
+                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  resetForms();
+                  setIsAddStyle(!isAddStyle);
+                }}
+              >
+                <div>
+                  {isAddStyle ? (
+                    <IoClose className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                  ) : (
+                    <IoMdAdd className="text-lg sm:text-xl group-hover:scale-125 duration-200" />
+                  )}
+                </div>
+                <span>{isAddStyle ? "Close" : "Add"}</span>
+              </motion.button>
 
-                <motion.button
-                  type="button"
-                  className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
-                  variants={buttonVariants}
-                  whileHover="hover"
-                  whileTap="tap"
-                  onClick={() => {
-                    resetForms();
-                    setIsUploadExcel(!isUploadExcel);
-                  }}
-                >
-                  <div>
-                    {isUploadExcel ? (
-                      <IoClose className="text-base sm:text-lg group-hover:scale-125 duration-200" />
-                    ) : (
-                      <RiFileExcel2Line className="text-base sm:text-lg group-hover:scale-125 duration-200" />
-                    )}
-                  </div>
-                  <span>{isUploadExcel ? "Close" : "Upload Excel"}</span>
-                </motion.button>
-              </>
-            ))}
+              <motion.button
+                type="button"
+                className="bg-blue-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
+                variants={buttonVariants}
+                whileHover="hover"
+                whileTap="tap"
+                onClick={() => {
+                  resetForms();
+                  setIsUploadExcel(!isUploadExcel);
+                }}
+              >
+                <div>
+                  {isUploadExcel ? (
+                    <IoClose className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                  ) : (
+                    <RiFileExcel2Line className="text-base sm:text-lg group-hover:scale-125 duration-200" />
+                  )}
+                </div>
+                <span>{isUploadExcel ? "Close" : "Upload Excel"}</span>
+              </motion.button>
+            </>
+          )}
         </div>
       </motion.div>
 

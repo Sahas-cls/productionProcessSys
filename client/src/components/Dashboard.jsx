@@ -38,12 +38,6 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
-  AreaChart,
-  Area,
-  LineChart,
-  Line,
-  ComposedChart,
-  Scatter,
 } from "recharts";
 
 const Dashboard = () => {
@@ -81,11 +75,6 @@ const Dashboard = () => {
     loading: false,
   });
 
-  const [seasonalTrends, setSeasonalTrends] = useState({
-    trends: [],
-    summary: {},
-    loading: false,
-  });
 
   const [customerDistribution, setCustomerDistribution] = useState({
     data: [],
@@ -94,6 +83,17 @@ const Dashboard = () => {
 
   const [selectedSeason, setSelectedSeason] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  const [recentActivity, setRecentActivity] = useState({
+    recentStyles: [],
+    recentOperations: [],
+    loading: false,
+  });
+
+  const [productionInsights, setProductionInsights] = useState({
+    data: null,
+    loading: false,
+  });
 
   // Enhanced color scheme
   const COLORS = {
@@ -199,28 +199,6 @@ const Dashboard = () => {
     }
   };
 
-  // Fetch seasonal trends
-  const fetchSeasonalTrends = async () => {
-    setSeasonalTrends((prev) => ({ ...prev, loading: true }));
-    try {
-      const response = await axios.get(
-        `${apiUrl}/api/dashboard/seasonal-trends`,
-        {
-          withCredentials: true,
-        }
-      );
-      if (response.data.success) {
-        setSeasonalTrends({
-          trends: response.data.data.trends,
-          summary: response.data.data.summary,
-          loading: false,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching seasonal trends:", error);
-      setSeasonalTrends((prev) => ({ ...prev, loading: false }));
-    }
-  };
 
   // Fetch customer distribution
   const fetchCustomerDistribution = async () => {
@@ -241,6 +219,51 @@ const Dashboard = () => {
     } catch (error) {
       console.error("Error fetching customer distribution:", error);
       setCustomerDistribution((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Fetch recent activity
+  const fetchRecentActivity = async () => {
+    setRecentActivity((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/recent-activity?limit=5`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setRecentActivity({
+          recentStyles: response.data.data.recentStyles,
+          recentOperations: response.data.data.recentOperations,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching recent activity:", error);
+      setRecentActivity((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Fetch production insights
+  const fetchProductionInsights = async () => {
+    setProductionInsights((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/production-insights`,
+        {
+          withCredentials: true,
+        }
+      );
+      if (response.data.success) {
+        setProductionInsights({
+          data: response.data.data,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching production insights:", error);
+      setProductionInsights((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -307,8 +330,9 @@ const Dashboard = () => {
         countBaseItems(),
         countSubItems(),
         fetchSeasonWiseStyles(),
-        fetchSeasonalTrends(),
         fetchCustomerDistribution(),
+        fetchRecentActivity(),
+        fetchProductionInsights(),
       ]);
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -336,8 +360,9 @@ const Dashboard = () => {
         countBaseItems(),
         countSubItems(),
         fetchSeasonWiseStyles(),
-        fetchSeasonalTrends(),
         fetchCustomerDistribution(),
+        fetchRecentActivity(),
+        fetchProductionInsights(),
       ]);
     };
     loadData();
@@ -678,7 +703,7 @@ const Dashboard = () => {
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               <MdPeople className="text-blue-600" />
-              Customer Distribution
+              Top Customers
             </h3>
             <MdInfoOutline
               className="text-gray-400 cursor-help"
@@ -690,7 +715,7 @@ const Dashboard = () => {
               <div className="flex justify-center items-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
               </div>
-            ) : (
+            ) : customerDistribution.data.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={customerDistribution.data.slice(0, 8)}
@@ -701,25 +726,22 @@ const Dashboard = () => {
                   <YAxis
                     type="category"
                     dataKey="customer_name"
-                    width={100}
-                    tick={{ fontSize: 12 }}
+                    width={120}
+                    tick={{ fontSize: 11 }}
                   />
                   <Tooltip />
-                  <Legend />
                   <Bar
                     dataKey="total_styles"
-                    name="Total Styles"
+                    name="Styles"
                     fill="#3B82F6"
-                    radius={[0, 4, 4, 0]}
-                  />
-                  <Bar
-                    dataKey="total_seasons"
-                    name="Total Seasons"
-                    fill="#10B981"
                     radius={[0, 4, 4, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
+            ) : (
+              <div className="flex justify-center items-center h-full text-gray-500">
+                No customer data available
+              </div>
             )}
           </div>
         </div>
@@ -762,10 +784,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Seasonal Trends and Customer Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Seasonal Trends Chart */}
-      </div>
+      {/* Recent Activity and Production Insights */}
+      
 
       {/* Selected Season Details */}
       {selectedSeason && (
@@ -829,77 +849,69 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Summary Stats */}
+      {/* Operations & Assets Summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Performance Summary */}
-        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
-          <div className="flex items-center justify-between mb-4">
-            <h4 className="text-lg font-bold">Season Performance</h4>
-            <MdTrendingUp className="text-xl" />
+        {/* Operations Summary */}
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <GiSewingNeedle className="text-indigo-600" />
+            Operations Summary
+          </h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-indigo-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Main Operations</p>
+              <p className="text-2xl font-bold text-indigo-700">
+                {subCounts.features}
+              </p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Sub Operations</p>
+              <p className="text-2xl font-bold text-purple-700">
+                {subCounts.operations}
+              </p>
+            </div>
           </div>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-indigo-100">Total Seasons</span>
-              <span className="font-bold">
-                {seasonData.summary?.total_seasons || 0}
-              </span>
+          {selectedStyle && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-2">
+                Filtered by: <span className="font-semibold">{selectedStyle}</span>
+              </p>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-indigo-100">Total Styles</span>
-              <span className="font-bold">
-                {seasonData.summary?.total_styles || 0}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-indigo-100">Avg. Styles/Season</span>
-              <span className="font-bold">
-                {seasonData.summary?.average_styles_per_season || 0}
-              </span>
-            </div>
-            {seasonData.summary?.top_seasons && (
-              <div className="mt-4 pt-4 border-t border-indigo-400">
-                <p className="text-sm font-semibold mb-2">Top Seasons:</p>
-                {seasonData.summary.top_seasons.map((season, index) => (
-                  <div key={index} className="flex justify-between text-sm">
-                    <span className="truncate">{season.season}</span>
-                    <span className="font-bold">{season.styles}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Quick Stats */}
+        {/* Assets Summary */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
-          <h4 className="text-lg font-bold text-gray-800 mb-4">Quick Stats</h4>
+          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <IoMdImages className="text-green-600" />
+            Assets Summary
+          </h4>
           <div className="grid grid-cols-2 gap-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-700">
-                {customerDistribution.data.length || 0}
-              </div>
-              <div className="text-sm text-gray-600">Active Customers</div>
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Videos</p>
+              <p className="text-2xl font-bold text-blue-700">
+                {subCounts.videos}
+              </p>
             </div>
-            <div className="text-center p-3 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-700">
-                {seasonData.seasonWiseData?.length || 0}
-              </div>
-              <div className="text-sm text-gray-600">Total Seasons</div>
+            <div className="bg-amber-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Images</p>
+              <p className="text-2xl font-bold text-amber-700">
+                {subCounts.images}
+              </p>
             </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-700">
-                {subCounts.features}
-              </div>
-              <div className="text-sm text-gray-600">Features</div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Tech Packs</p>
+              <p className="text-2xl font-bold text-green-700">
+                {subCounts.techPacks}
+              </p>
             </div>
-            <div className="text-center p-3 bg-amber-50 rounded-lg">
-              <div className="text-2xl font-bold text-amber-700">
-                {subCounts.operations}
-              </div>
-              <div className="text-sm text-gray-600">Operations</div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <p className="text-sm text-gray-600 mb-1">Folders</p>
+              <p className="text-2xl font-bold text-purple-700">
+                {subCounts.folders}
+              </p>
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-gray-200"></div>
         </div>
       </div>
     </div>
