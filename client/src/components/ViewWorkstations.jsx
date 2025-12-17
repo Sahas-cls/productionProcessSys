@@ -586,17 +586,17 @@ const ViewWorkstations = () => {
                                   {workstation.workstation_no
                                     ? workstation.workstation_no
                                     : "Not assigned yet"}
-                                  {userRole === "Admin" ||
-                                    (userRole === "SuperAdmin" && (
-                                      <button
-                                        onClick={() =>
-                                          startEditingWorkstation(workstation)
-                                        }
-                                        className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
-                                      >
-                                        <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
-                                      </button>
-                                    ))}
+                                  {(userRole === "Admin" ||
+                                    userRole === "SuperAdmin") && (
+                                    <button
+                                      onClick={() =>
+                                        startEditingWorkstation(workstation)
+                                      }
+                                      className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                                    >
+                                      <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                                    </button>
+                                  )}
                                 </div>
                               )}
                             </h5>
@@ -608,29 +608,30 @@ const ViewWorkstations = () => {
                           <span className="text-xs text-gray-500">
                             Created: {formatDate(workstation.createdAt)}
                           </span>
-                          {userRole === "Admin" ||
-                            (userRole === "SuperAdmin" && (
-                              <div className="flex gap-x-2">
-                                <button
-                                  className="bg-green-300/40 p-1 text-green-700 rounded"
-                                  onClick={() =>
-                                    openAddSubOperationModal(workstation)
-                                  }
-                                >
-                                  <BiPlus className="text-2xl hover:scale-150" />
-                                </button>
-                                <button
-                                  className="bg-red-300/40 p-1 text-red-700 rounded"
-                                  onClick={() =>
-                                    handleWorkstationDelete(
-                                      workstation.workstation_id
-                                    )
-                                  }
-                                >
-                                  <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
-                                </button>
-                              </div>
-                            ))}
+                          {(userRole === "Admin" ||
+                            userRole === "SuperAdmin") && (
+                            <div className="flex gap-x-2">
+                              <button
+                                className="bg-green-300/40 p-1 text-green-700 rounded"
+                                onClick={() =>
+                                  openAddSubOperationModal(workstation)
+                                }
+                              >
+                                <BiPlus className="text-2xl hover:scale-150" />
+                              </button>
+
+                              <button
+                                className="bg-red-300/40 p-1 text-red-700 rounded"
+                                onClick={() =>
+                                  handleWorkstationDelete(
+                                    workstation.workstation_id
+                                  )
+                                }
+                              >
+                                <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -717,7 +718,7 @@ const ViewWorkstations = () => {
                                           <BsFillCloudUploadFill className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Videos Button */}
+                                        {/* Videos */}
                                         <button
                                           type="button"
                                           className="bg-blue-200 p-1 text-black/60 rounded"
@@ -730,10 +731,10 @@ const ViewWorkstations = () => {
                                             })
                                           }
                                         >
-                                          <FaPlay className="text-xl text-black/60 hover:scale-125" />
+                                          <FaPlay className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Images Button */}
+                                        {/* Images */}
                                         <button
                                           type="button"
                                           title="Images"
@@ -749,7 +750,7 @@ const ViewWorkstations = () => {
                                           <FaImage className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Tech Packs Button */}
+                                        {/* Tech Packs */}
                                         <button
                                           type="button"
                                           title="Tech packs"
@@ -769,7 +770,7 @@ const ViewWorkstations = () => {
                                           <FaFileExcel className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Documents Button */}
+                                        {/* Documents */}
                                         <button
                                           type="button"
                                           title="Other documents"
@@ -786,12 +787,12 @@ const ViewWorkstations = () => {
                                             )
                                           }
                                         >
-                                          <FaFolder className="text-xl  hover:scale-125" />
+                                          <FaFolder className="text-xl hover:scale-125" />
                                         </button>
                                       </div>
                                     ) : (
                                       <div className="space-x-2 flex">
-                                        {/* Videos Button - User */}
+                                        {/* User buttons (no delete / upload) */}
                                         <button
                                           type="button"
                                           title="Watch videos"
@@ -807,7 +808,6 @@ const ViewWorkstations = () => {
                                           <FaPlay className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Images Button - User */}
                                         <button
                                           type="button"
                                           title="Watch images"
@@ -823,7 +823,6 @@ const ViewWorkstations = () => {
                                           <FaImage className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Tech Packs Button - User */}
                                         <button
                                           type="button"
                                           title="Tech packs"
@@ -843,7 +842,6 @@ const ViewWorkstations = () => {
                                           <FaFileExcel className="text-xl hover:scale-125" />
                                         </button>
 
-                                        {/* Documents Button - User */}
                                         <button
                                           type="button"
                                           title="Other documents"

@@ -10,6 +10,7 @@ import Swal from "sweetalert2";
 
 const AddLayoutPage = () => {
   const { user, loading, error } = useAuth();
+  // alert("user role: ", user.userRole);
   // console.log("auth user ====== ", user);
   const navigate = useNavigate();
   useEffect(() => {
