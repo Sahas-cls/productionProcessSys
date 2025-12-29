@@ -72,6 +72,15 @@ exports.userLogin = async (req, res, next) => {
       return next(error);
     }
 
+    // check user status
+    if (isUser.status !== "Active") {
+      const error = new Error(
+        "Your account has been blocked by the administrator. Please contact support."
+      );
+      error.status = 403;
+      throw error;
+    }
+
     // Check password
     const isPassword = await bcrypt.compare(userPassword, isUser.user_password);
     if (!isPassword) {
