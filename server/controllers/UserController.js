@@ -255,3 +255,303 @@ exports.getNotificationDetails = async (req, res, next) => {
     next(error);
   }
 };
+
+// ========================== admin panel operations
+// ========================== admin panel operations
+
+// to get all users data
+exports.getAllUsers = async (req, res, next) => {
+  //
+  console.log(req.user);
+  console.log(req.body);
+  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
+    console.error("Unauthorized");
+    return res
+      .status(401)
+      .json({ message: "You don't have permission to perform this action" });
+  }
+  try {
+    console.log("authorized");
+    const users = await User.findAll({
+      attributes: {
+        exclude: ["user_password"],
+      },
+      include: [
+        { model: Factory, as: "factory" },
+        { model: Department, as: "department" },
+        { model: UserCategory, as: "category" },
+      ],
+    });
+
+    return res.status(200).json({ data: users });
+  } catch (error) {
+    console.error(error);
+    return next(error);
+  }
+};
+
+// reset password
+exports.resetPassword = async (req, res, next) => {
+  const { userId } = req.params;
+  const { password } = req.body;
+  try {
+    if (!userId) {
+      const error = new Error("There is no user id include with response");
+      error.status = 400;
+      throw error;
+    }
+
+    if (!password) {
+      const error = new Error("New password required");
+      error.status = 400;
+      throw error;
+    }
+
+    // request is ok changing password
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      const error = new Error("Can't find that user on database");
+      error.status = 400;
+      throw error;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await user.update({ user_password: hashedPassword });
+    console.log(
+      "password reset success ====================== =============== = = = = = "
+    );
+    res.status(200).json({
+      status: "Ok",
+      message: `Password reset success of user ${user.user_name}`,
+    });
+  } catch (error) {
+    return next(error);
+  }
+  // 3Eq40
+};
+
+// to block/unblock user
+exports.changeUserStatus = async (req, res, next) => {
+  const { userId } = req.params;
+  try {
+    if (
+      req?.user?.userRole !== "Admin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(401).json({
+        message: "You don't have permission to perform this action",
+      });
+    }
+
+    if (!userId) {
+      const error = new Error("User ID is required");
+      error.status = 400;
+      throw error;
+    }
+
+    const user = await User.findByPk(userId, {
+      include: [{ model: UserCategory, as: "category" }],
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      error.status = 404;
+      throw error;
+    }
+
+    // Prevent blocking yourself
+    if (user.user_id === req.user.userId) {
+      return res.status(400).json({
+        message: "You cannot block/unblock yourself",
+      });
+    }
+
+    // Prevent modifying SuperAdmin unless you're SuperAdmin
+    if (
+      user.category?.category_name === "SuperAdmin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(403).json({
+        message: "Only SuperAdmin can modify other SuperAdmin users",
+      });
+    }
+
+    const newStatus = user.status === "Active" ? "Blocked" : "Active";
+    await user.update({ status: newStatus });
+
+    res.status(200).json({
+      status: "Ok",
+      message: `User ${user.user_name} has been ${
+        newStatus === "Blocked" ? "blocked" : "unblocked"
+      }`,
+      data: { status: newStatus },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to change user role
+exports.changeUserRole = async (req, res, next) => {
+  const { userId } = req.params;
+  const { roleId } = req.body;
+
+  try {
+    if (
+      req?.user?.userRole !== "Admin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(401).json({
+        message: "You don't have permission to perform this action",
+      });
+    }
+
+    if (!userId || !roleId) {
+      const error = new Error("User ID and Role ID are required");
+      error.status = 400;
+      throw error;
+    }
+
+    // Check if role exists
+    const role = await UserCategory.findByPk(roleId);
+    if (!role) {
+      const error = new Error("Invalid role ID");
+      error.status = 400;
+      throw error;
+    }
+
+    const user = await User.findByPk(userId, {
+      include: [{ model: UserCategory, as: "category" }],
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      error.status = 404;
+      throw error;
+    }
+
+    // Prevent changing your own role
+    if (user.user_id === req.user.userId) {
+      return res.status(400).json({
+        message: "You cannot change your own role",
+      });
+    }
+
+    // Prevent changing SuperAdmin role unless you're SuperAdmin
+    if (
+      user.category?.category_name === "SuperAdmin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(403).json({
+        message: "Only SuperAdmin can modify other SuperAdmin users",
+      });
+    }
+
+    // Prevent promoting to SuperAdmin unless you're SuperAdmin
+    if (
+      role.category_name === "SuperAdmin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(403).json({
+        message: "Only SuperAdmin can assign SuperAdmin role",
+      });
+    }
+
+    await user.update({ user_category: roleId });
+
+    res.status(200).json({
+      status: "Ok",
+      message: `User ${user.user_name} role changed to ${role.category_name}`,
+      data: {
+        category_id: roleId,
+        category_name: role.category_name,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to delete user
+exports.deleteUser = async (req, res, next) => {
+  const { userId } = req.params;
+
+  try {
+    if (
+      req?.user?.userRole !== "Admin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(401).json({
+        message: "You don't have permission to perform this action",
+      });
+    }
+
+    if (!userId) {
+      const error = new Error("User ID is required");
+      error.status = 400;
+      throw error;
+    }
+
+    const user = await User.findByPk(userId, {
+      include: [{ model: UserCategory, as: "category" }],
+    });
+
+    if (!user) {
+      const error = new Error("User not found");
+      error.status = 404;
+      throw error;
+    }
+
+    // Prevent deleting yourself
+    if (user.user_id === req.user.userId) {
+      return res.status(400).json({
+        message: "You cannot delete yourself",
+      });
+    }
+
+    // Prevent deleting SuperAdmin unless you're SuperAdmin
+    if (
+      user.category?.category_name === "SuperAdmin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(403).json({
+        message: "Only SuperAdmin can delete other SuperAdmin users",
+      });
+    }
+
+    await user.destroy();
+
+    res.status(200).json({
+      status: "Ok",
+      message: `User ${user.user_name} has been deleted successfully`,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// Get all user categories
+exports.getAllCategories = async (req, res, next) => {
+  try {
+    if (
+      req?.user?.userRole !== "Admin" &&
+      req?.user?.userRole !== "SuperAdmin"
+    ) {
+      return res.status(401).json({
+        message: "You don't have permission to perform this action",
+      });
+    }
+
+    const categories = await UserCategory.findAll({
+      attributes: ["category_id", "category_name"],
+    });
+
+    res.status(200).json({
+      status: "Ok",
+      data: categories,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};

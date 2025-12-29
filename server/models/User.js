@@ -1,3 +1,5 @@
+const { ENUM } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   const User = sequelize.define(
     "User",
@@ -51,6 +53,11 @@ module.exports = (sequelize, DataTypes) => {
         validate: {
           len: [5, 255],
         },
+      },
+      status: {
+        type: DataTypes.ENUM("Active", "Blocked"),
+        defaultValue: "Active",
+        allowNull: true,
       },
     },
     {

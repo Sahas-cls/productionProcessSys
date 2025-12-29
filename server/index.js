@@ -296,7 +296,7 @@ app.use("/api/thread", threadTypes);
 
 // ==================== B2 PROXY ROUTE ====================
 // This replaces the old /media UNC path
-
+// Fixed backend route for video streaming with proper progressive playback support
 app.get("/api/b2-files/*", async (req, res) => {
   try {
     const filePath = req.params[0];
@@ -306,15 +306,6 @@ app.get("/api/b2-files/*", async (req, res) => {
       return res.status(400).json({ error: "No file specified" });
     }
 
-    // Check if credentials are available
-    if (!process.env.B2_KEY_ID || !process.env.B2_APP_KEY) {
-      console.error("❌ [B2 Proxy] Missing B2 credentials");
-      return res.status(500).json({
-        error: "B2 credentials not configured",
-        details: "Check .env file for B2_KEY_ID and B2_APP_KEY",
-      });
-    }
-
     const params = {
       Bucket: process.env.B2_BUCKET_NAME || "guston-test-bucket",
       Key: filePath,
@@ -322,100 +313,249 @@ app.get("/api/b2-files/*", async (req, res) => {
 
     console.log("🔑 [B2 Proxy] Fetching:", params.Key);
 
-    // Get file from B2
-    const data = await s3.getObject(params).promise();
-
-    // Check if we got valid image data
-    if (!data.Body || !Buffer.isBuffer(data.Body)) {
-      console.error("❌ [B2 Proxy] Invalid response body from B2");
-      return res.status(500).json({
-        error: "Invalid image data from B2",
-        receivedType: typeof data.Body,
-      });
-    }
-
-    console.log("✅ [B2 Proxy] Success:", {
-      size: data.Body.length,
-      contentType: data.ContentType,
-    });
-
-    // Determine content type from extension
-    const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes = {
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".png": "image/png",
-      ".gif": "image/gif",
-      ".webp": "image/webp",
-      ".bmp": "image/bmp",
-      ".tiff": "image/tiff",
-      ".svg": "image/svg+xml",
-      ".pdf": "application/pdf",
-      ".mp4": "video/mp4",
-      ".mov": "video/quicktime",
-      ".avi": "video/x-msvideo",
+    // Set CORS headers first
+    const corsHeaders = {
+      "Access-Control-Allow-Origin":
+        req.headers.origin || "http://localhost:5173",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers":
+        "Content-Range, Accept-Ranges, Content-Length, Content-Type",
+      "Cache-Control": "public, max-age=31536000",
     };
 
-    const contentType =
-      mimeTypes[ext] || data.ContentType || "application/octet-stream";
+    // Handle OPTIONS preflight immediately
+    if (req.method === "OPTIONS") {
+      res.set(corsHeaders);
+      return res.status(200).end();
+    }
 
-    // Set headers
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-    res.setHeader("Cross-Origin-Embedder-Policy", "cross-origin");
+    try {
+      // Get file metadata
+      const headResult = await s3.headObject(params).promise();
+      const fileSize = headResult.ContentLength;
 
-    // Send binary data
-    console.log(
-      `🚀 [B2 Proxy] Sending ${data.Body.length} bytes as ${contentType}`
-    );
-    res.send(data.Body);
-  } catch (error) {
-    console.error("❌ [B2 Proxy] Error:", {
-      name: error.name,
-      code: error.code,
-      message: error.message,
-    });
+      // IMPORTANT: Override Content-Type based on file extension for video files
+      // B2 sometimes returns application/octet-stream which breaks video playback
+      const fileExtension = path.extname(filePath).toLowerCase();
+      let contentType = headResult.ContentType;
 
-    // Send proper error response
-    if (error.code === "NoSuchKey" || error.code === "NotFound") {
-      res.status(404).json({
-        error: `File not found: ${req.params[0]}`,
-        suggestion: "Check if file exists in B2 bucket",
-      });
-    } else if (error.code === "AccessDenied") {
-      res.status(403).json({
-        error: "Access denied to B2",
-        details: "Check B2 credentials and bucket permissions",
-      });
-    } else if (error.code === "InvalidAccessKeyId") {
-      res.status(401).json({
-        error: "Invalid B2 credentials",
-        details: "Check B2_KEY_ID in .env file",
-      });
-    } else if (error.code === "SignatureDoesNotMatch") {
-      res.status(401).json({
-        error: "Invalid B2 secret key",
-        details: "Check B2_APP_KEY in .env file",
-      });
-    } else if (error.code === "NoSuchBucket") {
-      res.status(404).json({
-        error: "Bucket not found",
-        details: `Bucket '${process.env.B2_BUCKET_NAME}' doesn't exist`,
-      });
-    } else {
-      res.status(500).json({
-        error: "Failed to fetch file from B2",
-        details: error.message,
-        code: error.code,
+      // Force correct Content-Type for known video formats
+      if (fileExtension === ".webm") {
+        contentType = "video/webm";
+      } else if (fileExtension === ".mp4") {
+        contentType = "video/mp4";
+      } else if (fileExtension === ".mov") {
+        contentType = "video/quicktime";
+      } else if (fileExtension === ".avi") {
+        contentType = "video/x-msvideo";
+      }
+
+      // If still not set, use extension-based detection
+      if (!contentType || contentType === "application/octet-stream") {
+        contentType = getContentTypeFromExtension(filePath);
+      }
+
+      const isVideo = isVideoExtension(filePath);
+
+      console.log(
+        `📊 [B2 Proxy] File found: ${fileSize} bytes, Type: ${contentType}, Video: ${isVideo}`
+      );
+
+      // Always set Accept-Ranges for video files
+      if (isVideo) {
+        corsHeaders["Accept-Ranges"] = "bytes";
+      }
+
+      // Handle Range request (for video seeking)
+      const range = req.headers.range;
+
+      if (isVideo && range) {
+        console.log(`🎯 [B2 Proxy] Range requested: ${range}`);
+
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+        // Validate range
+        if (start >= fileSize || end >= fileSize) {
+          res.set({
+            ...corsHeaders,
+            "Content-Range": `bytes */${fileSize}`,
+          });
+          return res.status(416).send("Requested range not satisfiable");
+        }
+
+        const chunkSize = end - start + 1;
+
+        console.log(
+          `🎯 [B2 Proxy] Streaming bytes ${start}-${end} of ${fileSize}`
+        );
+
+        // Stream specific range
+        const streamParams = {
+          ...params,
+          Range: `bytes=${start}-${end}`,
+        };
+
+        const headers = {
+          ...corsHeaders,
+          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+          "Content-Length": chunkSize,
+          "Content-Type": contentType,
+        };
+
+        res.writeHead(206, headers);
+
+        // Stream with error handling
+        const stream = s3.getObject(streamParams).createReadStream();
+
+        stream.on("error", (streamError) => {
+          console.error("❌ [B2 Proxy] Stream error:", streamError.message);
+          if (!res.headersSent) {
+            res.set(corsHeaders);
+            res
+              .status(500)
+              .json({ error: "Stream error", message: streamError.message });
+          }
+        });
+
+        stream.pipe(res);
+      } else {
+        // Full file request (initial load or non-video)
+        console.log(`📦 [B2 Proxy] Streaming full file (${fileSize} bytes)`);
+
+        const headers = {
+          ...corsHeaders,
+          "Content-Length": fileSize,
+          "Content-Type": contentType,
+        };
+
+        if (isVideo) {
+          headers["Accept-Ranges"] = "bytes";
+        }
+
+        res.writeHead(200, headers);
+
+        const stream = s3.getObject(params).createReadStream();
+
+        stream.on("error", (streamError) => {
+          console.error("❌ [B2 Proxy] Stream error:", streamError.message);
+          if (!res.headersSent) {
+            res.set(corsHeaders);
+            res
+              .status(500)
+              .json({ error: "Stream error", message: streamError.message });
+          }
+        });
+
+        stream.pipe(res);
+      }
+    } catch (headError) {
+      console.error("❌ [B2 Proxy] File not found:", headError.message);
+
+      res.set(corsHeaders);
+      return res.status(404).json({
+        error: "File not found",
+        requested: filePath,
       });
     }
+  } catch (error) {
+    console.error("❌ [B2 Proxy] Unexpected error:", error.message);
+
+    res.set({
+      "Access-Control-Allow-Origin":
+        req.headers.origin || "http://localhost:5173",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Credentials": "true",
+      "Content-Type": "application/json",
+    });
+
+    return res.status(500).json({
+      error: "Failed to stream file",
+      message: error.message,
+    });
   }
 });
 
-// ==================== HEALTH CHECK ROUTE ====================
-// Add this to test B2 connectivity
+// Add OPTIONS method for CORS preflight requests
+app.options("/api/b2-files/*", (req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin":
+      req.headers.origin || "http://localhost:5173",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Max-Age": "86400", // 24 hours
+  });
+  res.status(204).end();
+});
+
+// Helper functions to detect file types
+function isVideoExtension(filePath) {
+  const videoExtensions = [
+    ".mp4",
+    ".webm",
+    ".ogg",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".flv",
+    ".wmv",
+  ];
+  const ext = path.extname(filePath).toLowerCase();
+  return videoExtensions.includes(ext);
+}
+
+function isImageExtension(filePath) {
+  const imageExtensions = [
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".webp",
+    ".svg",
+  ];
+  const ext = path.extname(filePath).toLowerCase();
+  return imageExtensions.includes(ext);
+}
+
+function getContentTypeFromExtension(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+
+  const mimeTypes = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".ogg": "video/ogg",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx":
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx":
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".zip": "application/zip",
+    ".txt": "text/plain",
+    ".html": "text/html",
+    ".css": "text/css",
+    ".js": "application/javascript",
+    ".json": "application/json",
+  };
+
+  return mimeTypes[ext] || "application/octet-stream";
+}
 
 app.get("/api/b2-test", async (req, res) => {
   try {

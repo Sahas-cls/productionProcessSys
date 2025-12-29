@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaPlay, FaTrash, FaExternalLinkAlt, FaArrowLeft } from "react-icons/fa";
-import { BeatLoader } from "react-spinners";
+import {
+  FaPlay,
+  FaTrash,
+  FaArrowLeft,
+  FaExclamationTriangle,
+  FaPause,
+} from "react-icons/fa";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
-import Plyr from "plyr-react";
-import "plyr-react/plyr.css";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
 
@@ -14,12 +17,13 @@ const VideoGallery = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userRole = user?.userRole;
-  
+
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
+  const [activeVideo, setActiveVideo] = useState(null);
+  const [videoErrors, setVideoErrors] = useState({});
+  const videoRefs = useRef({});
 
-  // Fetch videos when component mounts
   useEffect(() => {
     if (location.state?.subOpId) {
       fetchVideos();
@@ -31,131 +35,168 @@ const VideoGallery = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getVideos/${subOpId}`,
+        `${
+          import.meta.env.VITE_API_URL
+        }/api/subOperationMedia/getVideos/${subOpId}`,
         { withCredentials: true }
       );
       setVideos(response.data?.data || []);
-      console.log("📹 Videos loaded:", response.data);
     } catch (error) {
-      console.error("Error fetching videos:", error);
-      Swal.fire({
-        title: "Error",
-        text: "Failed to load videos from cloud storage",
-        icon: "error",
-        confirmButtonText: "OK",
-      });
+      console.error("Error:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to get video MIME type from extension
-  const getVideoMimeType = (url) => {
-    if (!url) return 'video/mp4';
-    const ext = url.split('.').pop().toLowerCase();
-    const mimeTypes = {
-      'mp4': 'video/mp4',
-      'webm': 'video/webm',
-      'ogg': 'video/ogg',
-      'avi': 'video/x-msvideo',
-      'mov': 'video/quicktime',
-      'wmv': 'video/x-ms-wmv',
-      'flv': 'video/x-flv',
-      'mkv': 'video/x-matroska',
-      'm4v': 'video/x-m4v',
-    };
-    return mimeTypes[ext] || 'video/mp4';
-  };
-
-  const getFileUrl = (item) => {
-    // Use proxy URL from backend if available
-    if (item.video_url_proxy) {
-      const baseUrl = import.meta.env.VITE_API_URL || "";
-      return `${baseUrl}${item.video_url_proxy}`;
-    }
-    
-    // Fallback: construct proxy URL from B2 path
+  // Get URL with proper CORS handling
+  const getVideoUrl = (item) => {
     if (item.media_url) {
-      const baseUrl = import.meta.env.VITE_API_URL || "";
-      return `${baseUrl}/api/b2-files/${item.media_url}`;
+      return `${import.meta.env.VITE_API_URL}/api/b2-files/${item.media_url}`;
     }
-    
-    console.warn("No media_url found for video:", item);
     return "";
   };
 
-  const getFileName = (item) => {
-    // Use original filename if available
-    if (item.original_filename) {
-      return item.original_filename;
+  // Handle play - load video only when clicked
+  const handlePlayVideo = async (id) => {
+    const videoElement = videoRefs.current[id];
+    const item = videos.find((v) => v.so_media_id === id);
+
+    if (!item) return;
+
+    // If already playing, pause it
+    if (activeVideo === id && videoElement) {
+      videoElement.pause();
+      setActiveVideo(null);
+      return;
     }
-    
-    // Extract from B2 path like "SubOpVideos/123/filename.mp4"
-    if (item.media_url) {
-      const parts = item.media_url.split('/');
-      return parts[parts.length - 1] || item.media_url;
+
+    // Stop any currently playing video
+    if (activeVideo && videoRefs.current[activeVideo]) {
+      videoRefs.current[activeVideo].pause();
+      setActiveVideo(null);
     }
-    
-    return "Unknown video file";
+
+    // Set active video first for UI feedback
+    setActiveVideo(id);
+    setVideoErrors((prev) => ({ ...prev, [id]: null }));
+
+    if (videoElement && item) {
+      try {
+        const videoUrl = getVideoUrl(item);
+
+        // Clear any existing source
+        videoElement.src = "";
+        videoElement.load();
+
+        // Set new source with proper CORS
+        videoElement.crossOrigin = "anonymous";
+        videoElement.preload = "metadata"; // Only load metadata first
+
+        // For large videos, you might want to add quality monitoring
+        videoElement.addEventListener("loadedmetadata", () => {
+          console.log(
+            `Video ready: ${videoElement.videoWidth}x${videoElement.videoHeight}`
+          );
+        });
+
+        videoElement.addEventListener("canplay", () => {
+          console.log(`Video can play: ${item.so_media_id}`);
+        });
+
+        // Handle video errors
+        videoElement.onerror = (e) => {
+          console.error("Video element error:", e);
+          setVideoErrors((prev) => ({
+            ...prev,
+            [id]: "Failed to load video. Try downloading instead.",
+          }));
+          setActiveVideo(null);
+        };
+
+        // Set source and play
+        videoElement.src = videoUrl;
+
+        const playPromise = videoElement.play();
+
+        if (playPromise !== undefined) {
+          playPromise.catch((error) => {
+            console.error("Video play failed:", error);
+            // Auto-play might fail due to browser policies
+            // Just set to active and let user click play button
+            if (error.name === "NotAllowedError") {
+              // Browser blocked auto-play, just show controls
+              videoElement.controls = true;
+            } else {
+              setVideoErrors((prev) => ({
+                ...prev,
+                [id]: "Failed to play video. Try downloading instead.",
+              }));
+              setActiveVideo(null);
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Video setup failed:", error);
+        setVideoErrors((prev) => ({
+          ...prev,
+          [id]: "Failed to load video.",
+        }));
+        setActiveVideo(null);
+      }
+    }
   };
 
-  const handleFileAction = (item) => {
-    const fileUrl = getFileUrl(item);
-    if (fileUrl) {
-      window.open(fileUrl, "_blank");
-    } else {
-      Swal.fire({
-        title: "Error",
-        text: "Video URL not available",
-        icon: "error",
-        timer: 3000,
-      });
-    }
-  };
-
-  const handleDelete = async (id, fileName) => {
-    const result = await Swal.fire({
-      title: "Delete video?",
-      text: `Are you sure you want to delete "${fileName}"?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
-      cancelButtonText: "Cancel",
-    });
-
-    if (!result.isConfirmed) return;
-
-    setDeletingId(id);
+  const testVideoPlayback = async (item) => {
+    const videoUrl = getVideoUrl(item);
+    console.log("Testing video playback for:", item.so_media_id);
+    console.log("Video URL:", videoUrl);
+    console.log("File extension:", item.media_url?.split(".").pop());
 
     try {
-      const response = await axios.delete(
-        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/deleteVideo/${id}`,
-        { withCredentials: true }
-      );
-
-      if (response.status === 200) {
-        await fetchVideos();
-        Swal.fire({
-          title: "Deleted!",
-          text: "Video has been deleted from cloud storage.",
-          icon: "success",
-          timer: 2000,
-          showConfirmButton: false,
-        });
-      }
-    } catch (error) {
-      console.error("Delete error:", error);
-      Swal.fire({
-        title: "Error",
-        text: error.response?.data?.message || "Failed to delete video from cloud storage.",
-        icon: "error",
-        confirmButtonText: "OK",
+      // Test if video is accessible
+      const testResponse = await fetch(videoUrl, {
+        method: "HEAD",
+        mode: "cors",
+        credentials: "include",
       });
-    } finally {
-      setDeletingId(null);
+
+      console.log("HEAD response:", {
+        status: testResponse.status,
+        statusText: testResponse.statusText,
+        headers: Object.fromEntries(testResponse.headers.entries()),
+        ok: testResponse.ok,
+      });
+
+      // Test a small range request
+      const rangeResponse = await fetch(videoUrl, {
+        headers: { Range: "bytes=0-1000" },
+        credentials: "include",
+      });
+
+      console.log("Range response:", {
+        status: rangeResponse.status,
+        statusText: rangeResponse.statusText,
+        headers: Object.fromEntries(rangeResponse.headers.entries()),
+      });
+    } catch (error) {
+      console.error("Test failed:", error);
     }
+  };
+
+  // Handle video errors
+  const handleVideoError = (id, error) => {
+    console.error(`Video ${id} error:`, error);
+    setVideoErrors((prev) => ({
+      ...prev,
+      [id]: "Video playback failed. The file may be corrupted or unsupported.",
+    }));
+    setActiveVideo(null);
+  };
+
+  const getFileName = (item) => {
+    return (
+      item.original_filename || item.media_url?.split("/").pop() || "video"
+    );
   };
 
   const formatFileSize = (bytes) => {
@@ -167,198 +208,286 @@ const VideoGallery = () => {
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString("en-US", {
-      year: "numeric",
+    return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+      year: "numeric",
     });
   };
 
+  // Handle download video
+  const handleDownloadVideo = (item) => {
+    const videoUrl = getVideoUrl(item);
+    const fileName = getFileName(item);
+
+    if (videoUrl) {
+      const link = document.createElement("a");
+      link.href = videoUrl;
+      link.download = fileName;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      Swal.fire({
+        title: "Error",
+        text: "Cannot download video - URL not available",
+        icon: "error",
+      });
+    }
+  };
+
   return (
-    <div className="px-4 md:px-8 lg:px-16 xl:px-32 min-h-screen bg-gray-50 py-8">
-      {/* Page header */}
-      <div className="mb-8 flex items-center justify-between">
+    <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6">
+      {/* Header with warning */}
+      <div className="mb-6">
         <button
-          className="text-blue-600 font-medium flex items-center gap-2 hover:text-blue-800 transition-colors p-2 rounded-lg hover:bg-blue-50"
           onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 mb-4"
         >
           <FaArrowLeft />
-          <span>Go back</span>
+          <span>Go Back</span>
         </button>
 
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm">
-            Total Videos: {videos.length}
-          </div>
-          <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-            ☁️ Cloud Storage
-          </div>
-        </div>
-      </div>
-
-      {/* Videos Section */}
-      <div className="mb-8">
-        <div className="w-full flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <FaPlay className="text-red-500 text-2xl" />
-            <h1 className="text-2xl font-bold">Videos</h1>
-            <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
-              {videos.length}
-            </span>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="text-center">
-              <BeatLoader color="#3b82f6" size={15} />
-              <p className="mt-4 text-gray-600">Loading videos from cloud...</p>
-            </div>
-          </div>
-        ) : !videos || videos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-xl shadow-sm">
-            <div className="text-gray-400 mb-4 text-6xl">🎥</div>
-            <h3 className="text-xl font-medium text-gray-600 mb-2">
-              No videos available
-            </h3>
-            <p className="text-gray-500 max-w-md">
-              There are no videos uploaded for this sub-operation yet.
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Video Gallery</h1>
+            <p className="text-gray-600">
+              {videos.length} video{videos.length !== 1 ? "s" : ""}
             </p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {videos.map((item) => {
-              const fileUrl = getFileUrl(item);
-              const fileName = getFileName(item);
-              const mimeType = getVideoMimeType(fileUrl);
 
-              return (
-                <motion.div
-                  key={item.so_media_id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
-                >
-                  {/* Video Preview */}
-                  <div className="relative w-full aspect-video bg-gray-100">
-                    {fileUrl ? (
-                      <Plyr
-                        source={{
-                          type: "video",
-                          title: item.sub_operation_name || "Video",
-                          sources: [
-                            {
-                              src: fileUrl,
-                              type: mimeType,
-                            },
-                          ],
+          <div className="flex items-center gap-3 text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+            {/* <FaExclamationTriangle />
+            <span className="text-sm font-medium">
+              Bandwidth Critical: Videos load on click only
+            </span> */}
+          </div>
+        </div>
+      </div>
+
+      {/* Videos Grid - LAZY LOAD */}
+      {loading ? (
+        <div className="text-center py-20">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <p className="mt-2 text-gray-600">Loading video list...</p>
+        </div>
+      ) : videos.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-lg shadow">
+          <div className="text-6xl mb-4">🎥</div>
+          <h3 className="text-xl text-gray-600 mb-2">No videos available</h3>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {videos.map((item) => {
+            const fileName = getFileName(item);
+            const isActive = activeVideo === item.so_media_id;
+            const error = videoErrors[item.so_media_id];
+
+            return (
+              <motion.div
+                key={item.so_media_id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-blue-100"
+              >
+                {/* Video Container */}
+                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
+                  {isActive ? (
+                    <div className="relative w-full h-full">
+                      {/* // Update the video element in your JSX: */}
+                      <video
+                        ref={(el) => {
+                          if (el) {
+                            videoRefs.current[item.so_media_id] = el;
+                          } else {
+                            delete videoRefs.current[item.so_media_id];
+                          }
                         }}
-                        options={{
-                          controls: [
-                            "play-large",
-                            "play",
-                            "progress",
-                            "current-time",
-                            "duration",
-                            "mute",
-                            "volume",
-                            "settings",
-                            "pip",
-                            "fullscreen",
-                            "rewind",
-                            "fast-forward",
-                          ],
-                          ratio: "16:9",
-                          clickToPlay: true,
-                          tooltips: { controls: true, seek: true },
-                          keyboard: { global: true },
-                          seekTime: 10,
-                          disableContextMenu: true,
+                        className="w-full h-full object-contain"
+                        controls
+                        controlsList="nodownload"
+                        playsInline
+                        preload="metadata"
+                        crossOrigin="anonymous"
+                        onLoadStart={() => {
+                          console.log(`Video ${item.so_media_id} load started`);
+                          // Show loading indicator
                         }}
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full bg-gray-200">
-                        <div className="text-center text-gray-500">
-                          <FaPlay className="text-4xl mx-auto mb-2 opacity-50" />
-                          <p>Video not available</p>
+                        onLoadedData={() => {
+                          console.log(`Video ${item.so_media_id} loaded data`);
+                          // Hide loading indicator
+                        }}
+                        onCanPlay={() => {
+                          console.log(`Video ${item.so_media_id} can play`);
+                          // Auto-play if possible
+                          if (activeVideo === item.so_media_id) {
+                            videoRefs.current[item.so_media_id]
+                              ?.play()
+                              .catch((e) => {
+                                console.log(
+                                  "Auto-play blocked, showing controls"
+                                );
+                                videoRefs.current[
+                                  item.so_media_id
+                                ].controls = true;
+                              });
+                          }
+                        }}
+                        onEnded={() => setActiveVideo(null)}
+                        onError={(e) => {
+                          console.error("Video error event:", e);
+                          console.error("Video error details:", {
+                            errorCode:
+                              videoRefs.current[item.so_media_id]?.error?.code,
+                            errorMessage:
+                              videoRefs.current[item.so_media_id]?.error
+                                ?.message,
+                            networkState:
+                              videoRefs.current[item.so_media_id]?.networkState,
+                            readyState:
+                              videoRefs.current[item.so_media_id]?.readyState,
+                          });
+                          handleVideoError(item.so_media_id, e);
+                        }}
+                      >
+                        <source
+                          src={
+                            activeVideo === item.so_media_id
+                              ? getVideoUrl(item)
+                              : ""
+                          }
+                          type={
+                            item.media_url?.endsWith(".webm")
+                              ? "video/webm"
+                              : "video/mp4"
+                          }
+                        />
+                        Your browser does not support the video tag.
+                      </video>
+                      {/* Loading overlay */}
+                      {/* <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <div className="text-white text-center">
+                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
+                          <p className="text-sm">Loading video...</p>
                         </div>
-                      </div>
-                    )}
-
-                    {deletingId === item.so_media_id && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
-                        <BeatLoader color="#ffffff" size={10} />
-                        <span className="ml-3 text-white text-sm">
-                          Deleting from cloud...
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4">
-                    <h3 className="font-semibold text-lg mb-2 line-clamp-1">
-                      {item.sub_operation_name || "Untitled video"}
-                    </h3>
-
-                    <div className="text-sm text-gray-600 space-y-2">
-                      <div className="flex justify-between">
-                        <span className="font-medium">File:</span>
-                        <span className="text-xs font-mono truncate max-w-[120px]" title={fileName}>
-                          {fileName}
-                        </span>
-                      </div>
-                      {item.file_size && (
-                        <div className="flex justify-between">
-                          <span className="font-medium">Size:</span>
-                          <span>{formatFileSize(item.file_size)}</span>
-                        </div>
-                      )}
-                      {item.file_type && (
-                        <div className="flex justify-between">
-                          <span className="font-medium">Type:</span>
-                          <span className="text-xs">{item.file_type}</span>
-                        </div>
-                      )}
+                      </div> */}
                     </div>
-
-                    <div className="mt-4 flex justify-between items-center">
-                      <div className="pt-2 border-t border-gray-100 text-xs text-gray-500">
-                        Uploaded: {formatDate(item.createdAt)}
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleFileAction(item)}
-                          disabled={!fileUrl}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
-                          title={fileUrl ? "Open video" : "Video not available"}
-                        >
-                          <FaExternalLinkAlt className="text-sm" />
-                          View
-                        </button>
-
-                        {userRole === "Admin" && (
-                          <button
-                            onClick={() => handleDelete(item.so_media_id, fileName)}
-                            disabled={deletingId === item.so_media_id}
-                            className="flex items-center gap-1 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            <FaTrash size={12} />
-                            Delete
-                          </button>
+                  ) : error ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
+                      <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
+                      <p className="text-red-700 text-sm font-medium text-center">
+                        {error}
+                      </p>
+                      <button
+                        onClick={() => handleDownloadVideo(item)}
+                        className="mt-3 px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200"
+                      >
+                        Try Downloading
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/50 to-gray-100/50 hover:from-blue-100/50 hover:to-gray-200/50"
+                      onClick={() => handlePlayVideo(item.so_media_id)}
+                    >
+                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors">
+                        {isActive ? (
+                          <FaPause className="text-blue-600 text-3xl" />
+                        ) : (
+                          <FaPlay className="text-blue-600 text-3xl" />
                         )}
                       </div>
+                      <p className="text-blue-700 text-sm mt-3 font-medium">
+                        Click to load & play
+                      </p>
+                      <p className="text-gray-600 text-xs mt-1">
+                        {formatFileSize(item.file_size)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Video Info */}
+                <div className="p-4">
+                  <h3 className="font-semibold text-gray-800 truncate mb-2">
+                    {item.sub_operation_name || fileName}
+                  </h3>
+
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <div className="flex justify-between">
+                      <span>File:</span>
+                      <span
+                        className="font-mono text-xs truncate max-w-[120px]"
+                        title={fileName}
+                      >
+                        {fileName}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Size:</span>
+                      <span>{formatFileSize(item.file_size)}</span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Uploaded:</span>
+                      <span>{formatDate(item.createdAt)}</span>
                     </div>
                   </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                  {/* Actions */}
+                  <div className="mt-4 flex justify-between items-center">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handlePlayVideo(item.so_media_id)}
+                        className={`px-3 py-1 rounded text-sm font-medium ${
+                          isActive
+                            ? "bg-red-100 text-red-700 hover:bg-red-200"
+                            : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                        }`}
+                      >
+                        {isActive ? "Stop" : "Play"}
+                      </button>
+
+                      <button
+                        onClick={() => handleDownloadVideo(item)}
+                        className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200"
+                      >
+                        Download
+                      </button>
+                    </div>
+
+                    {(userRole === "Admin" || userRole === "SuperAdmin") && (
+                      <button
+                        onClick={() => {
+                          Swal.fire({
+                            title: "Delete video?",
+                            text: `Delete "${fileName}"?`,
+                            icon: "warning",
+                            showCancelButton: true,
+                            confirmButtonText: "Delete",
+                            cancelButtonText: "Cancel",
+                          }).then((result) => {
+                            if (result.isConfirmed) {
+                              // Implement delete
+                              console.log("Delete:", item.so_media_id);
+                            }
+                          });
+                        }}
+                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                        title="Delete video"
+                      >
+                        <FaTrash size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

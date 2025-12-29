@@ -88,25 +88,78 @@ const ImageGallery = () => {
   // Get the best URL for the image - prefers proxy URL for security
   const getImageUrl = (item) => {
     const baseUrl = import.meta.env.VITE_API_URL;
+    const apiUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
 
-    // Priority: proxy_url -> preview_url -> public_url -> direct_url -> old format
+    console.log(`🔍 Getting URL for image ${item.so_img_id}:`, {
+      proxy_url: item.proxy_url,
+      preview_url: item.preview_url,
+      public_url: item.public_url,
+      direct_url: item.direct_url,
+      image_url: item.image_url,
+    });
+
+    // Try all possible URL sources
+    const possibleUrls = [];
+
+    // Priority 1: Proxy URL (local API endpoint)
     if (item.proxy_url) {
-      return `${baseUrl}${item.proxy_url}`;
-    } else if (item.preview_url) {
-      return `${baseUrl}${item.preview_url}`;
-    } else if (item.public_url) {
-      return item.public_url;
-    } else if (item.direct_url) {
-      return item.direct_url;
-    } else if (item.image_url) {
-      // Legacy support - check if it's already a full URL
-      if (item.image_url.startsWith("http")) {
-        return item.image_url;
-      }
-      // Use B2 proxy endpoint
-      return `${baseUrl}/api/b2-files/${item.image_url}`;
+      const proxyUrl = item.proxy_url.startsWith("/")
+        ? `${apiUrl}${item.proxy_url}`
+        : `${apiUrl}/${item.proxy_url}`;
+      possibleUrls.push({ url: proxyUrl, type: "proxy" });
     }
 
+    // Priority 2: Preview URL
+    if (item.preview_url) {
+      const previewUrl = item.preview_url.startsWith("/")
+        ? `${apiUrl}${item.preview_url}`
+        : `${apiUrl}/${item.preview_url}`;
+      possibleUrls.push({ url: previewUrl, type: "preview" });
+    }
+
+    // Priority 3: Public URL (direct B2 link)
+    if (item.public_url) {
+      possibleUrls.push({ url: item.public_url, type: "public" });
+    }
+
+    // Priority 4: Direct URL
+    if (item.direct_url) {
+      possibleUrls.push({ url: item.direct_url, type: "direct" });
+    }
+
+    // Priority 5: Legacy image_url
+    if (item.image_url) {
+      // Check if it's already a full URL
+      if (item.image_url.startsWith("http")) {
+        possibleUrls.push({ url: item.image_url, type: "image_url_full" });
+      } else {
+        // Use B2 proxy endpoint
+        const proxyImageUrl = `${apiUrl}/api/b2-files/${item.image_url}`;
+        possibleUrls.push({ url: proxyImageUrl, type: "image_url_proxy" });
+      }
+    }
+
+    // Log all available URLs for debugging
+    if (possibleUrls.length > 0) {
+      console.log(
+        `📋 Available URLs for image ${item.so_img_id}:`,
+        possibleUrls
+      );
+
+      // Try to return the first proxy URL if available
+      const proxyUrl = possibleUrls.find((u) => u.type.includes("proxy"));
+      if (proxyUrl) {
+        console.log(`✅ Using ${proxyUrl.type} URL:`, proxyUrl.url);
+        return proxyUrl.url;
+      }
+
+      // Otherwise return the first available URL
+      const selectedUrl = possibleUrls[0];
+      console.log(`✅ Using ${selectedUrl.type} URL:`, selectedUrl.url);
+      return selectedUrl.url;
+    }
+
+    console.warn(`⚠️ No valid URL found for image ${item.so_img_id}`);
     return "";
   };
 
@@ -341,19 +394,83 @@ const ImageGallery = () => {
                       className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all"
                     >
                       {imageUrl ? (
+                        // In your ImageGallery component, update the img tag:
                         <img
                           src={imageUrl}
                           alt={item.sub_operation_name || fileName}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           loading="lazy"
+                          crossOrigin="anonymous" // Add this attribute
                           onError={(e) => {
-                            e.target.style.display = "none";
-                            // Show fallback
-                            const fallback =
-                              e.target.parentElement.querySelector(
-                                ".image-fallback"
+                            console.error(
+                              `❌ Failed to load image: ${imageUrl}`,
+                              e
+                            );
+                            console.error(`❌ Error type:`, e.type);
+                            console.error(
+                              `❌ CORS issue?`,
+                              e.target.crossOrigin
+                            );
+
+                            // Try to load with a different approach if CORS fails
+                            if (imageUrl.includes("/api/b2-files/")) {
+                              console.log(
+                                "🔄 Attempting alternative loading method..."
                               );
-                            if (fallback) fallback.classList.remove("hidden");
+
+                              // Create a new image element with different CORS settings
+                              const testImg = new Image();
+                              testImg.crossOrigin = "anonymous";
+                              testImg.onload = () => {
+                                console.log("✅ Alternative load succeeded");
+                                e.target.src = imageUrl; // Set the original img src to the loaded URL
+                                e.target.style.display = "block";
+                              };
+                              testImg.onerror = (err) => {
+                                console.error(
+                                  "❌ Alternative load also failed:",
+                                  err
+                                );
+                                e.target.style.display = "none";
+                                // Show fallback
+                                const fallback =
+                                  e.target.parentElement.querySelector(
+                                    ".image-fallback"
+                                  );
+                                if (fallback) {
+                                  fallback.classList.remove("hidden");
+                                  fallback.innerHTML = `
+            <div class="text-center p-2">
+              <FaImage className="text-2xl text-blue-500 mb-2 mx-auto" />
+              <div class="text-xs text-gray-600">Image failed to load</div>
+              <div class="text-xs text-red-400 mt-1 truncate max-w-full">URL: ${imageUrl}</div>
+              <button 
+                onclick="window.open('${imageUrl}', '_blank')"
+                class="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
+              >
+                Open in new tab
+              </button>
+            </div>
+          `;
+                                }
+                              };
+                              testImg.src = imageUrl + "?t=" + Date.now(); // Add timestamp to bypass cache
+                            } else {
+                              e.target.style.display = "none";
+                              // Show fallback
+                              const fallback =
+                                e.target.parentElement.querySelector(
+                                  ".image-fallback"
+                                );
+                              if (fallback) {
+                                fallback.classList.remove("hidden");
+                              }
+                            }
+                          }}
+                          onLoad={(e) => {
+                            console.log(
+                              `✅ Successfully loaded image: ${imageUrl}`
+                            );
                           }}
                         />
                       ) : null}

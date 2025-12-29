@@ -332,14 +332,22 @@ const Register = () => {
                   >
                     <option value="">Select user category</option>
                     {Array.isArray(userCategories) &&
-                      userCategories.map((category, index) => (
-                        <option
-                          key={category.category_id}
-                          value={category.category_id}
-                        >
-                          {category.category_name}
-                        </option>
-                      ))}
+                      userCategories.map((category, index) => {
+                        if (
+                          !category.category_name
+                            .toLowerCase()
+                            .includes("admin")
+                        ) {
+                          return (
+                            <option
+                              key={category.category_id}
+                              value={category.category_id}
+                            >
+                              {category.category_name}
+                            </option>
+                          );
+                        }
+                      })}
                   </select>
                 </motion.div>
                 <AnimatePresence>

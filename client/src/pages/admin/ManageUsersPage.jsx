@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
-import Header from "../components/Header";
+import Sidebar from "../../components/Sidebar";
+import Header from "../../components/Header";
 import { motion, AnimatePresence } from "framer-motion";
-import AddCustomer from "../components/admin/AddCustomer";
-import { useAuth } from "../hooks/useAuth";
+import AddCustomer from "../../components/admin/AddCustomer";
+import { useAuth } from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import Swal from "sweetalert2";
+import ManageUsers from "../../components/ManageUsers";
 
-
-const CustomerPage = () => {
+const ManageUsersPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const navigate = useNavigate();
   const { user, loading, error } = useAuth();
@@ -51,7 +51,8 @@ const CustomerPage = () => {
             exit="exit"
             className="bg-gray-200 w-full min-h-screen"
           >
-            <AddCustomer userRole={user.userRole} />
+            {/* <AddCustomer userRole={user.userRole} /> */}
+            <ManageUsers userRole={user.userRole} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -59,4 +60,4 @@ const CustomerPage = () => {
   );
 };
 
-export default CustomerPage;
+export default ManageUsersPage;

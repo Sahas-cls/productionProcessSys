@@ -10,6 +10,7 @@ import { RiLayoutMasonryFill } from "react-icons/ri";
 import { TbReport } from "react-icons/tb";
 import { MdSpaceDashboard } from "react-icons/md";
 import { TbNeedleThread } from "react-icons/tb";
+import { FaUsersCog } from "react-icons/fa";
 
 export const adminSidebarData = [
   {
@@ -97,6 +98,12 @@ export const adminSidebarData = [
     title: "Report",
     icon: TbReport,
     navigateTo: "/reports",
+  },
+  {
+    id: 10,
+    title: "Manage Users",
+    icon: FaUsersCog,
+    navigateTo: "/manage-users",
   },
 ];
 

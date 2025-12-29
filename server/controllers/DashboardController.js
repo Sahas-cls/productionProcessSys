@@ -193,38 +193,59 @@ exports.getSeasonWiseStyles = async (req, res) => {
       ],
     });
 
-    // Group data by season
-    const seasonWiseData = seasons.map((season) => {
+    // Group data by season name (combine seasons with same name)
+    const seasonMap = new Map();
+
+    seasons.forEach((season) => {
+      const seasonName = season.season;
       const styles = season.seasons || [];
 
-      return {
-        season_id: season.season_id,
-        season_name: season.season,
-        customer_id: season.customer_id,
-        customer_name: season.customer
-          ? season.customer.customer_name
-          : "Unknown",
-        total_styles: styles.length,
-        styles: styles.map((style) => ({
+      if (seasonMap.has(seasonName)) {
+        // If season name already exists, merge the data
+        const existing = seasonMap.get(seasonName);
+        existing.total_styles += styles.length;
+        existing.styles = [...existing.styles, ...styles.map((style) => ({
           style_id: style.style_id,
           style_no: style.style_no,
           style_name: style.style_name,
           created_at: style.createdAt,
-        })),
-        chart_data: {
-          name: season.season,
-          value: styles.length,
-          customer: season.customer ? season.customer.customer_name : "Unknown",
-        },
-      };
+        }))];
+        // Keep track of all customers for this season
+        if (season.customer && !existing.customers.includes(season.customer.customer_name)) {
+          existing.customers.push(season.customer.customer_name);
+        }
+      } else {
+        // First occurrence of this season name
+        seasonMap.set(seasonName, {
+          season_id: season.season_id,
+          season_name: seasonName,
+          customer_id: season.customer_id,
+          customer_name: season.customer
+            ? season.customer.customer_name
+            : "Unknown",
+          customers: season.customer ? [season.customer.customer_name] : [],
+          total_styles: styles.length,
+          styles: styles.map((style) => ({
+            style_id: style.style_id,
+            style_no: style.style_no,
+            style_name: style.style_name,
+            created_at: style.createdAt,
+          })),
+        });
+      }
     });
 
-    // Prepare chart data
+    // Convert map to array
+    const seasonWiseData = Array.from(seasonMap.values());
+
+    // Prepare chart data - grouped by season name
     const chartData = {
       barChartData: seasonWiseData.map((item) => ({
         name: item.season_name,
         styles: item.total_styles,
-        customer: item.customer_name,
+        customer: item.customers.length > 1 
+          ? `${item.customers.length} customers` 
+          : item.customer_name,
       })),
 
       pieChartData: seasonWiseData.map((item) => ({

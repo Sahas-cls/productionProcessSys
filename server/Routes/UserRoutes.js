@@ -47,3 +47,22 @@ routes.get(
 // auth user
 routes.get("/authCheck", userController.authCheck);
 module.exports = routes;
+
+// ======================== for admin account user data manipulation
+// to get all users data
+routes.get("/getAllUsers", authMiddleWare, userController.getAllUsers);
+
+// to reset password
+routes.put("/resetPassword/:userId", authMiddleWare, userController.resetPassword);
+
+// to change status of users
+routes.put("/blockUser/:userId", authMiddleWare, userController.changeUserStatus);
+
+// to change user role
+routes.put("/changeRole/:userId", authMiddleWare, userController.changeUserRole);
+
+// to delete user
+routes.delete("/deleteUser/:userId", authMiddleWare, userController.deleteUser);
+
+// to get all user categories
+routes.get("/categories", authMiddleWare, userController.getAllCategories);

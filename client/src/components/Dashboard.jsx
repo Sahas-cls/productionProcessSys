@@ -763,8 +763,8 @@ const Dashboard = () => {
                   outerRadius={90}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, percent }) =>
-                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  label={({ name, value }) =>
+                    `${name}: ${value}`
                   }
                 >
                   {assetsData.map((entry, index) => (

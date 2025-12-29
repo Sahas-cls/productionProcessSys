@@ -38,6 +38,7 @@ import TechPackGallery from "./pages/TechPackGallery";
 import DocumentGallery from "./pages/DocumentGallery";
 import NeedleThreatsPage from "./pages/NeedleThreatsPage";
 import NotificationPage from "./pages/NotificationPage";
+import ManageUsersPage from "./pages/admin/ManageUsersPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -115,6 +116,9 @@ const App = () => {
 
           {/* for display reports */}
           <Route path="/reports" element={<Reports />} />
+
+          {/* for manage users */}
+          <Route path="/manage-users" element={<ManageUsersPage />} />
 
           {/* to watch videos on component */}
           <Route path="/sub-operation/allMedia" element={<WatchVideos />} />
