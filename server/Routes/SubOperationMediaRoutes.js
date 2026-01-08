@@ -51,20 +51,34 @@ const videoUpload = multer({
     files: 1,
   },
   fileFilter: (req, file, cb) => {
-    console.log("Multer receiving:", {
-      mimetype: file.mimetype,
-      originalname: file.originalname,
-      extension: path.extname(file.originalname),
-    });
-
-    // Accept any video MIME type
-    if (file.mimetype.startsWith("video/")) {
-      console.log("✅ Accepting video file");
-      return cb(null, true);
+    // Check if it's a video file
+    if (!file.mimetype.startsWith("video/")) {
+      return cb(new Error("Only video files are allowed"), false);
     }
 
-    console.log("❌ Rejecting non-video file");
-    return cb(new Error("Only video files are allowed"), false);
+    // Check file extension
+    const allowedExtensions = [
+      ".mp4",
+      ".avi",
+      ".mov",
+      ".mkv",
+      ".webm",
+      ".wmv",
+      ".flv",
+      ".m4v",
+    ];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+
+    if (!allowedExtensions.includes(fileExtension)) {
+      return cb(
+        new Error(
+          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`
+        ),
+        false
+      );
+    }
+
+    cb(null, true);
   },
 });
 
