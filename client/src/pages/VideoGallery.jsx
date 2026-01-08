@@ -17,6 +17,7 @@ const VideoGallery = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userRole = user?.userRole;
+  const backendUrl = import.meta.env.VITE_API_URL;
 
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -460,20 +461,41 @@ const VideoGallery = () => {
 
                     {(userRole === "Admin" || userRole === "SuperAdmin") && (
                       <button
-                        onClick={() => {
-                          Swal.fire({
+                        onClick={async () => {
+                          const result = await Swal.fire({
                             title: "Delete video?",
                             text: `Delete "${fileName}"?`,
                             icon: "warning",
                             showCancelButton: true,
                             confirmButtonText: "Delete",
                             cancelButtonText: "Cancel",
-                          }).then((result) => {
-                            if (result.isConfirmed) {
-                              // Implement delete
-                              console.log("Delete:", item.so_media_id);
-                            }
                           });
+
+                          if (result.isConfirmed) {
+                            try {
+                              const response = await axios.delete(
+                                `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
+                                { withCredentials: true }
+                              );
+
+                              if (response.status === 200) {
+                                Swal.fire({
+                                  title: "Video Delete Successful...",
+                                  icon: "success",
+                                });
+                                fetchVideos(); // Only fetch if successful
+                              }
+                            } catch (error) {
+                              console.error("Delete error:", error);
+                              Swal.fire({
+                                title: "Video delete failed",
+                                text:
+                                  error.response?.data?.message ||
+                                  "Please try again",
+                                icon: "error",
+                              });
+                            }
+                          }
                         }}
                         className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
                         title="Delete video"

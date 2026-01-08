@@ -243,7 +243,7 @@ const CameraOrBrowse = ({
           }
         } else if (error.response.status === 413) {
           errorTitle = "File Too Large";
-          errorMessage = "Video file exceeds size limit. Maximum size is 1GB";
+          errorMessage = "Video file exceeds size limit. Maximum size is 100MB";
         } else if (error.response.status === 415) {
           errorTitle = "Unsupported Format";
           errorMessage =
@@ -445,7 +445,7 @@ const CameraOrBrowse = ({
       )}
 
       {/* Video Preview Area */}
-      <div className="relative rounded-lg overflow-hidden border-2 border-gray-700 mb-6 bg-black">
+      <div className="relative rounded-lg overflow-hidden border-2 border-red-700 mb-6 bg-black h-[70vh] md:h-auto flex items-center">
         {status !== "preview" ? (
           <video
             ref={videoRef}
