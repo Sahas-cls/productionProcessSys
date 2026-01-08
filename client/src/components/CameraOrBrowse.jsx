@@ -83,10 +83,32 @@ const CameraOrBrowse = ({
     }
   };
 
-  const handleUpload = async (
-    videoBlob = null,
-    fileName = "recorded-video.webm"
-  ) => {
+  const handleUpload = async () => {
+    // Validate we have a video to upload
+    if (!recordedBlob) {
+      Swal.fire({
+        title: "No Video",
+        text: "Please record or select a video first",
+        icon: "warning",
+        timer: 3000,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    // ========== CRITICAL FIX: Validate file size BEFORE uploading ==========
+    if (recordedBlob.size > 100 * 1024 * 1024) {
+      Swal.fire({
+        title: "File Too Large",
+        text: `Video is ${(recordedBlob.size / (1024 * 1024)).toFixed(
+          1
+        )}MB. Maximum size is 100MB.`,
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
@@ -101,25 +123,48 @@ const CameraOrBrowse = ({
       formData.append("sopName", uploadingData.sopName);
       formData.append("subOpId", uploadingData.sopId);
 
-      // Append the video file
-      if (videoBlob) {
-        formData.append("video", videoBlob, fileName);
-      } else if (recordedBlob) {
-        formData.append("video", recordedBlob, "recorded-video.webm");
+      // ========== CRITICAL FIX: Generate proper filename with extension ==========
+      let fileName;
+      let fileExtension;
+
+      // Determine file extension based on MIME type
+      if (recordedBlob.type.includes("webm")) {
+        fileExtension = ".webm";
+      } else if (recordedBlob.type.includes("mp4")) {
+        fileExtension = ".mp4";
+      } else if (recordedBlob.type.includes("quicktime")) {
+        fileExtension = ".mov";
+      } else if (recordedBlob.type.includes("avi")) {
+        fileExtension = ".avi";
+      } else if (recordedBlob.type.includes("matroska")) {
+        fileExtension = ".mkv";
       } else {
-        Swal.fire({
-          title: "Error occurred",
-          text: "No video to upload",
-          timer: 3000,
-          showTimeProgress: true,
-          showCancelButton: false,
-          icon: "error",
-        });
-        setUploading(false);
-        return;
+        // Default to webm for MediaRecorder recordings
+        fileExtension = ".webm";
       }
 
+      // Generate filename with timestamp and proper extension
+      const timestamp = new Date().getTime();
+      fileName = `video-${timestamp}${fileExtension}`;
+
+      // Debug log what we're sending
+      console.log("📤 Uploading video:", {
+        type: recordedBlob.type,
+        size: recordedBlob.size,
+        sizeMB: (recordedBlob.size / (1024 * 1024)).toFixed(2) + "MB",
+        fileName: fileName,
+        extension: fileExtension,
+      });
+
+      // ========== CRITICAL FIX: Append with proper filename ==========
+      formData.append("video", recordedBlob, fileName);
+
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+      console.log(
+        "📤 Sending to:",
+        `${apiUrl}/api/subOperationMedia/uploadVideos`
+      );
 
       const response = await axios.post(
         `${apiUrl}/api/subOperationMedia/uploadVideos`,
@@ -137,154 +182,102 @@ const CameraOrBrowse = ({
               setUploadProgress(percentCompleted);
             }
           },
-          timeout: 300000,
+          timeout: 300000, // 5 minutes for large files
         }
       );
 
-      console.log("🔍 Upload response:", response.data); // Debug log
+      console.log("🔍 Upload response:", response.data);
 
-      // FIXED: Enhanced success checking with storage type awareness
+      // Handle successful upload
       if (response.status === 201) {
         if (response.data.success === true) {
-          // ✅ True success case - handle different storage scenarios
+          // Success case
           let successTitle = "Success!";
           let successText = "Video uploaded successfully!";
           let iconType = "success";
           let timerDuration = 4000;
 
-          // Check storage type and show appropriate message
+          // Check storage type
           if (response.data.storageType === "local" || response.data.warning) {
             successTitle = "Uploaded with Note";
             successText =
-              response.data.warning ||
-              "Video saved to local storage (network unavailable - 404)";
+              response.data.warning || "Video saved to local storage";
             iconType = "warning";
-            timerDuration = 5000; // Longer for warnings
+            timerDuration = 5000;
           }
 
           Swal.fire({
             title: successTitle,
             text: successText,
             timer: timerDuration,
-            showTimeProgress: true,
-            showCancelButton: false,
+            showConfirmButton: false,
             icon: iconType,
           });
 
           console.log("✅ Upload successful:", response.data);
-          console.log(
-            "📁 Storage type:",
-            response.data.storageType || "unknown"
-          );
-          if (response.data.warning) {
-            console.log("⚠️ Warning:", response.data.warning);
-          }
 
-          // Reset states after successful upload
+          // Clean up and reset
+          if (recordedVideo) {
+            URL.revokeObjectURL(recordedVideo);
+          }
           setRecordedBlob(null);
           setRecordedVideo(null);
           setStatus("idle");
           setUploading(false);
           setUploadProgress(0);
-
-          // Optional: Refresh video list if needed
-          // if (typeof onUploadSuccess === 'function') {
-          //   onUploadSuccess();
-          // }
         } else if (response.data.success === false) {
-          // ❌ Server returned 201 but success is explicitly false
-          console.error("❌ Server returned failure:", response.data);
           throw new Error(response.data.message || "Upload failed on server");
         } else {
-          // ❌ No success flag in response - this indicates a server issue
-          console.error(
-            "❌ Malformed response - no success flag:",
-            response.data
-          );
-          throw new Error(
-            "Server response format error - please contact administrator"
-          );
+          throw new Error("Server response format error");
         }
       } else {
-        // ❌ Non-201 status code
-        console.error("❌ Unexpected status code:", response.status);
         throw new Error(`Upload failed with status: ${response.status}`);
       }
     } catch (error) {
       console.error("❌ Upload error:", error);
-      console.error("❌ Error response data:", error.response?.data);
-      console.error("❌ Error details:", {
-        message: error.message,
-        code: error.code,
-        responseStatus: error.response?.status,
-        responseHeaders: error.response?.headers,
-      });
+      console.error("❌ Error response:", error.response?.data);
 
       let errorMessage = "Upload failed";
       let errorTitle = "Upload Failed";
-      let timerDuration = 5000;
 
       if (error.response) {
-        // Server responded with error status
         errorMessage =
-          error.response.data?.message ||
-          error.response.statusText ||
-          "Server error occurred";
+          error.response.data?.message || error.response.statusText;
 
-        // Handle specific error types with better messages
+        // Handle specific errors
         if (error.response.status === 400) {
           errorTitle = "Invalid Request";
-          if (errorMessage?.includes("too large")) {
-            errorMessage = "Video file is too large. Maximum size is 1GB";
-          } else if (errorMessage?.includes("Missing required fields")) {
-            errorMessage = "Please fill all required fields";
-          } else if (errorMessage?.includes("No file uploaded")) {
-            errorMessage = "No video file selected";
+          if (errorMessage.toLowerCase().includes("only video files")) {
+            errorMessage =
+              "Server rejected the video file format. Please try recording again.";
+            console.error(
+              "⚠️ Multer rejected file. Check backend logs for details."
+            );
           }
         } else if (error.response.status === 413) {
           errorTitle = "File Too Large";
-          errorMessage = "Video file exceeds size limit. Maximum size is 100MB";
+          errorMessage = "Video exceeds server size limit (100MB).";
         } else if (error.response.status === 415) {
           errorTitle = "Unsupported Format";
-          errorMessage =
-            "Video format not supported. Please use MP4, AVI, MOV, MKV, or WebM";
-        } else if (error.response.status >= 500) {
-          errorTitle = "Server Error";
-          errorMessage =
-            "Network storage is not accessible. Please check the network connection and try again. error code 404";
-          timerDuration = 6000; // Longer for server errors
+          errorMessage = "Video format not supported by server.";
         }
       } else if (error.request) {
-        // Request was made but no response received
         errorTitle = "Network Error";
-        errorMessage =
-          "Unable to connect to server. Please check your internet connection.";
+        errorMessage = "Unable to connect to server.";
       } else if (error.code === "ECONNABORTED") {
-        // Request timeout
-        errorTitle = "Timeout Error";
-        errorMessage =
-          "Upload took too long. Please try again with a smaller video file.";
-      } else {
-        // Something else happened
-        errorTitle = "Upload Error";
-        errorMessage = error.message || "An unexpected error occurred";
+        errorTitle = "Timeout";
+        errorMessage = "Upload took too long.";
       }
 
       Swal.fire({
         title: errorTitle,
         text: errorMessage,
-        timer: timerDuration,
-        showTimeProgress: true,
-        showCancelButton: false,
         icon: "error",
+        confirmButtonText: "OK",
       });
 
-      // Keep the video for retry (don't reset recordedBlob)
       setUploading(false);
       setUploadProgress(0);
-
-      // Optional: Keep the preview for retry
-      // setStatus("preview");
     }
   };
 
@@ -334,7 +327,7 @@ const CameraOrBrowse = ({
 
       recorder.onstop = () => {
         const blob = new Blob(recordedChunks.current, {
-          type: recordedChunks.current[0]?.type || "video/webm",
+          type: "video/webm",
         });
         const videoUrl = URL.createObjectURL(blob);
         setRecordedVideo(videoUrl);
@@ -487,7 +480,10 @@ const CameraOrBrowse = ({
       {/* Step-by-step instructions */}
       <div className="mb-6 text-gray-300 text-sm text-center">
         {status === "idle" && (
-          <p>Start by opening your camera or uploading a video file</p>
+          <p>
+            Start by opening your camera or uploading a video file video size
+            must be less than 100MB
+          </p>
         )}
         {status === "ready" && (
           <p>Camera is ready. Press record when you're prepared</p>

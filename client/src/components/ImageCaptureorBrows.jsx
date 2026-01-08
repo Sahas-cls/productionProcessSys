@@ -6,151 +6,268 @@ import {
   FaSyncAlt,
   FaCheck,
   FaRedo,
+  FaStop,
   FaExpand,
 } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
 
-const ImageCaptureOrBrowse = ({
+const CameraOrBrowse = ({
   setIsUploading,
   uploadingData,
   setUploadingMaterial,
 }) => {
   const [mediaStream, setMediaStream] = useState(null);
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [imageBlob, setImageBlob] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const [recordedVideo, setRecordedVideo] = useState(null);
+  const [recordedBlob, setRecordedBlob] = useState(null);
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [status, setStatus] = useState("idle");
   const [isMobile, setIsMobile] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef(null);
   const videoRef = useRef(null);
-  const previewImageRef = useRef(null);
-  const canvasRef = useRef(null);
+  const previewVideoRef = useRef(null);
+  const recordedChunks = useRef([]);
   const fileInputRef = useRef(null);
+  const recordingTimerRef = useRef(null);
 
-  // Check if mobile device
+  // Check if mobile device and screen orientation
   useEffect(() => {
-    setIsMobile(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+    const userAgent = navigator.userAgent;
+    setIsMobile(/Android|iPhone|iPad|iPod/i.test(userAgent));
+
+    // Handle orientation changes
+    const handleOrientationChange = () => {
+      if (videoRef.current && mediaStream) {
+        // Re-apply video constraints on orientation change
+        setTimeout(() => {
+          if (videoRef.current) {
+            videoRef.current.style.transform =
+              window.orientation === 90 || window.orientation === -90
+                ? "rotate(90deg)"
+                : "";
+          }
+        }, 100);
+      }
+    };
+
+    window.addEventListener("orientationchange", handleOrientationChange);
+    return () => {
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      clearInterval(recordingTimerRef.current);
+    };
   }, []);
 
   // Initialize camera when facing mode changes
   useEffect(() => {
-    if (status === "ready") {
+    if (status === "ready" || status === "recording") {
       startCamera();
     }
+    return () => {
+      if (status === "recording") {
+        stopRecording();
+      }
+    };
   }, [cameraFacing]);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
       stopCamera();
+      clearInterval(recordingTimerRef.current);
+      if (recordedVideo) {
+        URL.revokeObjectURL(recordedVideo);
+      }
     };
   }, []);
 
-  // Start camera
+  // Start recording timer
+  useEffect(() => {
+    if (recording) {
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(recordingTimerRef.current);
+      setRecordingTime(0);
+    }
+
+    return () => {
+      clearInterval(recordingTimerRef.current);
+    };
+  }, [recording]);
+
+  // Format recording time
+  const formatRecordingTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  // Start camera with mobile optimizations
   const startCamera = async () => {
     setStatus("loading");
     try {
-      stopCamera(); // Stop any existing stream first
+      stopCamera();
+
+      const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(
+        navigator.userAgent
+      );
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
       const constraints = {
         video: {
           facingMode: cameraFacing,
-          width: { ideal: isMobile ? 1280 : 1920 },
-          height: { ideal: isMobile ? 720 : 1080 },
+          width: { ideal: isMobileDevice ? 1280 : 1920 },
+          height: { ideal: isMobileDevice ? 720 : 1080 },
+          frameRate: { ideal: isMobileDevice ? 24 : 30 },
+          // iOS specific constraints
+          ...(isIOS && {
+            aspectRatio: { exact: 16 / 9 },
+          }),
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100,
+          // iOS needs explicit audio constraints
+          ...(isIOS && {
+            channelCount: 2,
+            sampleSize: 16,
+          }),
         },
       };
+
+      console.log("Camera constraints:", constraints);
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setMediaStream(stream);
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch((e) => console.error("Play error:", e));
+
+        // Handle iOS auto-play restrictions
+        const playPromise = videoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((e) => {
+            console.warn("Autoplay prevented:", e);
+            // Show manual play button for iOS
+            if (isIOS) {
+              Swal.fire({
+                title: "Tap to Start Camera",
+                text: "Tap the video to start the camera preview",
+                icon: "info",
+                timer: 3000,
+                showConfirmButton: false,
+              });
+            }
+          });
+        }
       }
 
       setStatus("ready");
     } catch (error) {
       console.error("Camera error:", error);
       setStatus("error");
-      alert(`Camera error: ${error.message}`);
+
+      let errorMessage = "Cannot access camera";
+      if (error.name === "NotAllowedError") {
+        errorMessage =
+          "Camera permission denied. Please allow camera access in your browser settings.";
+      } else if (error.name === "NotFoundError") {
+        errorMessage = "No camera found on your device.";
+      } else if (error.name === "NotReadableError") {
+        errorMessage = "Camera is already in use by another application.";
+      }
+
+      Swal.fire({
+        title: "Camera Error",
+        text: errorMessage,
+        icon: "error",
+        confirmButtonText: "OK",
+      });
     }
   };
 
-  // Capture image
-  const captureImage = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+  // Get optimal recording settings
+  const getRecordingSettings = () => {
+    const options = {};
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
+    // Try WebM first (browser default)
+    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
+      options.mimeType = "video/webm;codecs=vp9,opus";
+    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")) {
+      options.mimeType = "video/webm;codecs=vp8,opus";
+    } else if (MediaRecorder.isTypeSupported("video/webm")) {
+      options.mimeType = "video/webm";
+    } else if (MediaRecorder.isTypeSupported("video/mp4")) {
+      options.mimeType = "video/mp4";
+    }
 
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Draw current video frame to canvas
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Convert canvas to blob and create URL
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const imageUrl = URL.createObjectURL(blob);
-          setCapturedImage(imageUrl);
-          setImageBlob(blob);
-          setStatus("preview");
-          stopCamera();
-        }
-      },
-      "image/jpeg",
-      0.8
-    );
+    return options;
   };
 
-  const handleUpload = async (
-    imageBlobToUpload = null,
-    fileName = "captured-image.jpg"
-  ) => {
+  // Handle video file upload
+  const handleUpload = async () => {
+    if (!recordedBlob) {
+      Swal.fire({
+        title: "No Video",
+        text: "Please record or select a video first",
+        icon: "warning",
+        timer: 3000,
+      });
+      return;
+    }
+
+    // Check file size (100MB limit)
+    if (recordedBlob.size > 100 * 1024 * 1024) {
+      Swal.fire({
+        title: "File Too Large",
+        text: "Video exceeds 100MB limit. Please record a shorter video or use lower quality.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
 
-      // Append the metadata - ADD subOpId HERE!
+      // Append metadata
       formData.append("styleId", uploadingData.style_id || 1);
       formData.append("styleNo", uploadingData.styleNo);
       formData.append("moId", uploadingData.moId);
       formData.append("sopId", uploadingData.sopId);
       formData.append("sopName", uploadingData.sopName);
-      // ADD THIS LINE - if you have subOpId available
-      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // Use sopId as fallback
+      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId);
 
-      // Append the image file
-      if (imageBlobToUpload) {
-        formData.append("image", imageBlobToUpload, fileName);
-      } else if (imageBlob) {
-        formData.append("image", imageBlob, "captured-image.jpg");
-      } else {
-        Swal.fire({
-          title: "Error occurred",
-          text: "No image to upload",
-          timer: 3000,
-          showTimeProgress: true,
-          showCancelButton: false,
-          icon: "error",
-        });
-        setUploading(false);
-        return;
+      // Determine file extension based on MIME type
+      let fileExtension = ".webm";
+      if (recordedBlob.type.includes("mp4")) {
+        fileExtension = ".mp4";
+      } else if (recordedBlob.type.includes("quicktime")) {
+        fileExtension = ".mov";
       }
+
+      const timestamp = new Date().getTime();
+      const fileName = `video-${timestamp}${fileExtension}`;
+
+      // Append video file
+      formData.append("video", recordedBlob, fileName);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
       const response = await axios.post(
-        `${apiUrl}/api/subOperationMedia/uploadImages`,
+        `${apiUrl}/api/subOperationMedia/uploadVideos`,
         formData,
         {
           withCredentials: true,
@@ -165,164 +282,70 @@ const ImageCaptureOrBrowse = ({
               setUploadProgress(percentCompleted);
             }
           },
-          timeout: 30000, // Reduced timeout for images
+          timeout: 300000, // 5 minutes for large files
         }
       );
 
-      console.log("🔍 Upload response:", response.data);
+      console.log("Upload response:", response.data);
 
-      // Enhanced success checking
-      if (response.status === 201) {
-        if (response.data.success === true) {
-          let successTitle = "Success!";
-          let successText = "Image uploaded successfully!";
-          let iconType = "success";
-          let timerDuration = 4000;
+      if (response.status === 201 && response.data.success === true) {
+        Swal.fire({
+          title: "Success!",
+          text: "Video uploaded successfully",
+          icon: "success",
+          timer: 4000,
+          showConfirmButton: false,
+        });
 
-          // Check if it's Backblaze B2 storage
-          if (
-            response.data.storage &&
-            response.data.storage.type === "backblaze_b2"
-          ) {
-            successTitle = "Uploaded to Cloud!";
-            successText = "Image uploaded to cloud storage successfully!";
-            iconType = "success";
-            timerDuration = 4000;
+        // Cleanup
+        if (recordedVideo) {
+          URL.revokeObjectURL(recordedVideo);
+        }
 
-            console.log("☁️ Stored in Backblaze B2:", {
-              bucket: response.data.storage.bucket,
-              region: response.data.storage.region,
-              fileId: response.data.data?.b2_file_id,
-            });
-          }
-          // Check for any warnings
-          else if (response.data.warning) {
-            successTitle = "Uploaded with Note";
-            successText = response.data.warning;
-            iconType = "warning";
-            timerDuration = 5000;
-          }
+        setRecordedBlob(null);
+        setRecordedVideo(null);
+        setStatus("idle");
+        setUploading(false);
+        setUploadProgress(0);
 
-          Swal.fire({
-            title: successTitle,
-            text: successText,
-            timer: timerDuration,
-            showTimeProgress: true,
-            showCancelButton: false,
-            icon: iconType,
-          });
-
-          console.log("✅ Upload successful:", response.data);
-          console.log(
-            "📁 Storage provider:",
-            response.data.storage?.type ||
-              response.data.storageProvider ||
-              "unknown"
-          );
-
-          // Store the returned data for later use if needed
-          if (response.data.data) {
-            console.log("📦 Uploaded image details:", {
-              id: response.data.data.so_img_id,
-              url:
-                response.data.data.image_url_proxy ||
-                response.data.data.image_url,
-              filename: response.data.data.file_name,
-              b2FileId: response.data.data.b2_file_id,
-            });
-          }
-
-          // Reset states after successful upload
-          setImageBlob(null);
-          setCapturedImage(null);
-          setStatus("idle");
-          setUploading(false);
-          setUploadProgress(0);
-
-          // Optionally trigger a refresh of image list
-          if (typeof onUploadSuccess === "function") {
-            onUploadSuccess(response.data.data);
-          }
-        } else if (response.data.success === false) {
-          console.error("❌ Server returned failure:", response.data);
-          throw new Error(response.data.message || "Upload failed on server");
-        } else {
-          console.error(
-            "❌ Malformed response - no success flag:",
-            response.data
-          );
-          throw new Error("Server response format error");
+        // Optionally close the modal
+        if (setUploadingMaterial) {
+          setUploadingMaterial(null);
         }
       } else {
-        console.error("❌ Unexpected status code:", response.status);
-        throw new Error(`Upload failed with status: ${response.status}`);
+        throw new Error(response.data.message || "Upload failed");
       }
     } catch (error) {
-      console.error("❌ Upload error:", error);
-      console.error("❌ Error response data:", error.response?.data);
+      console.error("Upload error:", error);
 
       let errorMessage = "Upload failed";
       let errorTitle = "Upload Failed";
-      let timerDuration = 5000;
 
       if (error.response) {
         errorMessage =
-          error.response.data?.message ||
-          error.response.statusText ||
-          "Server error occurred";
+          error.response.data?.message || error.response.statusText;
 
-        if (error.response.status === 400) {
-          errorTitle = "Invalid Request";
-          if (errorMessage?.includes("too large")) {
-            errorMessage = "Image file is too large. Maximum size is 50MB";
-          } else if (errorMessage?.includes("Missing required fields")) {
-            // More specific error for missing subOpId
-            if (errorMessage?.includes("subOpId")) {
-              errorMessage = "Please provide sub-operation ID";
-            } else {
-              errorMessage = "Please fill all required fields";
-            }
-          } else if (errorMessage?.includes("No file uploaded")) {
-            errorMessage = "No image file selected";
-          }
-        } else if (error.response.status === 413) {
+        if (error.response.status === 413) {
           errorTitle = "File Too Large";
-          errorMessage = "Image file exceeds size limit. Maximum size is 50MB";
+          errorMessage = "Video exceeds server size limit.";
         } else if (error.response.status === 415) {
           errorTitle = "Unsupported Format";
           errorMessage =
-            "Image format not supported. Please use JPEG, PNG, or WebP";
-        } else if (
-          error.response.status === 502 ||
-          error.response.status === 503
-        ) {
-          errorTitle = "Cloud Storage Error";
-          errorMessage = "Unable to upload to cloud storage. Please try again.";
-          timerDuration = 6000;
-        } else if (error.response.status >= 500) {
-          errorTitle = "Server Error";
-          errorMessage = "Server encountered an error. Please try again later.";
-          timerDuration = 6000;
+            "Video format not supported. Please try recording again.";
         }
-      } else if (error.request) {
-        errorTitle = "Network Error";
-        errorMessage =
-          "Unable to connect to server. Please check your internet connection.";
       } else if (error.code === "ECONNABORTED") {
-        errorTitle = "Timeout Error";
+        errorTitle = "Timeout";
         errorMessage = "Upload took too long. Please try again.";
-      } else {
-        errorTitle = "Upload Error";
-        errorMessage = error.message || "An unexpected error occurred";
+      } else if (!error.response) {
+        errorTitle = "Network Error";
+        errorMessage = "Unable to connect to server.";
       }
 
       Swal.fire({
         title: errorTitle,
         text: errorMessage,
-        timer: timerDuration,
-        showTimeProgress: true,
-        showCancelButton: false,
         icon: "error",
+        confirmButtonText: "OK",
       });
 
       setUploading(false);
@@ -333,21 +356,135 @@ const ImageCaptureOrBrowse = ({
   // Handle file selection for upload
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
-    if (file && file.type.includes("image")) {
-      const imageUrl = URL.createObjectURL(file);
-      setCapturedImage(imageUrl);
-      setImageBlob(file);
-      setStatus("preview");
-      stopCamera();
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = [
+      "video/mp4",
+      "video/webm",
+      "video/quicktime",
+      "video/x-msvideo",
+      "video/x-matroska",
+    ];
+
+    const isValidType = validTypes.some((type) =>
+      file.type.includes(type.replace("video/", ""))
+    );
+
+    if (!isValidType) {
+      Swal.fire({
+        title: "Invalid File",
+        text: "Please select a video file (MP4, WebM, MOV, AVI, MKV)",
+        icon: "error",
+        timer: 4000,
+      });
+      return;
+    }
+
+    // Validate file size (100MB limit)
+    if (file.size > 100 * 1024 * 1024) {
+      Swal.fire({
+        title: "File Too Large",
+        text: "Video exceeds 100MB limit. Please select a smaller file.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
+    const videoUrl = URL.createObjectURL(file);
+    setRecordedVideo(videoUrl);
+    setRecordedBlob(file);
+    setStatus("preview");
+
+    if (previewVideoRef.current) {
+      previewVideoRef.current.load();
     }
   };
 
   // Stop camera
   const stopCamera = () => {
     if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream.getTracks().forEach((track) => {
+        track.stop();
+      });
       setMediaStream(null);
     }
+  };
+
+  // Start recording
+  const startRecording = () => {
+    if (!mediaStream) return;
+
+    recordedChunks.current = [];
+    const options = getRecordingSettings();
+
+    console.log("Starting recording with options:", options);
+
+    try {
+      const recorder = new MediaRecorder(mediaStream, options);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunks.current, {
+          type: recordedChunks.current[0]?.type || "video/webm",
+        });
+
+        // Check if file is too large before preview
+        if (blob.size > 100 * 1024 * 1024) {
+          Swal.fire({
+            title: "Recording Too Long",
+            text: "Your recording exceeds 100MB. Please record a shorter video.",
+            icon: "warning",
+            confirmButtonText: "OK",
+          });
+          reset();
+          return;
+        }
+
+        const videoUrl = URL.createObjectURL(blob);
+        setRecordedVideo(videoUrl);
+        setRecordedBlob(blob);
+        setStatus("preview");
+
+        if (previewVideoRef.current) {
+          previewVideoRef.current.load();
+          previewVideoRef.current.play().catch((e) => {
+            console.log("Preview autoplay prevented:", e);
+          });
+        }
+      };
+
+      // For mobile, use timeslice for better performance
+      const timeslice = isMobile ? 500 : 1000;
+      recorder.start(timeslice);
+      mediaRecorderRef.current = recorder;
+      setRecording(true);
+      setStatus("recording");
+    } catch (error) {
+      console.error("Recording error:", error);
+      setStatus("error");
+      Swal.fire({
+        title: "Recording Error",
+        text: `Cannot start recording: ${error.message}`,
+        icon: "error",
+        timer: 4000,
+      });
+    }
+  };
+
+  // Stop recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+    stopCamera();
   };
 
   // Switch camera
@@ -355,9 +492,9 @@ const ImageCaptureOrBrowse = ({
     setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
   };
 
-  // Toggle fullscreen for image preview
+  // Toggle fullscreen
   const toggleFullscreen = () => {
-    const element = previewImageRef.current;
+    const element = previewVideoRef.current;
     if (!element) return;
 
     if (!document.fullscreenElement) {
@@ -377,31 +514,37 @@ const ImageCaptureOrBrowse = ({
 
   // Reset flow
   const reset = () => {
-    setCapturedImage(null);
-    setImageBlob(null);
+    if (recordedVideo) {
+      URL.revokeObjectURL(recordedVideo);
+    }
+    setRecordedVideo(null);
+    setRecordedBlob(null);
     setStatus("idle");
     stopCamera();
+    stopRecording();
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   };
 
   return (
-    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-4 lg:p-6 w-full mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
-      {/* Hidden canvas for image capture */}
-      <canvas ref={canvasRef} className="hidden" />
-
+    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-3 sm:p-4 lg:p-6 w-full mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
       <div className="text-right relative">
         <button
-          className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
+          className="hover:bg-red-600 px-3 py-1 sm:px-4 sm:py-2 rounded-full absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10 transition-colors"
           onClick={() => {
-            // setIsUploading(false);
-            setUploadingMaterial(null);
+            reset();
+            setUploadingMaterial?.(null);
           }}
           disabled={uploading}
         >
-          <RxCross2 className="text-2xl" />
+          <RxCross2 className="text-xl sm:text-2xl" />
         </button>
       </div>
-      <h2 className="text-2xl font-bold mb-6 text-center">
-        {status === "preview" ? "Image Preview" : "Capture or Upload an Image"}
+
+      <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">
+        {status === "preview" ? "Video Preview" : "Record or Upload Video"}
       </h2>
 
       {/* Upload progress */}
@@ -420,84 +563,95 @@ const ImageCaptureOrBrowse = ({
         </div>
       )}
 
-      {/* Status indicators */}
-      {status === "error" && (
-        <div className="bg-red-900 text-red-100 p-3 rounded-lg mb-4">
-          Camera error occurred. Please try again.
-        </div>
-      )}
-
-      {/* Camera/Image Preview Area */}
-      <div className="relative rounded-lg overflow-hidden border-2 border-gray-700 mb-6 bg-black">
-        {status !== "preview" ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full aspect-video object-cover"
-          />
-        ) : (
-          <div className="relative">
-            <img
-              ref={previewImageRef}
-              src={capturedImage}
-              alt="Captured preview"
-              className="w-full aspect-video object-contain bg-black"
+      {/* Video Preview Area - Responsive */}
+      <div className="relative rounded-lg overflow-hidden border-2 border-red-700 mb-4 sm:mb-6 bg-black">
+        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+          {" "}
+          {/* 16:9 aspect ratio */}
+          {status !== "preview" ? (
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="absolute top-0 left-0 w-full h-full object-cover"
             />
-            {isMobile && (
-              <button
-                onClick={toggleFullscreen}
-                className="absolute bottom-4 right-4 bg-black bg-opacity-50 text-white p-2 rounded-full"
-                aria-label="Fullscreen"
-              >
-                <FaExpand />
-              </button>
-            )}
+          ) : (
+            <div className="absolute top-0 left-0 w-full h-full">
+              <video
+                ref={previewVideoRef}
+                src={recordedVideo}
+                controls
+                playsInline
+                className="w-full h-full object-contain"
+              />
+              {isMobile && (
+                <button
+                  onClick={toggleFullscreen}
+                  className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4 bg-black bg-opacity-70 text-white p-1 sm:p-2 rounded-full hover:bg-opacity-90 transition"
+                  aria-label="Fullscreen"
+                >
+                  <FaExpand className="text-sm sm:text-base" />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Recording indicator with timer */}
+        {status === "recording" && (
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 bg-red-600 text-white px-2 py-1 sm:px-3 sm:py-1 rounded-full flex items-center gap-2 animate-pulse">
+            <div className="w-2 h-2 sm:w-3 sm:h-3 bg-white rounded-full"></div>
+            <span className="font-semibold text-xs sm:text-sm">REC</span>
+            <span className="text-xs sm:text-sm font-mono">
+              {formatRecordingTime(recordingTime)}
+            </span>
           </div>
         )}
 
-        {/* Capture indicator */}
-        {status === "ready" && (
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
-            <div className="w-16 h-16 border-4 border-white rounded-full bg-transparent flex items-center justify-center">
-              <div className="w-12 h-12 bg-white rounded-full"></div>
-            </div>
+        {/* File size warning */}
+        {status === "preview" && recordedBlob && (
+          <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
+            Size: {(recordedBlob.size / (1024 * 1024)).toFixed(1)} MB
           </div>
         )}
       </div>
 
-      {/* Step-by-step instructions */}
-      <div className="mb-6 text-gray-300 text-sm text-center">
-        {status === "idle" && (
-          <p>Start by opening your camera or uploading an image file</p>
-        )}
-        {status === "ready" && (
-          <p>Camera is ready. Press capture to take a photo</p>
+      {/* Instructions */}
+      <div className="mb-4 sm:mb-6 text-gray-300 text-xs sm:text-sm text-center px-2">
+        {status === "idle" && <p>Open camera or upload a video (max 100MB)</p>}
+        {status === "ready" && <p>Camera ready. Tap record when prepared</p>}
+        {status === "recording" && (
+          <p>
+            <span className="text-red-400 font-semibold">● Recording</span> -
+            Tap stop when finished
+          </p>
         )}
         {status === "preview" && (
-          <p>Review your image {isMobile && "or tap fullscreen icon"}</p>
+          <p>
+            Review your video {isMobile && "• Tap fullscreen for better view"}
+          </p>
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex flex-wrap justify-center gap-3">
+      {/* Action Buttons - Responsive */}
+      <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
         {/* Idle state */}
         {status === "idle" && (
           <>
             <button
               onClick={startCamera}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center"
+              className="flex items-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center min-w-[120px] text-sm sm:text-base"
               disabled={uploading}
             >
-              <FaCamera /> Open Camera
+              <FaCamera className="text-sm sm:text-base" /> Open Camera
             </button>
-            <label className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-3 rounded-lg font-medium cursor-pointer transition flex-1 justify-center">
-              <FaUpload /> Upload Image
+            <label className="flex items-center gap-1 sm:gap-2 bg-gray-700 hover:bg-gray-800 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium cursor-pointer transition flex-1 justify-center min-w-[120px] text-sm sm:text-base">
+              <FaUpload className="text-sm sm:text-base" /> Upload Video
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="video/*"
                 onChange={handleFileUpload}
                 className="hidden"
                 disabled={uploading}
@@ -510,22 +664,24 @@ const ImageCaptureOrBrowse = ({
         {status === "ready" && (
           <>
             <button
-              onClick={captureImage}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center"
+              onClick={startRecording}
+              className="flex items-center gap-1 sm:gap-2 bg-red-600 hover:bg-red-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
               disabled={uploading}
             >
-              📸 Capture Image
+              🎥 Start Recording
             </button>
-            <button
-              onClick={switchCamera}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-3 rounded-lg font-medium transition"
-              disabled={uploading}
-            >
-              <FaSyncAlt /> Switch Camera
-            </button>
+            {isMobile && (
+              <button
+                onClick={switchCamera}
+                className="flex items-center gap-1 sm:gap-2 bg-purple-600 hover:bg-purple-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition min-w-[80px] sm:min-w-[100px] justify-center text-sm sm:text-base"
+                disabled={uploading}
+              >
+                <FaSyncAlt className="text-sm sm:text-base" /> Flip
+              </button>
+            )}
             <button
               onClick={reset}
-              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-3 rounded-lg font-medium transition"
+              className="flex items-center gap-1 sm:gap-2 bg-gray-700 hover:bg-gray-800 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition min-w-[80px] sm:min-w-[100px] justify-center text-sm sm:text-base"
               disabled={uploading}
             >
               Cancel
@@ -533,46 +689,68 @@ const ImageCaptureOrBrowse = ({
           </>
         )}
 
+        {/* Recording state */}
+        {status === "recording" && (
+          <button
+            onClick={stopRecording}
+            className="flex items-center gap-1 sm:gap-2 bg-red-600 hover:bg-red-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition w-full justify-center text-sm sm:text-base animate-pulse"
+            disabled={uploading}
+          >
+            <FaStop className="text-sm sm:text-base" /> Stop Recording
+          </button>
+        )}
+
         {/* Preview state */}
         {status === "preview" && (
-          <div className="flex gap-3 w-full">
+          <div className="flex gap-2 sm:gap-3 w-full">
             <button
               onClick={reset}
-              className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 px-4 py-3 rounded-lg font-medium transition flex-1"
+              className="flex items-center gap-1 sm:gap-2 bg-yellow-600 hover:bg-yellow-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
               disabled={uploading}
             >
-              <FaRedo /> Re-capture
+              <FaRedo className="text-sm sm:text-base" /> Re-record
             </button>
             <button
-              onClick={() => handleUpload()}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-medium transition flex-1"
+              onClick={handleUpload}
+              className="flex items-center gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
               disabled={uploading}
             >
-              {uploading ? <ClipLoader size={16} color="white" /> : <FaCheck />}
-              {uploading ? "Uploading..." : "Confirm"}
+              {uploading ? (
+                <>
+                  <ClipLoader size={14} color="white" />
+                  <span>Uploading...</span>
+                </>
+              ) : (
+                <>
+                  <FaCheck className="text-sm sm:text-base" /> Upload
+                </>
+              )}
             </button>
           </div>
         )}
 
         {/* Loading state */}
         {status === "loading" && (
-          <button
-            className="flex items-center gap-2 bg-gray-700 px-4 py-3 rounded-lg font-medium w-full justify-center"
-            disabled
-          >
-            <ClipLoader size={16} color="white" /> Loading Camera...
-          </button>
+          <div className="w-full text-center py-3">
+            <ClipLoader size={20} color="white" />
+            <p className="mt-2 text-sm">Loading camera...</p>
+          </div>
         )}
       </div>
 
       {/* Camera facing mode indicator */}
-      {status === "ready" && (
-        <div className="mt-4 text-center text-sm text-gray-400">
+      {(status === "ready" || status === "recording") && (
+        <div className="mt-3 sm:mt-4 text-center text-xs sm:text-sm text-gray-400">
           Using {cameraFacing === "environment" ? "back" : "front"} camera
         </div>
       )}
+
+      {/* Size warning */}
+      <div className="mt-3 text-center text-xs text-yellow-400">
+        ⚠️ Maximum video size: 100MB
+      </div>
     </div>
   );
 };
 
-export default ImageCaptureOrBrowse;
+export default CameraOrBrowse;

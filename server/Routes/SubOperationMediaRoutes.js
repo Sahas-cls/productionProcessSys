@@ -47,38 +47,24 @@ const generateFilenames = (req, res, next) => {
 const videoUpload = multer({
   storage: storage,
   limits: {
-    fileSize: 1024 * 1024 * 1024, // 1GB limit
-    files: 1, // Limit to 1 file
+    fileSize: 100 * 1024 * 1024, // 100MB
+    files: 1,
   },
   fileFilter: (req, file, cb) => {
-    // Check if it's a video file
-    if (!file.mimetype.startsWith("video/")) {
-      return cb(new Error("Only video files are allowed"), false);
+    console.log("Multer receiving:", {
+      mimetype: file.mimetype,
+      originalname: file.originalname,
+      extension: path.extname(file.originalname),
+    });
+
+    // Accept any video MIME type
+    if (file.mimetype.startsWith("video/")) {
+      console.log("✅ Accepting video file");
+      return cb(null, true);
     }
 
-    // Check file extension
-    const allowedExtensions = [
-      ".mp4",
-      ".avi",
-      ".mov",
-      ".mkv",
-      ".webm",
-      ".wmv",
-      ".flv",
-      ".m4v",
-    ];
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-
-    if (!allowedExtensions.includes(fileExtension)) {
-      return cb(
-        new Error(
-          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`
-        ),
-        false
-      );
-    }
-
-    cb(null, true);
+    console.log("❌ Rejecting non-video file");
+    return cb(new Error("Only video files are allowed"), false);
   },
 });
 
