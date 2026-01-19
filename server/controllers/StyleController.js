@@ -37,7 +37,7 @@ async function saveImageToB2(file, styleNo, imageType, styleId) {
     const uploadResult = await b2Storage.uploadFile(
       file.buffer,
       fileName,
-      `styles/${styleId}` // Optional: keep folder structure
+      `styles/${styleId}`, // Optional: keep folder structure
     );
 
     if (uploadResult) {
@@ -65,7 +65,7 @@ async function deleteFileFromB2(mediaRecord) {
       console.log(`Deleting B2 file with ID: ${mediaRecord.b2_file_id}`);
       return await b2Storage.deleteFile(
         mediaRecord.b2_file_id,
-        mediaRecord.media_url
+        mediaRecord.media_url,
       );
     }
     // Otherwise try to delete by path
@@ -76,13 +76,13 @@ async function deleteFileFromB2(mediaRecord) {
   } catch (error) {
     console.error(
       `Failed to delete B2 file ${mediaRecord.media_url}:`,
-      error.message
+      error.message,
     );
 
     // Don't throw error for "file not found" - it might already be deleted
     if (error.code === "NoSuchKey" || error.code === "NotFound") {
       console.log(
-        `File ${mediaRecord.media_url} not found (may already be deleted)`
+        `File ${mediaRecord.media_url} not found (may already be deleted)`,
       );
       return { success: true, message: "File not found (already deleted)" };
     }
@@ -139,7 +139,7 @@ exports.getStyles = async (req, res, next) => {
               } catch (error) {
                 console.error(
                   `Error generating URL for media ${media.media_url}:`,
-                  error
+                  error,
                 );
                 // Return the media without URLs if there's an error
                 return {
@@ -149,12 +149,12 @@ exports.getStyles = async (req, res, next) => {
                   error: "Failed to generate URL",
                 };
               }
-            })
+            }),
           );
         }
 
         return styleData;
-      })
+      }),
     );
 
     if (styles) {
@@ -281,7 +281,7 @@ exports.addStyle = async (req, res, next) => {
 
     if (findStyleNo.length > 0) {
       const error = new Error(
-        "The provided style number and po number already exist, please check your data"
+        "The provided style number and po number already exist, please check your data",
       );
       error.status = 400;
       throw error;
@@ -314,7 +314,7 @@ exports.addStyle = async (req, res, next) => {
           file,
           styleNo,
           "front",
-          style.style_id
+          style.style_id,
         );
 
         if (uploadResult) {
@@ -336,7 +336,7 @@ exports.addStyle = async (req, res, next) => {
           file,
           styleNo,
           "back",
-          style.style_id
+          style.style_id,
         );
 
         if (uploadResult) {
@@ -376,7 +376,7 @@ exports.addStyle = async (req, res, next) => {
 exports.editStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
-    error.status = 401;
+    error.status = 403; // Forbidden
     return next(error);
   }
 
@@ -407,7 +407,7 @@ exports.editStyle = async (req, res, next) => {
 
     if (findStyleNo.length > 0) {
       const error = new Error(
-        "The provided style number and po number already exist, please check your data"
+        "The provided style number and po number already exist, please check your data",
       );
       error.status = 400;
       throw error;
@@ -453,13 +453,13 @@ exports.editStyle = async (req, res, next) => {
         try {
           await b2Storage.deleteFile(
             existingMedia.b2_file_id,
-            existingMedia.media_url
+            existingMedia.media_url,
           );
           console.log(`Deleted old ${imageType} image from B2`);
         } catch (deleteError) {
           console.warn(
             `Could not delete old ${imageType} image:`,
-            deleteError.message
+            deleteError.message,
           );
           // Continue anyway - don't fail the whole update
         }
@@ -470,7 +470,7 @@ exports.editStyle = async (req, res, next) => {
         file,
         styleNo,
         imageType,
-        styleId
+        styleId,
       );
 
       if (uploadResult) {
@@ -482,7 +482,7 @@ exports.editStyle = async (req, res, next) => {
             b2_file_id: uploadResult.fileId,
             media_type: imageType,
           },
-          { transaction: t }
+          { transaction: t },
         );
 
         return true;
@@ -552,7 +552,7 @@ exports.deleteStyle = async (req, res, next) => {
     console.log(
       `Deleting style ${styleId} with ${
         style.style_medias?.length || 0
-      } media files`
+      } media files`,
     );
 
     // 1️⃣ Delete files from B2 storage (if any)
@@ -572,7 +572,7 @@ exports.deleteStyle = async (req, res, next) => {
         } catch (deleteError) {
           console.warn(
             `⚠️ Could not delete file ${media.media_url}:`,
-            deleteError.message
+            deleteError.message,
           );
           // Continue deleting other files - don't fail entire operation
           // File might already be deleted or not exist
@@ -647,7 +647,7 @@ exports.generateExcel = async (req, res, next) => {
     // Set response headers for download
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     res.setHeader("Content-Disposition", "attachment; filename=styles.xlsx");
 

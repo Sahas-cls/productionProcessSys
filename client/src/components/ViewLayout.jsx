@@ -19,7 +19,7 @@ const ViewLayout = () => {
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
   const apiUrl = import.meta.env.VITE_API_URL;
 
-  console.log("layout list: ", layoutList);
+  // console.log("layout list: ", layoutList);
 
   // Close menu when clicking outside
   useEffect(() => {

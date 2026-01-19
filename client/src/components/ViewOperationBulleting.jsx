@@ -15,7 +15,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
     operationBulletingList,
     setOperationBulletingList,
   } = useOperationBulletin();
-  console.log("on view bo", operationBulletingList);
+  // console.log("on view bo", operationBulletingList);
   const [currentPage, setCurrentPage] = useState(0);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
@@ -149,7 +149,7 @@ const StyleCard = ({ style, onViewDetails }) => {
   const getImageUrl = (mediaUrl) => {
     if (!mediaUrl) return null;
     if (mediaUrl.startsWith("http")) return mediaUrl;
-    return `${apiUrl}/api/b2-files/${mediaUrl}`;;
+    return `${apiUrl}/api/b2-files/${mediaUrl}`;
   };
 
   // Calculate total sub-operations across all main operations
@@ -157,7 +157,7 @@ const StyleCard = ({ style, onViewDetails }) => {
     style.operations?.reduce((total, op) => {
       return total + (op.subOperations?.length || 0);
     }, 0) || 0;
-  console.log("style ---- ", style);
+  // console.log("style ---- ", style);
   return (
     <div className="bg-white rounded-3xl border  border-gray-200 shadow-xl overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-1 flex flex-col h-full">
       {/* Card Header */}
@@ -168,9 +168,9 @@ const StyleCard = ({ style, onViewDetails }) => {
             {style.style_no || "N/A"}
           </span>
         </h3>
-        <p className="text-xs mt-0.5">
+        {/* <p className="text-xs mt-0.5">
           PO: <span className="font-semibold">{style.po_number || "N/A"}</span>
-        </p>
+        </p> */}
       </div>
 
       {/* Image */}

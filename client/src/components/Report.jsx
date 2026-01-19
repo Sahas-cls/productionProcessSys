@@ -22,7 +22,7 @@ const Report = () => {
   const [expandedOperations, setExpandedOperations] = useState({});
   const { user, loading: userLoading } = useAuth();
   const userRole = user?.userRole;
-  console.log("expanded operations", operations);
+  // console.log("expanded operations", operations);
   // Memoize API URL
   const memoizedApiUrl = useMemo(() => apiUrl, [apiUrl]);
 

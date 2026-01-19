@@ -13,7 +13,7 @@ function useUsers() {
       const response = await axios.get(`${apiUrl}/api/user/getAllUsers`, {
         withCredentials: true,
       });
-      console.log("users count from hook: ", response);
+      // console.log("users count from hook: ", response);
       setUsers(response.data.data || []);
     } catch (error) {
       console.error(error);

@@ -18,7 +18,7 @@ function useNotifications() {
       if (response.status === 200) {
         setNotifications(response.data?.data || []);
       }
-      console.log("Notification response: ", response);
+      // console.log("Notification response: ", response);
     } catch (error) {
       console.error("Error fetching notifications:", error);
     } finally {

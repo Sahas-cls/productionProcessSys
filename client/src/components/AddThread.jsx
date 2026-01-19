@@ -19,7 +19,7 @@ const AddThread = () => {
   const [editingThread, setEditingThread] = useState(null);
   const [searchTerm, setSearchTerm] = useState(null);
 
-  console.log("threads: ", threadList);
+  // console.log("threads: ", threadList);
 
   const filteredThreads = useMemo(() => {
     if (!searchTerm) {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { IoSearchSharp } from "react-icons/io5";
 import { IoMdAdd } from "react-icons/io";
 import { MdModeEditOutline, MdDeleteForever } from "react-icons/md";
@@ -26,7 +26,11 @@ const AddSeason = ({ userRole }) => {
   const { seasonsList, seasonRefresh } = useSeasons();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
+  const [customerSearchKey, setCustomerSearchKey] = useState(null);
+  const [isCusSuggest, setIsCusSuggest] = useState(false);
   const navigate = useNavigate();
+  const wrapperRef = useRef(null);
+  // const [customerSearch, setCustomerSearch] =
 
   // Memoized filtered seasons based on search term
   const filteredSeasons = useMemo(() => {
@@ -67,6 +71,22 @@ const AddSeason = ({ userRole }) => {
       }
     };
   }, [searchTimeout]);
+
+  // customer select section outside click event catcher
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      // alert("clicking outside");
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsCusSuggest(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Animation variants with full transition definitions
   const containerVariants = {
@@ -169,6 +189,24 @@ const AddSeason = ({ userRole }) => {
       )
       .min(1, "At least one season is required"),
   });
+
+  const filteredCustomer = useMemo(() => {
+    if (customerList && !customerSearchKey) {
+      return customerList;
+    }
+
+    if (customerList) {
+      return customerList.filter((value) =>
+        value.customer_name
+          .toLowerCase()
+          .includes(customerSearchKey.toLowerCase())
+      );
+    }
+  }, [customerSearchKey]);
+
+  useEffect(() => {
+    // console.log("Filtered customer: ", filteredCustomer);
+  }, [filteredCustomer]);
 
   // Formik setup
   const formik = useFormik({
@@ -295,12 +333,15 @@ const AddSeason = ({ userRole }) => {
 
   // Edit season from table
   const handleEditSeasonFromTable = (season) => {
+    // console.log("selected season: ", season);
+    // return;
     formik.setValues({
       seasonId: season.season_id,
       customer: season.customer_id,
       seasons: [{ name: season.season }],
       currentSeason: season.season,
     });
+    setCustomerSearchKey(season.customer?.customer_name || "N/A");
     setEditingIndex(0);
     setEditingSeasonId(season.season_id);
     setIsAddFactory(true);
@@ -345,6 +386,7 @@ const AddSeason = ({ userRole }) => {
     setIsAddFactory(false);
     formik.resetForm();
     setEditingIndex(null);
+    setCustomerSearchKey(null);
     setEditingSeasonId(null);
     setServerMessage(null);
   };
@@ -430,35 +472,55 @@ const AddSeason = ({ userRole }) => {
                     >
                       Customer
                     </label>
-                    <select
-                      id="customer"
-                      name="customer"
-                      className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
-                        formik.touched.customer && formik.errors.customer
-                          ? "border-red-500 focus:ring-red-500"
-                          : "border-gray-300 focus:ring-blue-500"
-                      } focus:border-transparent transition-all duration-200`}
-                      value={formik.values.customer}
-                      onChange={formik.handleChange}
-                      onBlur={formik.handleBlur}
-                    >
-                      <option value="">Select a customer</option>
-                      {customerList.map((customer) => (
-                        <option
-                          key={customer.customer_id}
-                          value={customer.customer_id}
-                        >
-                          {customer.customer_name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative" ref={wrapperRef}>
+                      <input
+                        type="text"
+                        onChange={(e) => setCustomerSearchKey(e.target.value)}
+                        onFocus={() => setIsCusSuggest(true)}
+                        placeholder="Search by customer"
+                        id="customer"
+                        name="customer"
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 ${
+                          formik.touched.customer && formik.errors.customer
+                            ? "border-red-500 focus:ring-red-500"
+                            : "border-gray-300 focus:ring-blue-500"
+                        } focus:border-transparent transition-all duration-200`}
+                        value={customerSearchKey}
+                        onBlur={(e) => {
+                          formik.handleBlur(e);
+                          formik.setFieldTouched("customer", true);
+                        }}
+                      />
+                      {isCusSuggest && (
+                        <div className="absolute w-full rounded-b-md bg-white shadow-md border">
+                          {filteredCustomer && filteredCustomer.length > 0 ? (
+                            filteredCustomer.map((cus) => (
+                              <div
+                                className="border-b hover:bg-gray-200 cursor-pointer"
+                                onClick={() => {
+                                  formik.setFieldValue(
+                                    "customer",
+                                    cus.customer_id
+                                  );
+                                  setCustomerSearchKey(cus.customer_name);
+                                  setIsCusSuggest(false);
+                                }}
+                              >
+                                <p className="p-2">{cus.customer_name}</p>
+                              </div>
+                            ))
+                          ) : (
+                            <p>There is no any customers yet</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     {formik.touched.customer && formik.errors.customer && (
                       <div className="text-red-500 text-sm mt-1">
                         {formik.errors.customer}
                       </div>
                     )}
                   </motion.div>
-
                   {/* Season Input */}
                   <motion.div
                     className="space-y-2"
@@ -623,8 +685,8 @@ const AddSeason = ({ userRole }) => {
                     {loading
                       ? "Processing..."
                       : editingSeasonId
-                      ? "Update"
-                      : "Save"}
+                        ? "Update"
+                        : "Save"}
                   </motion.button>
                 </motion.div>
               </form>

@@ -7,7 +7,7 @@ function useStyles() {
   const apiUrl = import.meta.env.VITE_API_URL;
 
   const fetchStyles = async () => {
-    console.log("fetching styles");
+    // console.log("fetching styles");
     try {
       setIsLoading(true);
       const response = await axios.get(`${apiUrl}/api/styles/getStyles`, {

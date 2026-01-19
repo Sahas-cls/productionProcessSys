@@ -388,7 +388,7 @@ const AddOpExcel = () => {
       }
     } catch (err) {
       console.error("Submit error:", err);
-      setError("Failed to save operations - please try again");
+      setError(err?.response?.data.error || "Failed to save operations - please try again");
     } finally {
       setSubmitting(false);
     }

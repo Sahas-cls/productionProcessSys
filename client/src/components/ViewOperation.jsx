@@ -425,6 +425,12 @@ const ViewStyleDetails = () => {
                                     </p>
                                     <p className="text-gray-600">
                                       <span className="font-medium">
+                                        Machine type:
+                                      </span>{" "}
+                                      {subOp.machine_type || "N/A"}
+                                    </p>
+                                    <p className="text-gray-600">
+                                      <span className="font-medium">
                                         Created:
                                       </span>{" "}
                                       {formatDate(subOp.createdAt)}

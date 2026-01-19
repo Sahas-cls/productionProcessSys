@@ -714,7 +714,7 @@ const AddStyle = ({ userRole }) => {
             </motion.div>
 
             {/* po number */}
-            <motion.div variants={itemVariants} className="mb-6">
+            {/* <motion.div variants={itemVariants} className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 PO Number
               </label>
@@ -737,7 +737,7 @@ const AddStyle = ({ userRole }) => {
                   {formik.errors.poNumber}
                 </motion.div>
               )}
-            </motion.div>
+            </motion.div> */}
 
             {/* Description */}
             <motion.div variants={itemVariants} className="mb-6">

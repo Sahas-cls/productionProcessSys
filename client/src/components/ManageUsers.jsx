@@ -27,7 +27,7 @@ const ManageUsers = ({ userRole }) => {
   const [message, setMessage] = useState({ status: null, message: null });
   const navigate = useNavigate();
   // Fetch available roles
-  console.log("user role: ", userRole);
+  // console.log("user role: ", userRole);
   const checkUser = async () => {
     if (userRole && !userRole.toLowerCase().includes("admin")) {
       await Swal.fire({

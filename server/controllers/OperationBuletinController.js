@@ -1217,7 +1217,7 @@ exports.createHelperOps = async (req, res, next) => {
 /**
  * Process uploaded Excel file and extract operations
  */
-(exports.processExcel = async (req, res) => {
+((exports.processExcel = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -1315,7 +1315,7 @@ exports.createHelperOps = async (req, res, next) => {
         maxSize: "10MB",
       },
     });
-  });
+  }));
 
 exports.saveOperations = async (req, res, next) => {
   const transaction = await sequelize.transaction();
@@ -1337,7 +1337,7 @@ exports.saveOperations = async (req, res, next) => {
       await transaction.rollback();
       return res.status(404).json({
         success: false,
-        error: `Style with number "${styleNo}" not found`,
+        error: `We couldn’t find style number "${styleNo}". Please add the style first, then add operations.`,
       });
     }
 

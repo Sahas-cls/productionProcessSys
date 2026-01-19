@@ -16,7 +16,7 @@ function useOperationBulleting() {
         }
       );
       if (response.status === 200) {
-        console.log("response:- ", response.data.data);
+        // console.log("response:- ", response.data.data);
         setOperationBulletingList(response.data.data);
       }
     } catch (error) {
