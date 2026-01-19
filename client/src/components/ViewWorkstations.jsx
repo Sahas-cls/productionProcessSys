@@ -111,7 +111,7 @@ const ViewWorkstations = () => {
     try {
       setIsLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/workstations/getWorkstations/${state.layout}`
+        `${apiUrl}/api/workstations/getWorkstations/${state.layout}`,
       );
       setWorkstationList(response.data.data);
     } catch (error) {
@@ -158,7 +158,7 @@ const ViewWorkstations = () => {
       const response = await axios.post(
         `${apiUrl}/api/workstations/addEmptyWorkstation/${state.layout}`,
         { workstation_no: workstationNo },
-        { withCredentials: true }
+        { withCredentials: true },
       );
       if (response.status === 200) {
         getWorkstations();
@@ -181,7 +181,7 @@ const ViewWorkstations = () => {
 
     try {
       const response = await axios.delete(
-        `${apiUrl}/api/workstations/deleteWS/${workstation_id}`
+        `${apiUrl}/api/workstations/deleteWS/${workstation_id}`,
       );
       if (response.status === 200) {
         // await Swal.fire({
@@ -210,7 +210,7 @@ const ViewWorkstations = () => {
 
     try {
       const response = await axios.delete(
-        `${apiUrl}/api/workstations/deleteSubOperation/${subOpId}/${wsId}`
+        `${apiUrl}/api/workstations/deleteSubOperation/${subOpId}/${wsId}`,
       );
 
       if (response.status === 200) {
@@ -266,7 +266,7 @@ const ViewWorkstations = () => {
       const response = await axios.put(
         `${apiUrl}/api/workstations/renameWorkstation/${workstationId}`,
         { workstation_no: newWorkstationNo.trim() },
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.status === 200) {
@@ -275,8 +275,8 @@ const ViewWorkstations = () => {
           prevList.map((ws) =>
             ws.workstation_id === workstationId
               ? { ...ws, workstation_no: newWorkstationNo.trim() }
-              : ws
-          )
+              : ws,
+          ),
         );
         setEditingWorkstationId(null);
         setNewWorkstationNo("");
@@ -376,7 +376,7 @@ const ViewWorkstations = () => {
             }}
             className="fixed w[] left-0 backdrop-brightness-50 right-0 bottom-0 w-full z-50 lg:w-full lg:h-screen lg:flex lg:justify-center lg:items-center"
           >
-            <div className="md:w-[45%]">
+            <div className="md:w-[100%] flex justify-center">
               {/* <CameraOrBrowse
                 setIsUploading={setIsUploading}
                 uploadingData={uploadingData}
@@ -567,7 +567,7 @@ const ViewWorkstations = () => {
                                   <button
                                     onClick={() =>
                                       saveWorkstationNo(
-                                        workstation.workstation_id
+                                        workstation.workstation_id,
                                       )
                                     }
                                     className="hover:bg-green-300/40 p-1 rounded-md duration-150"
@@ -624,7 +624,7 @@ const ViewWorkstations = () => {
                                 className="bg-red-300/40 p-1 text-red-700 rounded"
                                 onClick={() =>
                                   handleWorkstationDelete(
-                                    workstation.workstation_id
+                                    workstation.workstation_id,
                                   )
                                 }
                               >
@@ -692,7 +692,7 @@ const ViewWorkstations = () => {
                                             onClick={() =>
                                               handleDeleteSubOP(
                                                 subOp.sub_operation_id,
-                                                workstation.workstation_id
+                                                workstation.workstation_id,
                                               )
                                             }
                                             className="text-xl hover:scale-150"
@@ -710,7 +710,7 @@ const ViewWorkstations = () => {
                                                 .main_operation_id,
                                               subOp.sub_operation_id,
                                               subOp.suboperatoin
-                                                .sub_operation_name
+                                                .sub_operation_name,
                                             );
                                             setIsUploading(true);
                                           }}
@@ -763,7 +763,7 @@ const ViewWorkstations = () => {
                                                   subOpId:
                                                     subOp.sub_operation_id,
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >
@@ -783,7 +783,7 @@ const ViewWorkstations = () => {
                                                   subOpId:
                                                     subOp.sub_operation_id,
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >
@@ -835,7 +835,7 @@ const ViewWorkstations = () => {
                                                   subOpId:
                                                     subOp.sub_operation_id,
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >
@@ -854,7 +854,7 @@ const ViewWorkstations = () => {
                                                   subOpId:
                                                     subOp.sub_operation_id,
                                                 },
-                                              }
+                                              },
                                             )
                                           }
                                         >

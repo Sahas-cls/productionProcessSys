@@ -17,7 +17,7 @@ const UploadMaterial = ({
     "flex items-center justify-center gap-3 px-6 py-3 bg-blue-500 font-semibold text-white rounded-md shadow-md hover:bg-blue-600 hover:scale-105 transition group";
 
   return (
-    <div className="w-full min-h-[400px] relative border shadow-lg rounded-lg bg-gray-900 border-gray-400">
+    <div className="w-full min-h-[400px] lg:max-w-[700px] relative border shadow-lg rounded-lg bg-gray-900 border-gray-400">
       <div className="">
         <button
           type="button"
@@ -34,7 +34,7 @@ const UploadMaterial = ({
         </h1>
       </div>
 
-      <div className="flex flex-col mt-8 space-y-6 px-20">
+      <div className="flex flex-col mt-8 space-y-6 px-10">
         <button
           className={btnStyle}
           onClick={() => handleMaterialType("video")}

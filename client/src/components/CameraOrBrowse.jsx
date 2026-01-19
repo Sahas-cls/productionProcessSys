@@ -11,6 +11,8 @@ import {
   FaCompress,
   FaVideo,
   FaCog,
+  FaPlay,
+  FaPause,
 } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
@@ -44,6 +46,8 @@ const CameraOrBrowse = ({
   const [originalSize, setOriginalSize] = useState(0);
   const [compressedSize, setCompressedSize] = useState(0);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [videoError, setVideoError] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef(null);
@@ -130,6 +134,41 @@ const CameraOrBrowse = ({
     setIsFullscreen(!!document.fullscreenElement);
   };
 
+  // Handle video events for preview
+  const handleVideoPlay = () => setIsVideoPlaying(true);
+  const handleVideoPause = () => setIsVideoPlaying(false);
+  const handleVideoEnded = () => setIsVideoPlaying(false);
+  const handleVideoError = () => setVideoError(true);
+
+  // Initialize video event listeners
+  useEffect(() => {
+    const videoElement = previewVideoRef.current;
+    if (videoElement && status === "preview") {
+      videoElement.addEventListener("play", handleVideoPlay);
+      videoElement.addEventListener("pause", handleVideoPause);
+      videoElement.addEventListener("ended", handleVideoEnded);
+      videoElement.addEventListener("error", handleVideoError);
+
+      // Auto-play preview on mobile
+      if (isMobile && videoElement.src) {
+        setTimeout(() => {
+          videoElement.play().catch((e) => {
+            console.log("Auto-play prevented:", e);
+          });
+        }, 500);
+      }
+    }
+
+    return () => {
+      if (videoElement) {
+        videoElement.removeEventListener("play", handleVideoPlay);
+        videoElement.removeEventListener("pause", handleVideoPause);
+        videoElement.removeEventListener("ended", handleVideoEnded);
+        videoElement.removeEventListener("error", handleVideoError);
+      }
+    };
+  }, [status, isMobile]);
+
   // Start camera
   const startCamera = async () => {
     setStatus("loading");
@@ -181,12 +220,16 @@ const CameraOrBrowse = ({
 
     recordedChunks.current = [];
     setRecordingTime(0);
+    setVideoError(false);
 
     const options = {
       mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
         ? "video/webm;codecs=vp9,opus"
-        : "video/webm;codecs=vp8,opus",
+        : MediaRecorder.isTypeSupported("video/webm;codecs=h264,opus")
+          ? "video/webm;codecs=h264,opus"
+          : "video/webm",
       videoBitsPerSecond: qualityPresets[videoQuality].bitrate * 1000,
+      audioBitsPerSecond: 128000,
     };
 
     try {
@@ -199,18 +242,27 @@ const CameraOrBrowse = ({
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(recordedChunks.current, { type: "video/webm" });
+        const blob = new Blob(recordedChunks.current, {
+          type: recorder.mimeType || "video/webm",
+        });
         const videoUrl = URL.createObjectURL(blob);
 
         setOriginalSize(blob.size);
         setRecordedVideo(videoUrl);
         setRecordedBlob(blob);
         setStatus("preview");
+        setVideoError(false);
 
-        if (previewVideoRef.current) {
-          previewVideoRef.current.src = videoUrl;
-          previewVideoRef.current.load();
-        }
+        // Small delay to ensure video element is ready
+        setTimeout(() => {
+          if (
+            previewVideoRef.current &&
+            previewVideoRef.current.src !== videoUrl
+          ) {
+            previewVideoRef.current.src = videoUrl;
+            previewVideoRef.current.load();
+          }
+        }, 100);
       };
 
       // Start timer
@@ -222,11 +274,6 @@ const CameraOrBrowse = ({
       mediaRecorderRef.current = recorder;
       setRecording(true);
       setStatus("recording");
-
-      // Enter fullscreen on mobile when recording starts
-      if (isMobile && videoRef.current) {
-        requestFullscreen(videoRef.current);
-      }
     } catch (error) {
       console.error("Recording error:", error);
       setStatus("error");
@@ -283,10 +330,24 @@ const CameraOrBrowse = ({
   };
 
   const toggleFullscreen = () => {
+    const element = previewVideoRef.current || videoRef.current;
+    if (!element) return;
+
     if (!isFullscreen) {
-      requestFullscreen(previewVideoRef.current || videoRef.current);
+      requestFullscreen(element);
     } else {
       exitFullscreen();
+    }
+  };
+
+  // Video playback controls
+  const toggleVideoPlayback = () => {
+    if (previewVideoRef.current) {
+      if (previewVideoRef.current.paused) {
+        previewVideoRef.current.play().catch(console.error);
+      } else {
+        previewVideoRef.current.pause();
+      }
     }
   };
 
@@ -408,6 +469,7 @@ const CameraOrBrowse = ({
         setRecordedVideo(videoUrl);
         setRecordedBlob(compressedBlob);
         setStatus("preview");
+        setVideoError(false);
 
         if (previewVideoRef.current) {
           previewVideoRef.current.src = videoUrl;
@@ -432,6 +494,7 @@ const CameraOrBrowse = ({
       setRecordedVideo(videoUrl);
       setRecordedBlob(file);
       setStatus("preview");
+      setVideoError(false);
 
       if (previewVideoRef.current) {
         previewVideoRef.current.src = videoUrl;
@@ -565,6 +628,8 @@ const CameraOrBrowse = ({
     setRecordingTime(0);
     setOriginalSize(0);
     setCompressedSize(0);
+    setIsVideoPlaying(false);
+    setVideoError(false);
     stopCamera();
     if (timerRef.current) clearInterval(timerRef.current);
   };
@@ -584,7 +649,7 @@ const CameraOrBrowse = ({
   return (
     <div className="bg-gray-900 min-h-screen p-4 w-full mx-auto text-white">
       {/* Compact Header */}
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center pt-12">
         <h2 className="text-xl font-semibold">
           {status === "preview" ? "Video Preview" : "Record Operation"}
         </h2>
@@ -594,6 +659,7 @@ const CameraOrBrowse = ({
             <button
               onClick={() => setShowQualityMenu(!showQualityMenu)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm transition"
+              disabled={recording || compressing || uploading}
             >
               <FaCog className="text-sm" />
               <span className="hidden sm:inline">
@@ -636,7 +702,11 @@ const CameraOrBrowse = ({
 
           <button
             className="p-1.5 hover:bg-red-600 rounded-lg transition"
-            onClick={() => setUploadingMaterial(null)}
+            onClick={() => {
+              if (!uploading && !compressing && !recording) {
+                setUploadingMaterial(null);
+              }
+            }}
             disabled={uploading || compressing || recording}
           >
             <RxCross2 className="text-xl" />
@@ -678,7 +748,7 @@ const CameraOrBrowse = ({
         </div>
       )}
 
-      {/* MAIN VIDEO PREVIEW - LARGER */}
+      {/* MAIN VIDEO PREVIEW */}
       <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-black mb-4 h-[60vh] min-h-[400px]">
         {/* Recording Timer */}
         {status === "recording" && (
@@ -690,18 +760,46 @@ const CameraOrBrowse = ({
           </div>
         )}
 
+        {/* Video Error Message */}
+        {videoError && status === "preview" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+            <div className="text-center p-4">
+              <div className="text-red-400 text-lg mb-2">
+                ⚠️ Video Playback Error
+              </div>
+              <p className="text-gray-300 text-sm">
+                The video cannot be played. Please try re-recording.
+              </p>
+              <button
+                onClick={resetState}
+                className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"
+              >
+                Re-record Video
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Video Playback Controls (for preview) */}
+        {status === "preview" && !videoError && (
+          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
+            <button
+              onClick={toggleVideoPlayback}
+              className="bg-black/60 hover:bg-black/80 text-white p-3 rounded-full backdrop-blur-sm transition transform hover:scale-105"
+            >
+              {isVideoPlaying ? <FaPause /> : <FaPlay />}
+            </button>
+          </div>
+        )}
+
         {/* Fullscreen Toggle */}
         {(status === "preview" || status === "recording") && (
           <button
             onClick={toggleFullscreen}
-            className="absolute top-3 right-3 z-20 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded backdrop-blur-sm transition"
+            className="absolute top-3 right-3 z-20 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full backdrop-blur-sm transition"
             aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           >
-            {isFullscreen ? (
-              <FaCompress className="text-sm" />
-            ) : (
-              <FaExpand className="text-sm" />
-            )}
+            {isFullscreen ? <FaCompress /> : <FaExpand />}
           </button>
         )}
 
@@ -718,14 +816,20 @@ const CameraOrBrowse = ({
           ) : (
             <video
               ref={previewVideoRef}
-              controls
+              src={recordedVideo}
+              controls={!videoError}
               playsInline
               className="w-full h-full object-contain"
-              onLoadedMetadata={() => {
-                if (previewVideoRef.current) {
-                  previewVideoRef.current.play().catch(console.log);
-                }
+              poster={videoError ? "" : undefined}
+              onLoadedData={() => {
+                console.log("Video loaded successfully");
+                setVideoError(false);
               }}
+              onError={(e) => {
+                console.error("Video error:", e);
+                setVideoError(true);
+              }}
+              autoPlay
             />
           )}
         </div>
@@ -735,46 +839,72 @@ const CameraOrBrowse = ({
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
             <div className="text-center">
               <ClipLoader size={30} color="#3B82F6" />
-              <p className="mt-3 text-sm">Initializing camera...</p>
+              <p className="mt-3 text-sm">Starting camera...</p>
             </div>
           </div>
         )}
         {status === "compressing" && (
           <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-            <div className="text-center">
+            <div className="text-center max-w-sm">
               <ClipLoader size={30} color="#F59E0B" />
-              <p className="mt-3 text-sm">Compressing video...</p>
+              <p className="mt-3 text-lg font-medium">Optimizing Video Size</p>
+              <p className="text-sm text-gray-300 mt-2">
+                Compressing for Cloudflare...
+              </p>
+              <div className="mt-3 w-48 mx-auto bg-gray-700 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-yellow-500 to-orange-500 h-2 rounded-full transition-all"
+                  style={{ width: `${compressProgress}%` }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                {compressProgress}% complete
+              </p>
             </div>
           </div>
         )}
       </div>
 
       {/* Compact Stats */}
-      {status === "preview" && recordedBlob && (
-        <div className="mb-4">
-          <div className="flex justify-between text-xs text-gray-400">
-            <span>
-              Size: {(recordedBlob.size / (1024 * 1024)).toFixed(1)}MB
-            </span>
-            <span>Duration: {formatTime(recordingTime)}</span>
-            {originalSize > recordedBlob.size && (
-              <span className="text-green-400">
-                Saved{" "}
-                {((originalSize - recordedBlob.size) / (1024 * 1024)).toFixed(
-                  1,
-                )}
-                MB
-              </span>
-            )}
+      {status === "preview" && recordedBlob && !videoError && (
+        <div className="bg-gray-800/30 rounded-lg p-3 mb-4">
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-gray-400 text-xs">File Size</div>
+              <div className="font-medium">
+                {(recordedBlob.size / (1024 * 1024)).toFixed(1)} MB
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-gray-400 text-xs">Duration</div>
+              <div className="font-medium">{formatTime(recordingTime)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-gray-400 text-xs">Status</div>
+              <div
+                className={`font-medium ${recordedBlob.size > 95 * 1024 * 1024 ? "text-red-400" : "text-green-400"}`}
+              >
+                {recordedBlob.size > 95 * 1024 * 1024
+                  ? "Needs Compression"
+                  : "Ready"}
+              </div>
+            </div>
           </div>
+          {originalSize > recordedBlob.size && (
+            <div className="text-center text-xs text-green-400 mt-2">
+              ✓ Saved{" "}
+              {((originalSize - recordedBlob.size) / (1024 * 1024)).toFixed(1)}
+              MB
+            </div>
+          )}
         </div>
       )}
 
       {/* Compact Status Indicator */}
-      <div className="mb-4">
-        <div className="flex items-center justify-center gap-2">
+      <div className="mb-6">
+        <div className="flex items-center justify-center gap-3">
           <div
-            className={`w-2 h-2 rounded-full ${
+            className={`w-3 h-3 rounded-full ${
               status === "recording"
                 ? "bg-red-500 animate-pulse"
                 : status === "ready"
@@ -785,31 +915,39 @@ const CameraOrBrowse = ({
             }`}
           ></div>
           <span className="text-sm text-gray-300">
-            {status === "idle" && "Ready to record or upload"}
-            {status === "ready" && "Camera ready - Start recording"}
+            {status === "idle" && "Select an option to begin"}
+            {status === "ready" && "Camera ready - Position your operation"}
             {status === "recording" &&
               `Recording - ${formatTime(recordingTime)}`}
-            {status === "preview" && "Preview your video"}
+            {status === "preview" && "Review your video"}
+            {status === "compressing" && "Optimizing video..."}
           </span>
         </div>
       </div>
 
       {/* COMPACT ACTION BUTTONS */}
-      <div className="space-y-2">
+      <div className="space-y-3 max-w-md mx-auto">
         {/* Idle State */}
         {status === "idle" && (
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={startCamera}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 px-3 py-2.5 rounded-lg font-medium text-sm transition"
+              className="flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 px-2 py-2 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-blue-900/30 disabled:opacity-50"
               disabled={uploading || compressing}
+              title="Start recording"
             >
-              <FaCamera />
-              <span>Open Camera</span>
+              <FaCamera className="text-sm" />
+              <div className="text-sm">Open Camera</div>
+              <div className="hidden md:block text-xs opacity-75">
+                Record new video
+              </div>
             </button>
-            <label className="flex-1 flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 px-3 py-2.5 rounded-lg font-medium text-sm cursor-pointer transition">
-              <FaUpload />
-              <span>Upload Video</span>
+            <label className="flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-900 px-2 py-2 rounded-xl font-medium cursor-pointer transition-all duration-200 shadow-lg shadow-gray-900/30 disabled:opacity-50">
+              <FaUpload className="text-sm" />
+              <div className="text-sm">Upload Video</div>
+              <div className="hidden md:block text-xs opacity-75">
+                Select existing file
+              </div>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -824,30 +962,35 @@ const CameraOrBrowse = ({
 
         {/* Ready State */}
         {status === "ready" && (
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button
               onClick={startRecording}
-              className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 px-3 py-2.5 rounded-lg font-medium text-sm transition"
+              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-br from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 px-5 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30"
             >
               <div className="relative">
-                <div className="w-3 h-3 bg-white rounded-full"></div>
-                <div className="w-3 h-3 bg-red-300 rounded-full absolute top-0 animate-ping opacity-75"></div>
+                <div className="w-4 h-4 bg-white rounded-full"></div>
+                <div className="w-4 h-4 bg-red-300 rounded-full absolute top-0 animate-ping opacity-75"></div>
               </div>
-              <span>Start Recording</span>
+              <div className="text-left">
+                <div className="font-semibold">Start Recording</div>
+                <div className="text-xs opacity-75">Begin operation</div>
+              </div>
             </button>
-            <button
-              onClick={switchCamera}
-              className="px-3 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition flex items-center gap-2 text-sm"
-            >
-              <FaSyncAlt />
-              <span className="hidden sm:inline">Switch</span>
-            </button>
-            <button
-              onClick={resetState}
-              className="px-3 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-sm"
-            >
-              Cancel
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={switchCamera}
+                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition flex items-center justify-center gap-2 text-sm"
+              >
+                <FaSyncAlt />
+                <span>Switch</span>
+              </button>
+              <button
+                onClick={resetState}
+                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 transition text-sm"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
@@ -855,50 +998,96 @@ const CameraOrBrowse = ({
         {status === "recording" && (
           <button
             onClick={stopRecording}
-            className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 px-3 py-2.5 rounded-lg font-medium text-sm transition animate-pulse"
+            className="w-full flex items-center justify-center gap-3 bg-gradient-to-br from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 px-5 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30 animate-pulse"
           >
-            <FaStop />
-            <span>Stop Recording</span>
+            <FaStop className="text-xl" />
+            <div className="text-left">
+              <div className="font-semibold">Stop Recording</div>
+              <div className="text-xs opacity-75">Finish operation</div>
+            </div>
           </button>
         )}
 
         {/* Preview State */}
-        {status === "preview" && (
-          <div className="flex gap-2">
+        {status === "preview" && !videoError && (
+          <div className="flex gap-3">
             <button
               onClick={resetState}
-              className="flex-1 flex items-center justify-center gap-2 bg-yellow-600 hover:bg-yellow-700 px-3 py-2.5 rounded-lg font-medium text-sm transition"
+              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-br from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 px-5 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-yellow-900/30 disabled:opacity-50"
               disabled={uploading}
             >
               <FaRedo />
-              <span>Re-record</span>
+              <div className="text-left">
+                <div className="font-semibold">Re-record</div>
+                <div className="text-xs opacity-75">Try again</div>
+              </div>
             </button>
             <button
               onClick={handleUpload}
-              className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 px-3 py-2.5 rounded-lg font-medium text-sm transition disabled:opacity-50"
+              className="flex-1 flex items-center justify-center gap-3 bg-gradient-to-br from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 px-5 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-green-900/30 disabled:opacity-50"
               disabled={uploading}
             >
-              {uploading ? <ClipLoader size={14} color="white" /> : <FaCheck />}
-              <span>{uploading ? "Uploading..." : "Upload"}</span>
+              {uploading ? (
+                <ClipLoader size={16} color="white" />
+              ) : (
+                <FaCheck className="text-xl" />
+              )}
+              <div className="text-left">
+                <div className="font-semibold">
+                  {uploading ? "Uploading..." : "Upload"}
+                </div>
+                <div className="text-xs opacity-75">
+                  {uploading
+                    ? `${uploadProgress}% complete`
+                    : "To cloud storage"}
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Video Error State */}
+        {status === "preview" && videoError && (
+          <div className="text-center">
+            <button
+              onClick={resetState}
+              className="w-full flex items-center justify-center gap-3 bg-gradient-to-br from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 px-2 py-2 rounded-xl font-medium transition-all duration-200 shadow-lg shadow-red-900/30"
+            >
+              <FaRedo />
+              <div className="text-left">
+                <div className="font-semibold">Re-record Video</div>
+                <div className="text-xs opacity-75">
+                  Previous video had issues
+                </div>
+              </div>
             </button>
           </div>
         )}
       </div>
 
-      {/* Minimal Footer */}
-      <div className="mt-4 pt-3 border-t border-gray-800">
-        <div className="flex justify-between text-xs text-gray-500">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-              <span>Ready</span>
+      {/* Enhanced Footer */}
+      <div className="mt-8 pt-4 border-t border-gray-800">
+        <div className="flex flex-col sm:flex-row justify-between items-center text-xs text-gray-500 gap-2">
+          <div className="flex items-center gap-4">
+            {/* <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>Camera Ready</span>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
               <span>Recording</span>
-            </div>
+            </div> */}
           </div>
-          <span>Max: 100MB • {isMobile ? "Mobile" : "Desktop"}</span>
+          <div className="text-center">
+            <span className="inline-flex items-center gap-1 bg-gray-800/50 px-2 py-1 rounded">
+              <FaVideo className="text-xs" />
+              Max 100MB • Auto-compression •{" "}
+              {isMobile ? "📱 Mobile" : "🖥️ Desktop"}
+            </span>
+          </div>
+          <div className="text-right">
+            <span>Quality: {qualityPresets[videoQuality].name}</span>
+          </div>
         </div>
       </div>
     </div>

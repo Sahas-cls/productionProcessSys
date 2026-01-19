@@ -364,6 +364,8 @@ exports.editMachine = async (req, res, next) => {
   const { mId } = req.params;
   console.log(req.params);
   console.log(req.body);
+  console.log("machine edit request body: ", req.body);
+  // return;
 
   const {
     machine_id,
@@ -375,7 +377,10 @@ exports.editMachine = async (req, res, next) => {
     status,
     breakdown_date,
     purchase_date,
+    supplier,
+    service_date,
   } = req.body;
+
   try {
     const updateMachine = await Machine.update(
       {
@@ -386,10 +391,12 @@ exports.editMachine = async (req, res, next) => {
         machine_location,
         machine_status: status,
         purchase_date,
+        supplier,
+        service_date,
       },
       {
         where: { machine_id },
-      }
+      },
     );
 
     if (breakdown_date) {
@@ -399,7 +406,7 @@ exports.editMachine = async (req, res, next) => {
         },
         {
           where: { machine_id },
-        }
+        },
       );
     }
 
@@ -476,7 +483,7 @@ exports.getExcelFile = async (req, res, next) => {
     // Send file to client
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     res.setHeader("Content-Disposition", "attachment; filename=machines.xlsx");
 
@@ -553,7 +560,7 @@ exports.uploadMachines = async (req, res, next) => {
     }
 
     console.log(
-      `Processing Excel file: ${excelFile.originalname}, Size: ${excelFile.buffer.length} bytes`
+      `Processing Excel file: ${excelFile.originalname}, Size: ${excelFile.buffer.length} bytes`,
     );
 
     // Extract data from Excel using the buffer
@@ -586,7 +593,7 @@ exports.uploadMachines = async (req, res, next) => {
 
         if (existingMachine) {
           console.log(
-            `Machine ${machineData.machine_no} already exists, skipping...`
+            `Machine ${machineData.machine_no} already exists, skipping...`,
           );
           results.skipped.push({
             machine_no: machineData.machine_no,
@@ -609,7 +616,7 @@ exports.uploadMachines = async (req, res, next) => {
       } catch (error) {
         console.error(
           `✗ Failed to insert machine ${machineData.machine_no}:`,
-          error.message
+          error.message,
         );
         results.failed.push({
           machine_no: machineData.machine_no,
@@ -638,7 +645,7 @@ exports.uploadMachines = async (req, res, next) => {
     };
 
     console.log(
-      `Upload completed: ${results.successful.length} successful, ${results.skipped.length} skipped, ${results.failed.length} failed`
+      `Upload completed: ${results.successful.length} successful, ${results.skipped.length} skipped, ${results.failed.length} failed`,
     );
     res.status(201).json(response);
   } catch (error) {

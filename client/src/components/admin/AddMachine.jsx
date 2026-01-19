@@ -161,7 +161,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
     setSearchLoading(true);
     try {
       const searchRes = await axios.get(
-        `${apiUrl}/api/machine/filter/${encodeURIComponent(searchKey)}`
+        `${apiUrl}/api/machine/filter/${encodeURIComponent(searchKey)}`,
       );
 
       if (searchRes.status === 200) {
@@ -183,7 +183,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
     debounce((searchKey) => {
       search(searchKey);
     }, 500),
-    []
+    [],
   );
 
   // Handle search input change
@@ -231,7 +231,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         machine.machine_name?.toLowerCase().includes(lowerSearch) ||
         machine.machine_type?.toLowerCase().includes(lowerSearch) ||
         machine.machine_brand?.toLowerCase().includes(lowerSearch) ||
-        machine.machine_location?.toLowerCase().includes(lowerSearch)
+        machine.machine_location?.toLowerCase().includes(lowerSearch),
     );
   }, [searchTerm, machineList, backendSearchResults]);
 
@@ -244,13 +244,13 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         response = await axios.put(
           `${apiUrl}/api/machine/editMachine/${values.machine_id}`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       } else {
         response = await axios.post(
           `${apiUrl}/api/machine/createMachine`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       }
 
@@ -258,9 +258,10 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         showSuccessAlert(
           editingMachine
             ? "Machine updated successfully."
-            : "Machine added successfully!"
+            : "Machine added successfully!",
         );
         refresh();
+        // window.refresh();
         setEditingMachine(null);
         resetForm();
         setIsAddStyle(false);
@@ -330,7 +331,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
     try {
       const response = await axios.delete(
         `${apiUrl}/api/machine/deleteMachine/${machineId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.status === 200) {
@@ -445,7 +446,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
         </motion.div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2 sm:gap-3 lg:gap-4 w-full lg:w-auto overflow-x-auto md:overflow-hidden pb-2 lg:pb-0">
+        <div className="flex gap-2 sm:gap-2 lg:gap-4 w-full lg:w-auto overflow-x-auto md:overflow-hidden pb-2 lg:pb-0">
           <motion.button
             type="button"
             className="bg-green-600 py-2 px-4 sm:py-2 sm:px-6 rounded-md text-white flex items-center gap-2 whitespace-nowrap text-sm min-w-max flex-1 lg:flex-none justify-center"
@@ -535,7 +536,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="machine_type"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_type"
@@ -551,7 +552,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="machine_no"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                         disabled={!!editingMachine}
                       />
                       <ErrorMessage
@@ -568,7 +569,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="machine_name"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_name"
@@ -584,7 +585,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="machine_brand"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_brand"
@@ -600,7 +601,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="machine_location"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="machine_location"
@@ -616,7 +617,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="date"
                         name="purchase_date"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="purchase_date"
@@ -632,7 +633,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="text"
                         name="supplier"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="supplier"
@@ -648,7 +649,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <Field
                         type="date"
                         name="service_date"
-                        className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                       />
                       <ErrorMessage
                         name="service_date"
@@ -661,7 +662,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Status
                       </label>
-                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-6">
                         <div className="flex gap-4">
                           <label
                             htmlFor="status_active"
@@ -718,7 +719,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                           <Field
                             type="date"
                             name="breakdown_date"
-                            className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
                           />
                         </motion.div>
                       )}
@@ -736,7 +737,7 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                     </div>
                   </fieldset>
 
-                  <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-3">
+                  <div className="mt-6 flex flex-col-reverse sm:flex-row justify-end gap-2">
                     <button
                       type="button"
                       className="px-6 py-3 bg-gray-200 rounded-md text-sm sm:text-base hover:bg-gray-300 transition-colors"
@@ -811,12 +812,11 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                 {/* <th className="whitespace-nowrap border-r border-white/50 px-3 py-3 sm:px-4 sm:py-3 text-left">
                   Existing Style
                 </th> */}
-                {userRole === "Admin" ||
-                  (userRole === "SuperAdmin" && (
-                    <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
-                      Actions
-                    </th>
-                  ))}
+                {(userRole === "Admin" || userRole === "SuperAdmin") && (
+                  <th className="whitespace-nowrap px-3 py-3 sm:px-4 sm:py-3 text-left">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="text-xs sm:text-sm lg:text-base divide-y divide-gray-200">
@@ -863,30 +863,29 @@ const AddMachine = ({ onViewMachine, userRole }) => {
                         {getStyleNames(machine)}
                       </span>
                     </td> */}
-                    {userRole === "Admin" ||
-                      (userRole === "SuperAdmin" && (
-                        <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
-                          <div className="flex justify-start sm:justify-center gap-2 sm:gap-3">
-                            <TbEyeSpark
-                              onClick={() =>
-                                navigate("/view-machine", { state: machine })
-                              }
-                              className="text-lg sm:text-xl text-gray-600 hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
-                              title="View Machine"
-                            />
-                            <MdModeEditOutline
-                              onClick={() => handleEdit(machine)}
-                              className="text-lg sm:text-xl text-gray-600 hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
-                              title="Edit Machine"
-                            />
-                            <MdDeleteForever
-                              onClick={() => handleDelete(machine.machine_id)}
-                              className="text-lg sm:text-xl text-gray-600 hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
-                              title="Delete Machine"
-                            />
-                          </div>
-                        </td>
-                      ))}
+                    {(userRole === "Admin" || userRole === "SuperAdmin") && (
+                      <td className="py-3 px-3 sm:px-4 whitespace-nowrap">
+                        <div className="flex justify-start sm:justify-center gap-2 sm:gap-2">
+                          <TbEyeSpark
+                            onClick={() =>
+                              navigate("/view-machine", { state: machine })
+                            }
+                            className="text-lg sm:text-xl text-gray-600 hover:text-blue-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="View Machine"
+                          />
+                          <MdModeEditOutline
+                            onClick={() => handleEdit(machine)}
+                            className="text-lg sm:text-xl text-gray-600 hover:text-yellow-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="Edit Machine"
+                          />
+                          <MdDeleteForever
+                            onClick={() => handleDelete(machine.machine_id)}
+                            className="text-lg sm:text-xl text-gray-600 hover:text-red-600 hover:scale-125 duration-300 cursor-pointer"
+                            title="Delete Machine"
+                          />
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
