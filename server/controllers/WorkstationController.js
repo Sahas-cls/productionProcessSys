@@ -6,6 +6,7 @@ const {
   Layout,
   SubOperation,
   MainOperation,
+  Machine,
 } = require("../models");
 
 // to create a empty workstation
@@ -72,6 +73,10 @@ exports.getWorkstations = async (req, res, next) => {
                   model: MainOperation,
                   as: "mainOperation",
                 },
+                {
+                  model: Machine,
+                  as: "machines",
+                },
               ],
             },
           ],
@@ -119,7 +124,7 @@ exports.createWS = async (req, res, next) => {
       const layout_id = existingWorkstation.layout_id;
       if (!layout_id) {
         throw new Error(
-          `No layout_id associated with workstation ${workstation_id}`
+          `No layout_id associated with workstation ${workstation_id}`,
         );
       }
 
@@ -129,7 +134,7 @@ exports.createWS = async (req, res, next) => {
           {
             workstation_no: workstation_no,
           },
-          { transaction: t }
+          { transaction: t },
         );
       }
 
@@ -144,7 +149,7 @@ exports.createWS = async (req, res, next) => {
         const submenuEntries = operations.map((op) => {
           if (!op.sub_operation_id) {
             throw new Error(
-              `Operation missing sub_operation_id: ${JSON.stringify(op)}`
+              `Operation missing sub_operation_id: ${JSON.stringify(op)}`,
             );
           }
           return {
@@ -293,7 +298,7 @@ exports.workstationId = async (req, res, next) => {
 
     const rename = await Workstation.update(
       { workstation_no: workstation_no },
-      { where: { workstation_id: workstationId } }
+      { where: { workstation_id: workstationId } },
     );
 
     res

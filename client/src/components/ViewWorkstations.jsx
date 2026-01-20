@@ -113,6 +113,7 @@ const ViewWorkstations = () => {
       const response = await axios.get(
         `${apiUrl}/api/workstations/getWorkstations/${state.layout}`,
       );
+      console.log("workstation list----: ", response);
       setWorkstationList(response.data.data);
     } catch (error) {
       console.error(error);
@@ -659,6 +660,9 @@ const ViewWorkstations = () => {
                                 <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-24">
                                   SMV
                                 </th>
+                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-24">
+                                  Machine Type
+                                </th>
                                 <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase tracking-wider w-40 text-center">
                                   Actions
                                 </th>
@@ -678,6 +682,9 @@ const ViewWorkstations = () => {
                                   </td>
                                   <td className="px-4 py-3 text-gray-500 w-24">
                                     {subOp.suboperatoin?.smv || "0.00"}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-500 w-24 whitespace-nowrap">
+                                    {subOp.suboperatoin?.machine_type || "0.00"}
                                   </td>
                                   <td className="px-4 py-3 text-gray-500 w-24">
                                     {userRole === "Admin" ||

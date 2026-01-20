@@ -33,6 +33,7 @@ const CameraOrBrowse = ({
   const [recording, setRecording] = useState(false);
   const [recordedVideo, setRecordedVideo] = useState(null);
   const [recordedBlob, setRecordedBlob] = useState(null);
+  const [recordedFile, setRecordedFile] = useState(null); // NEW: Store File object
   const [cameraFacing, setCameraFacing] = useState("environment");
   const [status, setStatus] = useState("idle");
   const [isMobile, setIsMobile] = useState(false);
@@ -245,11 +246,21 @@ const CameraOrBrowse = ({
         const blob = new Blob(recordedChunks.current, {
           type: recorder.mimeType || "video/webm",
         });
+
+        // Create a File object from the Blob
+        const timestamp = new Date().getTime();
+        const fileName = `recording-${timestamp}.mp4`;
+        const file = new File([blob], fileName, {
+          type: "video/mp4", // Force MP4 type
+          lastModified: Date.now(),
+        });
+
         const videoUrl = URL.createObjectURL(blob);
 
         setOriginalSize(blob.size);
         setRecordedVideo(videoUrl);
         setRecordedBlob(blob);
+        setRecordedFile(file); // Store File object
         setStatus("preview");
         setVideoError(false);
 
@@ -352,7 +363,7 @@ const CameraOrBrowse = ({
   };
 
   // Video compression using FFmpeg
-  const compressVideo = async (inputBlob) => {
+  const compressVideo = async (inputBlob, fileName) => {
     if (!ffmpegRef.current) {
       throw new Error("FFmpeg not loaded");
     }
@@ -419,20 +430,25 @@ const CameraOrBrowse = ({
 
       // Read output file
       const data = await ffmpeg.readFile("output.mp4");
-      const compressedBlob = new Blob([data], { type: "video/mp4" });
+
+      // Create File object instead of just Blob
+      const compressedFile = new File([data], fileName, {
+        type: "video/mp4",
+        lastModified: Date.now(),
+      });
 
       // Clean up
       await ffmpeg.deleteFile(inputName);
       await ffmpeg.deleteFile("output.mp4");
 
-      setCompressedSize(compressedBlob.size);
+      setCompressedSize(compressedFile.size);
       setCompressProgress(100);
 
       console.log(
-        `Compression complete: ${(compressedBlob.size / (1024 * 1024)).toFixed(2)}MB`,
+        `Compression complete: ${(compressedFile.size / (1024 * 1024)).toFixed(2)}MB`,
       );
 
-      return compressedBlob;
+      return compressedFile;
     } catch (error) {
       console.error("FFmpeg error:", error);
       throw new Error("Compression failed: " + error.message);
@@ -463,11 +479,12 @@ const CameraOrBrowse = ({
       setCompressProgress(0);
 
       try {
-        const compressedBlob = await compressVideo(file);
-        const videoUrl = URL.createObjectURL(compressedBlob);
+        const compressedFile = await compressVideo(file, file.name);
+        const videoUrl = URL.createObjectURL(compressedFile);
 
         setRecordedVideo(videoUrl);
-        setRecordedBlob(compressedBlob);
+        setRecordedBlob(compressedFile);
+        setRecordedFile(compressedFile); // Store File object
         setStatus("preview");
         setVideoError(false);
 
@@ -493,6 +510,7 @@ const CameraOrBrowse = ({
       const videoUrl = URL.createObjectURL(file);
       setRecordedVideo(videoUrl);
       setRecordedBlob(file);
+      setRecordedFile(file); // Store original File object
       setStatus("preview");
       setVideoError(false);
 
@@ -503,9 +521,10 @@ const CameraOrBrowse = ({
     }
   };
 
-  // Main upload handler
+  // Main upload handler - FIXED VERSION
   const handleUpload = async () => {
-    if (!recordedBlob) {
+    // Use recordedFile instead of recordedBlob for upload
+    if (!recordedFile) {
       Swal.fire({
         title: "No Video",
         text: "Please record or select a video first",
@@ -517,10 +536,10 @@ const CameraOrBrowse = ({
     }
 
     // Final size check
-    if (recordedBlob.size > 100 * 1024 * 1024) {
+    if (recordedFile.size > 100 * 1024 * 1024) {
       Swal.fire({
         title: "File Too Large",
-        text: `Video is ${(recordedBlob.size / (1024 * 1024)).toFixed(1)}MB. Maximum is 100MB.`,
+        text: `Video is ${(recordedFile.size / (1024 * 1024)).toFixed(1)}MB. Maximum is 100MB.`,
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -543,20 +562,36 @@ const CameraOrBrowse = ({
       formData.append("recordingDuration", recordingTime);
       formData.append("videoQuality", videoQuality);
       formData.append("originalSize", originalSize);
-      formData.append("compressedSize", compressedSize || recordedBlob.size);
+      formData.append("compressedSize", compressedSize || recordedFile.size);
 
-      const timestamp = new Date().getTime();
-      const fileName = `sawing-operation-${timestamp}.mp4`;
-      formData.append("video", recordedBlob, fileName);
+      // Append the File object directly
+      // Ensure the file has correct extension (.mp4) for backend validation
+      let fileName = recordedFile.name;
+      if (!fileName.toLowerCase().endsWith(".mp4")) {
+        fileName = fileName.replace(/\.[^/.]+$/, "") + ".mp4";
+      }
+
+      formData.append("video", recordedFile, fileName);
+
+      // Debug: Log FormData contents
+      console.log("Uploading file details:");
+      console.log("File name:", fileName);
+      console.log("File type:", recordedFile.type);
+      console.log("File size:", recordedFile.size);
+
+      for (let pair of formData.entries()) {
+        console.log(pair[0] + ":", pair[1]);
+      }
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
+      // IMPORTANT: Don't set Content-Type header for FormData
+      // axios will automatically set it with the correct boundary
       const response = await axios.post(
         `${apiUrl}/api/subOperationMedia/uploadVideos`,
         formData,
         {
           withCredentials: true,
-          headers: { "Content-Type": "multipart-form-data" },
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const percentCompleted = Math.round(
@@ -566,6 +601,10 @@ const CameraOrBrowse = ({
             }
           },
           timeout: 600000,
+          // Add headers for debugging
+          headers: {
+            Accept: "application/json",
+          },
         },
       );
 
@@ -598,12 +637,19 @@ const CameraOrBrowse = ({
       }
     } catch (error) {
       console.error("Upload error:", error);
+      console.error("Error details:", error.response?.data);
 
       let errorMessage = "Upload failed. Please try again.";
       if (error.response?.status === 413) {
         errorMessage = "File too large for server. Please compress further.";
       } else if (error.response?.status === 415) {
         errorMessage = "Unsupported video format.";
+      } else if (error.response?.status === 400) {
+        errorMessage =
+          error.response.data?.message ||
+          "Invalid file format. Please ensure you're uploading a valid video file.";
+      } else if (error.code === "ECONNABORTED") {
+        errorMessage = "Upload timeout. Please try again with a smaller file.";
       } else if (!error.response) {
         errorMessage = "Network error. Please check your connection.";
       }
@@ -624,6 +670,7 @@ const CameraOrBrowse = ({
   const resetState = () => {
     setRecordedVideo(null);
     setRecordedBlob(null);
+    setRecordedFile(null);
     setStatus("idle");
     setRecordingTime(0);
     setOriginalSize(0);
@@ -866,13 +913,13 @@ const CameraOrBrowse = ({
       </div>
 
       {/* Compact Stats */}
-      {status === "preview" && recordedBlob && !videoError && (
+      {status === "preview" && recordedFile && !videoError && (
         <div className="bg-gray-800/30 rounded-lg p-3 mb-4">
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div className="text-center">
               <div className="text-gray-400 text-xs">File Size</div>
               <div className="font-medium">
-                {(recordedBlob.size / (1024 * 1024)).toFixed(1)} MB
+                {(recordedFile.size / (1024 * 1024)).toFixed(1)} MB
               </div>
             </div>
             <div className="text-center">
@@ -882,18 +929,18 @@ const CameraOrBrowse = ({
             <div className="text-center">
               <div className="text-gray-400 text-xs">Status</div>
               <div
-                className={`font-medium ${recordedBlob.size > 95 * 1024 * 1024 ? "text-red-400" : "text-green-400"}`}
+                className={`font-medium ${recordedFile.size > 95 * 1024 * 1024 ? "text-red-400" : "text-green-400"}`}
               >
-                {recordedBlob.size > 95 * 1024 * 1024
+                {recordedFile.size > 95 * 1024 * 1024
                   ? "Needs Compression"
                   : "Ready"}
               </div>
             </div>
           </div>
-          {originalSize > recordedBlob.size && (
+          {originalSize > recordedFile.size && (
             <div className="text-center text-xs text-green-400 mt-2">
               ✓ Saved{" "}
-              {((originalSize - recordedBlob.size) / (1024 * 1024)).toFixed(1)}
+              {((originalSize - recordedFile.size) / (1024 * 1024)).toFixed(1)}
               MB
             </div>
           )}

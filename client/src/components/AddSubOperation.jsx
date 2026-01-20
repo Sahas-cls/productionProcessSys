@@ -26,7 +26,7 @@ const SearchInputWithSuggestions = ({
       filteredOperations?.length > 0
     ) {
       const selectedOp = filteredOperations.find(
-        (op) => op.sub_operation_id === values.sub_operation_id
+        (op) => op.sub_operation_id === values.sub_operation_id,
       );
       if (selectedOp) {
         setInputValue(selectedOp.sub_operation_name);
@@ -150,7 +150,7 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
   const getSubOperations = async () => {
     try {
       const response = await axios.get(
-        `${apiUrl}/api/layout/getLaSubOperations/${style_id}`
+        `${apiUrl}/api/layout/getLaSubOperations/${style_id}`,
       );
 
       if (response.status === 200) {
@@ -169,7 +169,7 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
     return subOperations?.filter((op) =>
       op.sub_operation_name
         .toLowerCase()
-        .includes(operationSearchKey.toLowerCase())
+        .includes(operationSearchKey.toLowerCase()),
     );
   }, [subOperations, operationSearchKey]);
 
@@ -195,7 +195,7 @@ const AddSubOperation = ({ style_id, workstation_id, onSuccess, onCancel }) => {
 
       const response = await axios.post(
         `${apiUrl}/api/workstations/addSubOperationToWorkstation/${workstation_id}`,
-        payload
+        payload,
       );
 
       if (response.status === 200) {
