@@ -217,12 +217,14 @@ exports.getPOList = async (req, res, next) => {
 
 exports.getStylesMo = async (req, res, next) => {
   //
-  // console.log("requesting");
-  // console.log(req.body);
-  const { styleNo, poNo } = req.body;
+  console.log("requesting");
+  console.log(req.body);
+  return;
+  // return res.status(200);
+  const { styleNo } = req.body;
   try {
     const operations = await Style.findOne({
-      where: { style_no: styleNo, po_number: poNo },
+      where: { style_no: styleNo },
       include: [
         {
           model: MainOperation,

@@ -881,9 +881,9 @@ const Dashboard = () => {
       )}
       {/* Operations & Assets Summary */}{" "}
       {/*!!!! please remove this section instead add machine breakdown instead */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Operations Summary */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
+        <div className="bg-red rounded-2xl p-6 shadow-lg border border-gray-200">
           <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
             <GiSewingNeedle className="text-indigo-600" />
             Operations Summary
@@ -914,7 +914,7 @@ const Dashboard = () => {
 
         {/* Assets Summary */}
         {/* Machine Breakdown Section */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 mb-6">
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 mb-6 w-full h-full lg:col-span-2">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -929,9 +929,9 @@ const Dashboard = () => {
               <div className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm">
                 Total: {machineBreakdown.summary.totalMachines || 0}
               </div>
-              <div className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm">
+              {/* <div className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm">
                 Types: {machineBreakdown.summary.totalTypes || 0}
-              </div>
+              </div> */}
             </div>
           </div>
 
@@ -951,13 +951,19 @@ const Dashboard = () => {
                           data={machineBreakdown.charts.pieChartData}
                           cx="50%"
                           cy="50%"
-                          innerRadius={60}
-                          outerRadius={110}
-                          paddingAngle={2}
+                          innerRadius={70}
+                          outerRadius={120}
+                          paddingAngle={4}
                           dataKey="value"
-                          label={({ name, percent }) =>
-                            `${name}: ${(percent * 100).toFixed(1)}%`
-                          }
+                          labelLine={({ value }) => {
+                            value > 22 ? true : false;
+                          }}
+                          label={({ name, value, percent }) => {
+                            if (value > 22) {
+                              return `${name} ${value}`;
+                            }
+                            return null;
+                          }}
                         >
                           {machineBreakdown.charts.pieChartData.map(
                             (entry, index) => (

@@ -114,7 +114,7 @@ const AddCustomer = ({ userRole }) => {
         customer.type?.customer_type
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
-        customer.customer_id.toString().includes(searchTerm)
+        customer.customer_id.toString().includes(searchTerm),
     );
   }, [allCustomers, searchTerm]);
 
@@ -131,7 +131,7 @@ const AddCustomer = ({ userRole }) => {
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300) // 300ms debounce delay
+      }, 300), // 300ms debounce delay
     );
   };
 
@@ -171,13 +171,13 @@ const AddCustomer = ({ userRole }) => {
         response = await axios.put(
           `${apiUrl}/api/customers/editCustomer/${currentCustomerId}`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       } else {
         response = await axios.post(
           `${apiUrl}/api/customers/createCustomer`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       }
 
@@ -281,7 +281,7 @@ const AddCustomer = ({ userRole }) => {
     try {
       const result = await axios.delete(
         `${apiUrl}/api/customers/deleteCustomer/${index}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (result.status === 200 || result.status === 201) {
@@ -521,8 +521,8 @@ const AddCustomer = ({ userRole }) => {
                     {isSubmitting
                       ? "Processing..."
                       : isEditMode
-                      ? "Update"
-                      : "Save"}
+                        ? "Update"
+                        : "Save"}
                   </motion.button>
                 </motion.div>
               </form>
@@ -533,7 +533,7 @@ const AddCustomer = ({ userRole }) => {
 
       {/* Customers Table */}
       <motion.div
-        className="bg-white rounded-xl shadow-md max-h-80 overflow-y-auto w-full"
+        className="bg-white rounded-xl shadow-md max-h-[70VH] overflow-y-auto w-full"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}

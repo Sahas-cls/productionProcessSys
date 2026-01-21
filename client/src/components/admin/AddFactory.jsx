@@ -47,7 +47,7 @@ const AddFactory = ({ userRole }) => {
     return allFactories.filter(
       (factory) =>
         factory.factory_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        factory.factory_code.toLowerCase().includes(searchTerm.toLowerCase())
+        factory.factory_code.toLowerCase().includes(searchTerm.toLowerCase()),
     );
   }, [allFactories, searchTerm]);
 
@@ -126,7 +126,7 @@ const AddFactory = ({ userRole }) => {
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300) // 300ms
+      }, 300), // 300ms
     );
   };
 
@@ -179,7 +179,7 @@ const AddFactory = ({ userRole }) => {
     try {
       const response = await axios.delete(
         `${apiUrl}/api/factories/deleteFactory/${index}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
       if (response.status === 200 || response.status === 201) {
         swal.fire({
@@ -222,13 +222,13 @@ const AddFactory = ({ userRole }) => {
         result = await axios.put(
           `${apiUrl}/api/factories/updateFactory/${currentFactoryId}`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       } else {
         result = await axios.post(
           `${apiUrl}/api/factories/createNewFactory`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
       }
 
@@ -516,7 +516,7 @@ const AddFactory = ({ userRole }) => {
 
       {/* Factories Table */}
       <motion.div
-        className="bg-white rounded-xl shadow-md max-h-80 overflow-y-auto w-full"
+        className="bg-white rounded-xl shadow-md max-h-[70vh] overflow-y-auto w-full"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}

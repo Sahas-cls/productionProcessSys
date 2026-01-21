@@ -11,6 +11,7 @@ import { MdOutlineDeleteForever } from "react-icons/md";
 import { BsFillCloudUploadFill } from "react-icons/bs";
 import { useNavigate } from "react-router-dom";
 import { MdPermMedia } from "react-icons/md";
+import { TbReportSearch } from "react-icons/tb";
 
 const Report = () => {
   const [selectedStyle, setSelectedStyle] = useState(null);
@@ -55,7 +56,7 @@ const Report = () => {
         `${memoizedApiUrl}/api/styles/getStylesUnq`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.status === 200) {
         setStyleList(response.data.data);
@@ -73,7 +74,7 @@ const Report = () => {
 
     try {
       const response = await axios.get(
-        `${memoizedApiUrl}/api/styles/getPOList/${debouncedSelectedStyle}`
+        `${memoizedApiUrl}/api/styles/getPOList/${debouncedSelectedStyle}`,
       );
 
       if (response.status === 200) {
@@ -117,7 +118,7 @@ const Report = () => {
           `Report generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}`,
           105,
           280,
-          { align: "center" }
+          { align: "center" },
         );
 
         let yPosition = 60;
@@ -140,7 +141,7 @@ const Report = () => {
             doc.text(
               `${opIndex + 1}. ${operation.operation_name}`,
               20,
-              yPosition
+              yPosition,
             );
             yPosition += 7;
 
@@ -156,13 +157,13 @@ const Report = () => {
                 doc.text(
                   `   Sub-operation: ${subOp.sub_operation_name} (${subOp.sub_operation_number})`,
                   25,
-                  yPosition
+                  yPosition,
                 );
                 yPosition += 5;
                 doc.text(
                   `   SMV: ${subOp.smv} | Needle Count: ${subOp.needle_count}`,
                   25,
-                  yPosition
+                  yPosition,
                 );
                 yPosition += 5;
 
@@ -173,7 +174,7 @@ const Report = () => {
                   details.push(
                     `Machines: ${subOp.machines
                       .map((m) => `${m.machine_name} (${m.machine_type})`)
-                      .join(", ")}`
+                      .join(", ")}`,
                   );
                 }
 
@@ -181,7 +182,7 @@ const Report = () => {
                   details.push(
                     `Needle Types: ${subOp.needle_types
                       .map((nt) => nt.type)
-                      .join(", ")}`
+                      .join(", ")}`,
                   );
                 }
 
@@ -189,7 +190,7 @@ const Report = () => {
                   details.push(
                     `Needle Threads: ${subOp.needle_treads
                       .map((nt) => nt.tread)
-                      .join(", ")}`
+                      .join(", ")}`,
                   );
                 }
 
@@ -197,7 +198,7 @@ const Report = () => {
                   details.push(
                     `Needle Loopers: ${subOp.needle_loopers
                       .map((nl) => nl.looper_type)
-                      .join(", ")}`
+                      .join(", ")}`,
                   );
                 }
 
@@ -263,12 +264,14 @@ const Report = () => {
   // Memoized form submission
   const handleSubmit = useCallback(
     async (values) => {
+      console.log("values:  ", values);
       setLoading(true);
       try {
+        console.log("sending backend request");
         const response = await axios.post(
           `${memoizedApiUrl}/api/styles/getStylesMo`,
           values,
-          { withCredentials: true }
+          { withCredentials: true },
         );
 
         if (response.status === 200) {
@@ -281,7 +284,7 @@ const Report = () => {
         setLoading(false);
       }
     },
-    [memoizedApiUrl]
+    [memoizedApiUrl],
   );
 
   // Memoized style change handler
@@ -340,7 +343,7 @@ const Report = () => {
         }}
       />
     ),
-    [memoizedApiUrl]
+    [memoizedApiUrl],
   );
 
   // Memoized form component
@@ -372,8 +375,8 @@ const Report = () => {
             )}
           </Field>
         </div>
-
-        <div className="flex flex-col">
+        {/* PO number was removed from here due to requirement changes */}
+        {/* <div className="flex flex-col">
           <label
             htmlFor="poNo"
             className="mb-2 font-medium text-sm md:text-base"
@@ -397,20 +400,24 @@ const Report = () => {
               <option disabled>No PO Numbers yet</option>
             )}
           </Field>
-        </div>
+        </div> */}
 
         <div className="flex items-end">
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 md:px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors w-full text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!values.styleNo || !values.poNo || loading}
+            className="bg-blue-600 text-white px-4 md:px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!values.styleNo || loading}
           >
-            {loading ? "Generating..." : "Generate Report"}
+            {loading ? (
+              <div className="border-2 border-white rounded-full border-b-transparent animate-spin w-6 h-6"></div>
+            ) : (
+              <TbReportSearch className="text-2xl" />
+            )}
           </button>
         </div>
       </Form>
     ),
-    [styleList, poList, selectedStyle, loading, handleStyleChange]
+    [styleList, poList, selectedStyle, loading, handleStyleChange],
   );
 
   return (
@@ -623,7 +630,7 @@ const Report = () => {
                                                         subOpId:
                                                           subOp.sub_operation_id,
                                                       },
-                                                    }
+                                                    },
                                                   )
                                                 }
                                               >
@@ -648,7 +655,7 @@ const Report = () => {
                                                         subOpId:
                                                           subOp.sub_operation_id,
                                                       },
-                                                    }
+                                                    },
                                                   )
                                                 }
                                               >
@@ -696,7 +703,7 @@ const Report = () => {
                                           ))}
                                         </div>
                                       </div>
-                                    )
+                                    ),
                                 )}
 
                                 {subOp.remark && (

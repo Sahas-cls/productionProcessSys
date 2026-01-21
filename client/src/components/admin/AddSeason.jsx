@@ -42,7 +42,7 @@ const AddSeason = ({ userRole }) => {
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
         season.season?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        season.season_id?.toString().includes(searchTerm)
+        season.season_id?.toString().includes(searchTerm),
     );
   }, [seasonsList, searchTerm]);
 
@@ -59,7 +59,7 @@ const AddSeason = ({ userRole }) => {
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300) // 300ms debounce delay
+      }, 300), // 300ms debounce delay
     );
   };
 
@@ -185,7 +185,7 @@ const AddSeason = ({ userRole }) => {
       .of(
         yup.object({
           name: yup.string().required("Season name is required"),
-        })
+        }),
       )
       .min(1, "At least one season is required"),
   });
@@ -199,7 +199,7 @@ const AddSeason = ({ userRole }) => {
       return customerList.filter((value) =>
         value.customer_name
           .toLowerCase()
-          .includes(customerSearchKey.toLowerCase())
+          .includes(customerSearchKey.toLowerCase()),
       );
     }
   }, [customerSearchKey]);
@@ -231,7 +231,7 @@ const AddSeason = ({ userRole }) => {
               customerId: values.customer,
               season: values.seasons[0].name,
             },
-            { withCredentials: true }
+            { withCredentials: true },
           );
 
           if (response.status === 200) {
@@ -256,7 +256,7 @@ const AddSeason = ({ userRole }) => {
               customerId: values.customer,
               seasons: values.seasons.map((s) => s.name),
             },
-            { withCredentials: true }
+            { withCredentials: true },
           );
 
           if (response.status === 201) {
@@ -500,7 +500,7 @@ const AddSeason = ({ userRole }) => {
                                 onClick={() => {
                                   formik.setFieldValue(
                                     "customer",
-                                    cus.customer_id
+                                    cus.customer_id,
                                   );
                                   setCustomerSearchKey(cus.customer_name);
                                   setIsCusSuggest(false);
@@ -697,7 +697,7 @@ const AddSeason = ({ userRole }) => {
 
       {/* Seasons Table */}
       <motion.div
-        className="bg-white rounded-xl shadow-md max-h-96 overflow-y-auto"
+        className="bg-white rounded-xl shadow-md max-h-[70vh] overflow-y-auto"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2 }}

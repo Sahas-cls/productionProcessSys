@@ -12,6 +12,7 @@ exports.getSeasons = async (req, res, next) => {
           requried: true,
         },
       ],
+      order: [["createdAt", "DESC"]],
     });
     // console.log(seasons);
     if (seasons) {

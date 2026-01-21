@@ -204,14 +204,20 @@ exports.getSeasonWiseStyles = async (req, res) => {
         // If season name already exists, merge the data
         const existing = seasonMap.get(seasonName);
         existing.total_styles += styles.length;
-        existing.styles = [...existing.styles, ...styles.map((style) => ({
-          style_id: style.style_id,
-          style_no: style.style_no,
-          style_name: style.style_name,
-          created_at: style.createdAt,
-        }))];
+        existing.styles = [
+          ...existing.styles,
+          ...styles.map((style) => ({
+            style_id: style.style_id,
+            style_no: style.style_no,
+            style_name: style.style_name,
+            created_at: style.createdAt,
+          })),
+        ];
         // Keep track of all customers for this season
-        if (season.customer && !existing.customers.includes(season.customer.customer_name)) {
+        if (
+          season.customer &&
+          !existing.customers.includes(season.customer.customer_name)
+        ) {
           existing.customers.push(season.customer.customer_name);
         }
       } else {
@@ -243,9 +249,10 @@ exports.getSeasonWiseStyles = async (req, res) => {
       barChartData: seasonWiseData.map((item) => ({
         name: item.season_name,
         styles: item.total_styles,
-        customer: item.customers.length > 1 
-          ? `${item.customers.length} customers` 
-          : item.customer_name,
+        customer:
+          item.customers.length > 1
+            ? `${item.customers.length} customers`
+            : item.customer_name,
       })),
 
       pieChartData: seasonWiseData.map((item) => ({
@@ -258,14 +265,14 @@ exports.getSeasonWiseStyles = async (req, res) => {
         total_seasons: seasons.length,
         total_styles: seasonWiseData.reduce(
           (sum, item) => sum + item.total_styles,
-          0
+          0,
         ),
         average_styles_per_season:
           seasonWiseData.length > 0
             ? (
                 seasonWiseData.reduce(
                   (sum, item) => sum + item.total_styles,
-                  0
+                  0,
                 ) / seasonWiseData.length
               ).toFixed(1)
             : 0,
@@ -327,7 +334,7 @@ exports.getSeasonalTrends = async (req, res) => {
       where: year
         ? sequelize.where(
             sequelize.fn("YEAR", sequelize.col("Season.createdAt")),
-            year
+            year,
           )
         : undefined,
       order: [["createdAt", "ASC"]],
@@ -357,7 +364,7 @@ exports.getSeasonalTrends = async (req, res) => {
     }, {});
 
     const trendData = Object.values(trends).sort((a, b) =>
-      a.period.localeCompare(b.period)
+      a.period.localeCompare(b.period),
     );
 
     res.status(200).json({
@@ -368,7 +375,7 @@ exports.getSeasonalTrends = async (req, res) => {
           total_periods: trendData.length,
           total_styles_in_period: trendData.reduce(
             (sum, item) => sum + item.styles,
-            0
+            0,
           ),
           average_styles_per_period:
             trendData.length > 0
@@ -615,7 +622,7 @@ exports.getCustomerSeasonStyles = async (req, res) => {
         seasons: seasonData,
         total_styles: seasonData.reduce(
           (sum, item) => sum + item.style_count,
-          0
+          0,
         ),
       },
     });
@@ -816,10 +823,10 @@ exports.getProductionInsights = async (req, res) => {
     const insights = {
       totalStyles: stylesWithOps.length,
       stylesWithOperations: stylesWithOps.filter(
-        (s) => s.operations && s.operations.length > 0
+        (s) => s.operations && s.operations.length > 0,
       ).length,
       stylesWithoutOperations: stylesWithOps.filter(
-        (s) => !s.operations || s.operations.length === 0
+        (s) => !s.operations || s.operations.length === 0,
       ).length,
       averageOperationsPerStyle: 0,
       averageSubOperationsPerStyle: 0,
@@ -903,14 +910,14 @@ function getColorForSeason(seasonName) {
     Math.abs(
       seasonName.split("").reduce((acc, char) => {
         return acc + char.charCodeAt(0);
-      }, 0)
+      }, 0),
     ) % colors.length;
 
   return colors[index];
 }
 
 /**
- * Get machine breakdown by type
+ * Get machine breakdown by type with aggregation for small categories
  */
 exports.getMachineBreakdown = async (req, res) => {
   try {
@@ -928,13 +935,50 @@ exports.getMachineBreakdown = async (req, res) => {
       GROUP BY machine_type
       ORDER BY count DESC`,
       {
-        type: sequelize.QueryTypes.SELECT
-      }
+        type: sequelize.QueryTypes.SELECT,
+      },
     );
+
+    // Separate categories with 5+ machines and those with less than 5
+    const majorCategories = [];
+    const minorCategories = [];
+    let otherCount = 0;
+    let otherActive = 0;
+    let otherInactive = 0;
+    let otherMaintenance = 0;
+    let otherRepair = 0;
+
+    machinesByType.forEach((item) => {
+      if (item.count >= 8) {
+        majorCategories.push(item);
+      } else {
+        minorCategories.push(item);
+        otherCount += parseInt(item.count);
+        otherActive += parseInt(item.active_count) || 0;
+        otherInactive += parseInt(item.inactive_count) || 0;
+        otherMaintenance += parseInt(item.maintenance_count) || 0;
+        otherRepair += parseInt(item.repair_count) || 0;
+      }
+    });
+
+    // Add "Other" category if there are minor categories
+    if (minorCategories.length > 0) {
+      majorCategories.push({
+        machine_type: "Other",
+        count: otherCount,
+        active_count: otherActive,
+        inactive_count: otherInactive,
+        maintenance_count: otherMaintenance,
+        repair_count: otherRepair,
+        is_other: true,
+        minor_categories_count: minorCategories.length,
+        minor_categories: minorCategories, // Include details for table
+      });
+    }
 
     // Get total machines
     const totalMachines = await Machine.count();
-    
+
     // Get machines by status (for donut chart)
     const machinesByStatus = await sequelize.query(
       `SELECT 
@@ -943,8 +987,8 @@ exports.getMachineBreakdown = async (req, res) => {
       FROM machine
       GROUP BY machine_status`,
       {
-        type: sequelize.QueryTypes.SELECT
-      }
+        type: sequelize.QueryTypes.SELECT,
+      },
     );
 
     // Get top machine brands
@@ -958,45 +1002,61 @@ exports.getMachineBreakdown = async (req, res) => {
       ORDER BY count DESC
       LIMIT 5`,
       {
-        type: sequelize.QueryTypes.SELECT
-      }
+        type: sequelize.QueryTypes.SELECT,
+      },
     );
 
-    // Format data for frontend
-    const pieChartData = machinesByType.map((item, index) => ({
-      name: item.machine_type || 'Unknown',
+    // Format data for frontend charts (using only majorCategories)
+    const pieChartData = majorCategories.map((item, index) => ({
+      name: item.machine_type,
       value: parseInt(item.count),
-      color: GRADIENTS[index % GRADIENTS.length][0],
-      gradient: GRADIENTS[index % GRADIENTS.length]
+      color:
+        item.machine_type === "Other"
+          ? "#9CA3AF"
+          : GRADIENTS[index % GRADIENTS.length][0],
+      gradient:
+        item.machine_type === "Other"
+          ? ["#9CA3AF", "#6B7280"]
+          : GRADIENTS[index % GRADIENTS.length],
+      isOther: item.is_other || false,
     }));
 
     const donutChartData = machinesByStatus.map((item, index) => ({
       name: item.status,
       value: parseInt(item.count),
-      color: getStatusColor(item.status)
+      color: getStatusColor(item.status),
     }));
 
     // Calculate summary statistics
     const summary = {
       totalMachines,
       totalTypes: machinesByType.length,
-      averageMachinesPerType: totalMachines > 0 ? (totalMachines / machinesByType.length).toFixed(1) : 0,
-      mostCommonType: machinesByType.length > 0 ? machinesByType[0].machine_type : 'None',
-      topBrand: topBrands.length > 0 ? topBrands[0].brand : 'Unknown'
+      majorTypesCount:
+        majorCategories.length - (minorCategories.length > 0 ? 1 : 0), // exclude "Other"
+      minorTypesCount: minorCategories.length,
+      averageMachinesPerType:
+        totalMachines > 0
+          ? (totalMachines / machinesByType.length).toFixed(1)
+          : 0,
+      mostCommonType:
+        machinesByType.length > 0 ? machinesByType[0].machine_type : "None",
+      topBrand: topBrands.length > 0 ? topBrands[0].brand : "Unknown",
     };
 
     res.status(200).json({
       success: true,
       data: {
-        byType: machinesByType,
+        byType: majorCategories, // Send aggregated data
+        allTypes: machinesByType, // Send all data for table
         byStatus: machinesByStatus,
         topBrands,
+        minorCategories, // Send minor categories separately for table
         charts: {
           pieChartData,
-          donutChartData
+          donutChartData,
         },
-        summary
-      }
+        summary,
+      },
     });
   } catch (error) {
     console.error("Error fetching machine breakdown:", error);
@@ -1011,13 +1071,13 @@ exports.getMachineBreakdown = async (req, res) => {
 // Helper function for status colors
 function getStatusColor(status) {
   const colors = {
-    'Active': '#10B981',      // Green
-    'Inactive': '#6B7280',    // Gray
-    'Maintenance': '#F59E0B', // Amber
-    'Repair': '#EF4444',      // Red
-    'Unknown': '#9CA3AF'      // Gray
+    Active: "#10B981", // Green
+    Inactive: "#6B7280", // Gray
+    Maintenance: "#F59E0B", // Amber
+    Repair: "#EF4444", // Red
+    Unknown: "#9CA3AF", // Gray
   };
-  return colors[status] || '#9CA3AF';
+  return colors[status] || "#9CA3AF";
 }
 
 // Add this at the top of your file with other gradient colors
