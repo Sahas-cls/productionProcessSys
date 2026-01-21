@@ -175,7 +175,7 @@ exports.createOperation = async (req, res, next) => {
           style_no: styleExist.style_id, // Fixed: Should be style_id if that's the PK
           operation_name: operationName,
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       // 3. Create sub operation
@@ -186,7 +186,7 @@ exports.createOperation = async (req, res, next) => {
           msv: smv, // Note: Your field is 'msv' but input is 'smv'
           remark: remarks,
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       // 4. Find or create machine
@@ -209,7 +209,7 @@ exports.createOperation = async (req, res, next) => {
             machine_location: machineLocation,
             needle_count: needleCount,
           },
-          { transaction: t }
+          { transaction: t },
         );
       }
 
@@ -223,9 +223,9 @@ exports.createOperation = async (req, res, next) => {
                 machine_id: machine.machine_id, // Fixed: Using the correct machine reference
                 sub_operation_id: createSubOP.sub_operation_id,
               },
-              { transaction: t }
-            )
-          )
+              { transaction: t },
+            ),
+          ),
         );
       }
 
@@ -239,9 +239,9 @@ exports.createOperation = async (req, res, next) => {
                 machine_id: machine.machine_id,
                 sub_operation_id: createSubOP.sub_operation_id,
               },
-              { transaction: t }
-            )
-          )
+              { transaction: t },
+            ),
+          ),
         );
       }
 
@@ -255,9 +255,9 @@ exports.createOperation = async (req, res, next) => {
                 machine_id: machine.machine_id,
                 sub_operation_id: createSubOP.sub_operation_id,
               },
-              { transaction: t }
-            )
-          )
+              { transaction: t },
+            ),
+          ),
         );
       }
       console.log("Operation create success");
@@ -410,7 +410,7 @@ exports.createSubOp = async (req, res, next) => {
           thread_id: needleThreads || null, // needleThreads is thread_id
           created_by: req.user?.userId || null, // Add created_by from user session
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       // 7. Link machine to sub-operation through junction table
@@ -419,7 +419,7 @@ exports.createSubOp = async (req, res, next) => {
           sub_operation_id: subOperation.sub_operation_id,
           machine_id: machine.machine_id,
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       // Note: Removed the bulkCreate for needleTypes, needleTreads, and needleLoopers
@@ -491,7 +491,7 @@ exports.editMainOperation = async (req, res, next) => {
         {
           where: { operation_id: moId },
           transaction: t,
-        }
+        },
       );
     });
 
@@ -519,7 +519,7 @@ exports.createBulkOperations = async (req, res, next) => {
       req?.user?.userRole !== "SuperAdmin"
     ) {
       const error = new Error(
-        "You don't have permission to perform this action"
+        "You don't have permission to perform this action",
       );
       error.status = 401;
       throw error;
@@ -555,7 +555,7 @@ exports.createBulkOperations = async (req, res, next) => {
           operation_type_id: mainOperation,
           created_by: req.user.userId || null,
         },
-        { transaction: t }
+        { transaction: t },
       );
 
       // 3. Cache to avoid duplicate machines
@@ -569,7 +569,7 @@ exports.createBulkOperations = async (req, res, next) => {
 
         if (!op.operationName || !op.operationNumber || !op.machineNo) {
           throw new Error(
-            `Missing required fields in operation: ${JSON.stringify(op)}`
+            `Missing required fields in operation: ${JSON.stringify(op)}`,
           );
         }
 
@@ -609,7 +609,7 @@ exports.createBulkOperations = async (req, res, next) => {
             looper_id: op.bobbinTreadLoopers || null,
             created_by: req.user.userId || null,
           },
-          { transaction: t }
+          { transaction: t },
         );
 
         // 7. Associate machine and sub operation via junction table
@@ -734,7 +734,7 @@ exports.updateSubOperation = async (req, res, next) => {
         looper_id: currentSubOperation.looper_id,
         created_by: req.user.userId,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 3. THEN: Update the SubOperation
@@ -784,7 +784,7 @@ exports.updateSubOperation = async (req, res, next) => {
           sub_operation_id: id,
           machine_id: machineId,
         },
-        { transaction: t }
+        { transaction: t },
       );
     }
 
@@ -859,12 +859,12 @@ exports.updateSubOperation = async (req, res, next) => {
           operation_id: currentSubOperation.sub_operation_id,
           message: message,
           type: "ALERT",
-        })
+        }),
       );
 
       await Promise.all(notificationPromises);
       console.log(
-        `Notifications sent to ${superAdminUsers.length} SuperAdmin users`
+        `Notifications sent to ${superAdminUsers.length} SuperAdmin users`,
       );
     } else {
       console.log("No SuperAdmin users found to send notifications");
@@ -956,9 +956,9 @@ exports.deleteOperation = async (req, res, next) => {
           // Set machines' subOperationId to null instead of deleting them
           await Machine.update(
             { subOperationId: null },
-            { where: { subOperationId: subId }, transaction: t }
+            { where: { subOperationId: subId }, transaction: t },
           );
-        })
+        }),
       );
 
       // 3. Delete sub-operations
@@ -1041,7 +1041,7 @@ exports.deleteSubOperation = async (req, res, next) => {
         looper_id: subOperationToDelete.looper_id,
         created_by: req.user.userId,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     // 3. THEN: Delete related records
@@ -1095,14 +1095,14 @@ exports.deleteSubOperation = async (req, res, next) => {
               message: message,
               type: "ALERT",
             },
-            { transaction: t }
-          )
+            { transaction: t },
+          ),
         );
 
         await Promise.all(notificationPromises);
         notificationsSent = superAdminUsers.length;
         console.log(
-          `Delete notifications sent to ${superAdminUsers.length} SuperAdmin users`
+          `Delete notifications sent to ${superAdminUsers.length} SuperAdmin users`,
         );
       } else {
         console.log("No SuperAdmin users found to send delete notifications");
@@ -1186,7 +1186,7 @@ exports.createHelperOps = async (req, res, next) => {
     const isStyle = await Style.findOne({ where: { style_no: styleNumber } });
     if (!isStyle) {
       const error = new Error(
-        "The requested style is not existing in style data table"
+        "The requested style is not existing in style data table",
       );
       error.status = 403;
       // console.log("requested style cannot find in style data table");
@@ -1251,7 +1251,7 @@ exports.createHelperOps = async (req, res, next) => {
           totalMainOperations: result.data.operations.length,
           totalSubOperations: result.data.operations.reduce(
             (sum, op) => sum + op.SubOperations.length,
-            0
+            0,
           ),
           styleId: result.data.styleId, // Include in summary too
           fileName: req.file.originalname,
@@ -1274,7 +1274,7 @@ exports.createHelperOps = async (req, res, next) => {
       } catch (cleanupError) {
         console.warn(
           "⚠️ Could not delete temporary file on error:",
-          cleanupError.message
+          cleanupError.message,
         );
       }
     }
@@ -1323,11 +1323,8 @@ exports.saveOperations = async (req, res, next) => {
   try {
     const { styleId } = req.params;
     const styleNo = styleId.startsWith(":") ? styleId.slice(1) : styleId;
-    const { operations, fileName, selectionStats } = req.body;
+    const { operations, selectionStats } = req.body;
 
-    // console.log("Style number:", styleNo);
-
-    // Find the style to get the style_id
     const style = await Style.findOne({
       where: { style_no: styleNo },
       transaction,
@@ -1341,146 +1338,176 @@ exports.saveOperations = async (req, res, next) => {
       });
     }
 
-    // console.log(`Found style: ${style.style_no}, Style ID: ${style.style_id}`);
+    const DEFAULT_OPERATION_TYPE_ID = 1; // normal / finishing
+    const HELPER_OPERATION_TYPE_ID = 2;
 
-    const DEFAULT_OPERATION_TYPE_ID = 1;
     const savedMainOperations = [];
     const savedSubOperations = [];
+    const savedHelpers = [];
     const skippedOperations = [];
 
-    for (const [index, operationData] of operations.entries()) {
+    // Helper detectors
+    const isFinishingOperation = (opNo) => /^F\d+/i.test(opNo);
+    const isHelperOperation = (opNo) => /^H\d+/i.test(opNo);
+    const isNumericSubOperation = (opNo) => /^\d+$/i.test(opNo);
+
+    for (const operationData of operations) {
       const {
         MainOperation: operationName,
         required,
         SubOperations,
       } = operationData;
 
-      if (required === "false") {
-        // console.log(`Skipping main operation: ${operationName} (not required)`);
-        continue;
-      }
+      if (required === "false") continue;
 
-      try {
-        // ✅ CHECK FOR DUPLICATE MAIN OPERATION
-        const existingMainOperation = await MainOperation.findOne({
-          where: {
-            style_no: style.style_id,
-            operation_name: operationName,
-          },
-          transaction,
-        });
+      // ============================
+      // CREATE / SKIP MAIN OPERATION
+      // ============================
+      let mainOperation = await MainOperation.findOne({
+        where: {
+          style_no: style.style_id,
+          operation_name: operationName,
+        },
+        transaction,
+      });
 
-        if (existingMainOperation) {
-          // console.log(`Skipping duplicate main operation: ${operationName}`);
-          skippedOperations.push(`Main: ${operationName}`);
-          continue;
-        }
-
-        // ✅ FIX: Use style_id instead of style_no
-        const mainOperation = await MainOperation.create(
+      if (!mainOperation) {
+        mainOperation = await MainOperation.create(
           {
             style_no: style.style_id,
-            operation_type_id: DEFAULT_OPERATION_TYPE_ID,
+            operation_type_id: 1,
             operation_name: operationName,
           },
-          { transaction }
+          { transaction },
         );
-
         savedMainOperations.push(mainOperation);
-        // console.log(
-        //   `Created main operation: ${operationName} (ID: ${mainOperation.operation_id})`
-        // );
+      }
 
-        // Process sub-operations...
-        if (SubOperations && Array.isArray(SubOperations)) {
-          for (const subOpData of SubOperations) {
-            const {
-              OperationNo: subOperationNumber,
-              Operation: subOperationName,
-              "M/C Type": machineType,
-              "MC SMV": smv,
-              required: subRequired,
-            } = subOpData;
+      // ============================
+      // PROCESS SUB OPERATIONS
+      // ============================
+      if (!Array.isArray(SubOperations)) continue;
 
-            if (subRequired === "false") {
-              console.log(
-                `Skipping sub-operation: ${subOperationName} (not required)`
-              );
-              continue;
-            }
+      for (const subOpData of SubOperations) {
+        const {
+          OperationNo: subOperationNumber,
+          Operation: subOperationName,
+          "M/C Type": machineType,
+          "MC SMV": smv,
+          required: subRequired,
+        } = subOpData;
 
-            try {
-              // ✅ CHECK FOR DUPLICATE SUB-OPERATION
-              const existingSubOperation = await SubOperation.findOne({
-                where: {
-                  main_operation_id: mainOperation.operation_id,
-                  sub_operation_number: subOperationNumber,
-                  sub_operation_name: subOperationName,
-                },
-                transaction,
-              });
+        if (subRequired === "false") continue;
 
-              if (existingSubOperation) {
-                // console.log(
-                //   `Skipping duplicate sub-operation: ${subOperationName} (${subOperationNumber})`
-                // );
-                skippedOperations.push(
-                  `Sub: ${subOperationName} (${subOperationNumber})`
-                );
-                continue;
-              }
+        // ============================
+        // HELPER OPERATION (H*)
+        // ============================
+        if (isHelperOperation(subOperationNumber)) {
+          const existingHelper = await Helper.findOne({
+            where: {
+              style_id: style.style_id,
+              operation_code: subOperationNumber,
+            },
+            transaction,
+          });
 
-              const subOperation = await SubOperation.create(
-                {
-                  main_operation_id: mainOperation.operation_id,
-                  sub_operation_number: subOperationNumber,
-                  sub_operation_name: subOperationName,
-                  smv: smv || null,
-                  machine_type: `${machineType}`,
-                  needle_count: null,
-                },
-                { transaction }
-              );
-
-              savedSubOperations.push(subOperation);
-              // console.log(
-              //   `Created sub-operation: ${subOperationName} for main operation ${mainOperation.operation_id}`
-              // );
-            } catch (subOpError) {
-              console.error(
-                `Error creating sub-operation ${subOperationName}:`,
-                subOpError
-              );
-            }
+          if (existingHelper) {
+            skippedOperations.push(
+              `Helper: ${subOperationName} (${subOperationNumber})`,
+            );
+            continue;
           }
+
+          const helper = await Helper.create(
+            {
+              style_id: style.style_id,
+              operation_type_id: HELPER_OPERATION_TYPE_ID,
+              operation_code: subOperationNumber,
+              operation_name: subOperationName,
+              mc_type: machineType,
+              mc_smv: smv ? smv.toString() : null,
+              comments: null,
+            },
+            { transaction },
+          );
+
+          savedHelpers.push(helper);
+          continue; // ⛔ no main operation involvement
         }
-      } catch (mainOpError) {
-        console.error(
-          `Error creating main operation ${operationName}:`,
-          mainOpError
-        );
+
+        // ============================
+        // FINISHING OPERATION (F*)
+        // ============================
+        let targetMainOperation = mainOperation;
+
+        if (isFinishingOperation(subOperationNumber)) {
+          const [finishingMainOp] = await MainOperation.findOrCreate({
+            where: {
+              style_no: style.style_id,
+              operation_name: "FINISHING",
+            },
+            defaults: {
+              style_no: style.style_id,
+              operation_type_id: DEFAULT_OPERATION_TYPE_ID,
+              operation_name: "FINISHING",
+            },
+            transaction,
+          });
+
+          targetMainOperation = finishingMainOp;
+        }
+
+        // ============================
+        // NORMAL SUB OPERATION (123 / F*)
+        // ============================
+        if (
+          isNumericSubOperation(subOperationNumber) ||
+          isFinishingOperation(subOperationNumber)
+        ) {
+          const existingSubOperation = await SubOperation.findOne({
+            where: {
+              main_operation_id: targetMainOperation.operation_id,
+              sub_operation_number: subOperationNumber,
+              sub_operation_name: subOperationName,
+            },
+            transaction,
+          });
+
+          if (existingSubOperation) {
+            skippedOperations.push(
+              `Sub: ${subOperationName} (${subOperationNumber})`,
+            );
+            continue;
+          }
+
+          const subOperation = await SubOperation.create(
+            {
+              main_operation_id: targetMainOperation.operation_id,
+              sub_operation_number: subOperationNumber,
+              sub_operation_name: subOperationName,
+              smv: smv || null,
+              machine_type: `${machineType}`,
+              needle_count: null,
+            },
+            { transaction },
+          );
+
+          savedSubOperations.push(subOperation);
+        }
       }
     }
 
     await transaction.commit();
 
-    // console.log(
-    //   `Successfully saved ${savedMainOperations.length} main operations and ${savedSubOperations.length} sub-operations`
-    // );
-    // console.log(`Skipped ${skippedOperations.length} duplicate operations`);
-
     return res.status(201).json({
       success: true,
-      message: `Successfully saved ${savedMainOperations.length} main operations and ${savedSubOperations.length} sub-operations for style ${styleNo}`,
+      message: `Successfully saved operations for style ${styleNo}`,
       data: {
         style: style.style_no,
         mainOperationsCount: savedMainOperations.length,
         subOperationsCount: savedSubOperations.length,
+        helperOperationsCount: savedHelpers.length,
         skippedOperationsCount: skippedOperations.length,
-        savedMainOperations: savedMainOperations.map((op) => ({
-          operation_id: op.operation_id,
-          operation_name: op.operation_name,
-        })),
         summary: selectionStats,
         duplicatesSkipped: skippedOperations,
       },
@@ -1502,7 +1529,7 @@ exports.saveOperations = async (req, res, next) => {
 async function handleMachineAssociations(
   subOperation,
   machineType,
-  transaction
+  transaction,
 ) {
   try {
     // Find machine by type or create if it doesn't exist
@@ -1519,7 +1546,7 @@ async function handleMachineAssociations(
           machine_name: machineType,
           // Add other required machine fields here
         },
-        { transaction }
+        { transaction },
       );
     }
 
@@ -1529,7 +1556,7 @@ async function handleMachineAssociations(
         sub_operation_id: subOperation.sub_operation_id,
         machine_id: machine.machine_id,
       },
-      { transaction }
+      { transaction },
     );
 
     // console.log(
@@ -1538,7 +1565,7 @@ async function handleMachineAssociations(
   } catch (machineError) {
     console.error(
       `Error handling machine associations for ${machineType}:`,
-      machineError
+      machineError,
     );
     // Don't throw - we don't want machine association errors to stop the entire process
   }

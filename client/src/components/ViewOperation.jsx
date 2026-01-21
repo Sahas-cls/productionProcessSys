@@ -254,15 +254,15 @@ const ViewStyleDetails = () => {
         </button>
 
         <div className="text-center">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-2 sm:mb-3">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-0 sm:mb-0">
             {style.style_no || "Unnamed Style"}
           </h1>
-          <div className="flex flex-col sm:flex-row justify-center gap-2 sm:gap-4 items-center">
+          <div className="flex flex-col sm:flex-row justify-center items-center">
             <span className="text-lg sm:text-xl text-teal-600 font-semibold">
-              PO: {style.po_number}
+              {/* PO: {style.po_number} */}
             </span>
-            <span className="text-sm sm:text-base text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              Style ID: {style.style_id}
+            <span className="text-sm sm:text-base text-gray-500 bg-gray-200 px-2 py-1 rounded min-w-10 border">
+              {/* Style ID: {style.style_id} */}
             </span>
           </div>
         </div>

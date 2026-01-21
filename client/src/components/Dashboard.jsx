@@ -75,7 +75,6 @@ const Dashboard = () => {
     loading: false,
   });
 
-
   const [customerDistribution, setCustomerDistribution] = useState({
     data: [],
     loading: false,
@@ -90,6 +89,24 @@ const Dashboard = () => {
     loading: false,
   });
 
+  const [machineBreakdown, setMachineBreakdown] = useState({
+    byType: [],
+    byStatus: [],
+    topBrands: [],
+    charts: {
+      pieChartData: [],
+      donutChartData: [],
+    },
+    summary: {
+      totalMachines: 0,
+      totalTypes: 0,
+      averageMachinesPerType: 0,
+      mostCommonType: "None",
+      topBrand: "Unknown",
+    },
+    loading: false,
+  });
+
   const [productionInsights, setProductionInsights] = useState({
     data: null,
     loading: false,
@@ -97,7 +114,7 @@ const Dashboard = () => {
 
   // Enhanced color scheme
   const COLORS = {
-    primary: "#6366F1",
+    primary: "#3e42f2",
     secondary: "#8B5CF6",
     success: "#10B981",
     warning: "#F59E0B",
@@ -136,7 +153,7 @@ const Dashboard = () => {
     if (!searchInput) return [];
     return styleList
       .filter((style) =>
-        style.style_no.toLowerCase().includes(searchInput.toLowerCase())
+        style.style_no.toLowerCase().includes(searchInput.toLowerCase()),
       )
       .slice(0, 8);
   }, [searchInput, styleList]);
@@ -184,7 +201,7 @@ const Dashboard = () => {
         `${apiUrl}/api/dashboard/season-wise-styles`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.data.success) {
         setSeasonData({
@@ -199,7 +216,6 @@ const Dashboard = () => {
     }
   };
 
-
   // Fetch customer distribution
   const fetchCustomerDistribution = async () => {
     setCustomerDistribution((prev) => ({ ...prev, loading: true }));
@@ -208,7 +224,7 @@ const Dashboard = () => {
         `${apiUrl}/api/dashboard/customer-season-distribution`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.data.success) {
         setCustomerDistribution({
@@ -230,7 +246,7 @@ const Dashboard = () => {
         `${apiUrl}/api/dashboard/recent-activity?limit=5`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.data.success) {
         setRecentActivity({
@@ -253,7 +269,7 @@ const Dashboard = () => {
         `${apiUrl}/api/dashboard/production-insights`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.data.success) {
         setProductionInsights({
@@ -274,13 +290,35 @@ const Dashboard = () => {
         `${apiUrl}/api/dashboard/season/${seasonId}`,
         {
           withCredentials: true,
-        }
+        },
       );
       if (response.data.success) {
         setSelectedSeason(response.data.data);
       }
     } catch (error) {
       console.error("Error fetching styles by season:", error);
+    }
+  };
+
+  // machine fetch functions
+  const fetchMachineBreakdown = async () => {
+    setMachineBreakdown((prev) => ({ ...prev, loading: true }));
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/dashboard/machine-breakdown`,
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        setMachineBreakdown({
+          ...response.data.data,
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching machine breakdown:", error);
+      setMachineBreakdown((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -304,7 +342,7 @@ const Dashboard = () => {
     setIsLoading(true);
     try {
       const response = await axios.get(
-        `${apiUrl}/api/dashboard/countSub/${selectedStyle}`
+        `${apiUrl}/api/dashboard/countSub/${selectedStyle}`,
       );
       const count = response.data;
       setSubCounts({
@@ -333,6 +371,7 @@ const Dashboard = () => {
         fetchCustomerDistribution(),
         fetchRecentActivity(),
         fetchProductionInsights(),
+        fetchMachineBreakdown(), // Add this
       ]);
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -363,6 +402,7 @@ const Dashboard = () => {
         fetchCustomerDistribution(),
         fetchRecentActivity(),
         fetchProductionInsights(),
+        fetchMachineBreakdown(), // Add this
       ]);
     };
     loadData();
@@ -526,7 +566,6 @@ const Dashboard = () => {
           </div> */}
         </div>
       </div>
-
       {/* Top Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <StatCard
@@ -536,7 +575,7 @@ const Dashboard = () => {
           color={COLORS.primary}
           gradient="bg-gradient-to-br from-indigo-50 to-purple-50"
           onClick={() => {
-            setSelectedCustomer(null), navigate("/customer");
+            (setSelectedCustomer(null), navigate("/customer"));
           }}
         />
         <StatCard
@@ -560,7 +599,6 @@ const Dashboard = () => {
           }}
         />
       </div>
-
       {/* Search Filter Section */}
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 border border-gray-200">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
@@ -633,9 +671,7 @@ const Dashboard = () => {
           </div>
         )}
       </div>
-
       {/* Season Summary Section */}
-
       {/* Season Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Season Distribution Pie Chart */}
@@ -763,9 +799,7 @@ const Dashboard = () => {
                   outerRadius={90}
                   paddingAngle={2}
                   dataKey="value"
-                  label={({ name, value }) =>
-                    `${name}: ${value}`
-                  }
+                  label={({ name, value }) => `${name}: ${value}`}
                 >
                   {assetsData.map((entry, index) => (
                     <Cell
@@ -783,10 +817,7 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
-
       {/* Recent Activity and Production Insights */}
-      
-
       {/* Selected Season Details */}
       {selectedSeason && (
         <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 mb-6">
@@ -848,8 +879,8 @@ const Dashboard = () => {
           )}
         </div>
       )}
-
-      {/* Operations & Assets Summary */}
+      {/* Operations & Assets Summary */}{" "}
+      {/*!!!! please remove this section instead add machine breakdown instead */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Operations Summary */}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
@@ -874,44 +905,91 @@ const Dashboard = () => {
           {selectedStyle && (
             <div className="mt-4 pt-4 border-t border-gray-200">
               <p className="text-xs text-gray-500 mb-2">
-                Filtered by: <span className="font-semibold">{selectedStyle}</span>
+                Filtered by:{" "}
+                <span className="font-semibold">{selectedStyle}</span>
               </p>
             </div>
           )}
         </div>
 
         {/* Assets Summary */}
-        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-200">
-          <h4 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <IoMdImages className="text-green-600" />
-            Assets Summary
-          </h4>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Videos</p>
-              <p className="text-2xl font-bold text-blue-700">
-                {subCounts.videos}
-              </p>
+        {/* Machine Breakdown Section */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <GiSewingMachine className="text-indigo-600" />
+                Machine Breakdown
+              </h2>
+              {/* <p className="text-gray-600 text-sm">
+                Distribution by type and status
+              </p> */}
             </div>
-            <div className="bg-amber-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Images</p>
-              <p className="text-2xl font-bold text-amber-700">
-                {subCounts.images}
-              </p>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Tech Packs</p>
-              <p className="text-2xl font-bold text-green-700">
-                {subCounts.techPacks}
-              </p>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Folders</p>
-              <p className="text-2xl font-bold text-purple-700">
-                {subCounts.folders}
-              </p>
+            <div className="flex items-center gap-2">
+              <div className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-sm">
+                Total: {machineBreakdown.summary.totalMachines || 0}
+              </div>
+              <div className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm">
+                Types: {machineBreakdown.summary.totalTypes || 0}
+              </div>
             </div>
           </div>
+
+          {machineBreakdown.loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-1">
+              {/* Donut Chart - Machines by Type */}
+              <div>
+                <div className="h-72">
+                  {machineBreakdown.charts.pieChartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={machineBreakdown.charts.pieChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={110}
+                          paddingAngle={2}
+                          dataKey="value"
+                          label={({ name, percent }) =>
+                            `${name}: ${(percent * 100).toFixed(1)}%`
+                          }
+                        >
+                          {machineBreakdown.charts.pieChartData.map(
+                            (entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={entry.color}
+                                stroke="#fff"
+                                strokeWidth={2}
+                              />
+                            ),
+                          )}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name) => [value, name]}
+                          contentStyle={{
+                            backgroundColor: "white",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        {/* <Legend /> */}
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex justify-center items-center h-full text-gray-500">
+                      No machine data available
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -73,13 +73,14 @@ async function processExcelFile(filePath) {
         };
         operations.push(currentMainOperation);
         console.log(
-          `✅ Detected Main Operation: "${operationValue}" - Row ${rowNumber}`
+          `✅ Detected Main Operation: "${operationValue}" - Row ${rowNumber}`,
         );
       }
+
       // Sub operation detection
-      else if (currentMainOperation && opNumber && !isNaN(opNumber)) {
+      else if (currentMainOperation && isValidOperationNumber(opNumber)) {
         const subOp = {
-          OperationNo: opNumber.toString(),
+          OperationNo: opNumber.toString().trim().toUpperCase(),
           Operation: operationValue,
           "M/C Type": mcType,
           "MC SMV": smv,
@@ -98,7 +99,7 @@ async function processExcelFile(filePath) {
         operations.length
       } main operations with ${operations.reduce(
         (sum, op) => sum + op.SubOperations.length,
-        0
+        0,
       )} sub-operations`,
       metadata: {
         totalRowsProcessed: processedCount,
@@ -153,7 +154,7 @@ async function processExcelFileAdvanced(filePath) {
     }
 
     // Extract Style ID from cell C6
-    const styleIdCell = sheet.getCell('C6');
+    const styleIdCell = sheet.getCell("C6");
     const styleId = (styleIdCell.value || "").toString().trim();
 
     const operations = [];
@@ -218,11 +219,11 @@ async function processExcelFileAdvanced(filePath) {
         };
         operations.push(currentMainOperation);
         console.log(
-          `✅ Detected Main Operation: "${operationValue}" - Row ${rowNumber} (Bold: ${isBold}, Upper: ${isUpper}, Centered: ${isCentered}, EmptyAbove: ${isEmptyRowAbove})`
+          `✅ Detected Main Operation: "${operationValue}" - Row ${rowNumber} (Bold: ${isBold}, Upper: ${isUpper}, Centered: ${isCentered}, EmptyAbove: ${isEmptyRowAbove})`,
         );
       }
       // Sub operation detection
-      else if (currentMainOperation && opNumber && !isNaN(opNumber)) {
+      else if (currentMainOperation && isValidOperationNumber(opNumber)) {
         const subOp = {
           OperationNo: opNumber.toString(),
           Operation: operationValue,
@@ -241,19 +242,19 @@ async function processExcelFileAdvanced(filePath) {
       success: true,
       data: {
         styleId: styleId,
-        operations: operations
+        operations: operations,
       },
       message: `Successfully extracted Style ID "${styleId}" and ${
         operations.length
       } main operations with ${operations.reduce(
         (sum, op) => sum + op.SubOperations.length,
-        0
+        0,
       )} sub-operations`,
       metadata: {
         totalRowsProcessed: processedCount,
         totalRowsInSheet: rowCount,
         extractionTimestamp: new Date().toISOString(),
-        styleId: styleId
+        styleId: styleId,
       },
     };
   } catch (error) {
@@ -263,7 +264,7 @@ async function processExcelFileAdvanced(filePath) {
       error: error.message,
       data: {
         styleId: "",
-        operations: []
+        operations: [],
       },
     };
   }
@@ -305,6 +306,14 @@ function isKnownMainOperationFormat(value) {
   ];
 
   return mainOperationPatterns.some((pattern) => pattern.test(value));
+}
+
+// **test
+function isValidOperationNumber(value) {
+  if (!value) return false;
+
+  // Accept numbers OR alphanumeric codes like F1, A12, OP3
+  return /^[A-Za-z0-9\-]+$/.test(value.toString().trim());
 }
 
 module.exports = { processExcelFile: processExcelFileAdvanced };

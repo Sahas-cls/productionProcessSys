@@ -51,8 +51,9 @@ const videoUpload = multer({
     files: 1,
   },
   fileFilter: (req, file, cb) => {
-    // Check if it's a video file
-    if (!file.mimetype.startsWith("video/")) {
+    // Check if it's a video file - handle MIME types with codec parameters
+    const cleanMimeType = file.mimetype.split(";")[0]; // Remove codec part
+    if (!cleanMimeType.startsWith("video/")) {
       return cb(new Error("Only video files are allowed"), false);
     }
 
@@ -72,9 +73,9 @@ const videoUpload = multer({
     if (!allowedExtensions.includes(fileExtension)) {
       return cb(
         new Error(
-          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`
+          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`,
         ),
-        false
+        false,
       );
     }
 
@@ -110,9 +111,9 @@ const imageUpload = multer({
     if (!allowedExtensions.includes(fileExtension)) {
       return cb(
         new Error(
-          `Unsupported image type. Allowed: ${allowedExtensions.join(", ")}`
+          `Unsupported image type. Allowed: ${allowedExtensions.join(", ")}`,
         ),
-        false
+        false,
       );
     }
 
@@ -172,9 +173,9 @@ const folderUpload = multer({
         new Error(
           `Unsupported file type: ${
             file.originalname
-          }. Allowed: ${allowedExtensions.join(", ")}`
+          }. Allowed: ${allowedExtensions.join(", ")}`,
         ),
-        false
+        false,
       );
     }
 
@@ -193,8 +194,8 @@ const handleMulterError = (error, req, res, next) => {
           (error.field === "video"
             ? "1GB"
             : error.field === "image"
-            ? "50MB"
-            : "20MB"),
+              ? "50MB"
+              : "20MB"),
       });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
@@ -229,7 +230,7 @@ routes.post(
   videoUpload.single("video"),
   handleMulterError,
   generateFilenames, // Add filename generation
-  controller.uploadVideo
+  controller.uploadVideo,
 );
 routes.delete("/deleteVideo/:so_media_id", controller.deleteVideo);
 
@@ -240,7 +241,7 @@ routes.post(
   imageUpload.single("image"),
   handleMulterError,
   generateFilenames, // Add filename generation
-  controller.uploadImage
+  controller.uploadImage,
 );
 routes.delete("/deleteImage/:so_img_id", controller.deleteImage);
 
@@ -251,7 +252,7 @@ routes.post(
   folderUpload.single("techPack"),
   handleMulterError,
   generateFilenames, // Add filename generation
-  controller.uploadTechPack
+  controller.uploadTechPack,
 );
 routes.delete("/deleteTechPack/:so_tech_id", controller.deleteTechPack);
 
@@ -262,15 +263,15 @@ routes.post(
   folderUpload.array("documents", 10), // max 10 files
   handleMulterError,
   generateFilenames, // Add filename generation
-  controller.uploadFolder
+  controller.uploadFolder,
 );
 routes.delete(
   "/deleteFolderDocument/:so_folder_id",
-  controller.deleteFolderDocument
+  controller.deleteFolderDocument,
 );
 routes.delete(
   "/deleteMultipleFolderDocuments",
-  controller.deleteMultipleFolderDocuments
+  controller.deleteMultipleFolderDocuments,
 );
 
 // !=============================== BULK MEDIA ROUTES ===============================

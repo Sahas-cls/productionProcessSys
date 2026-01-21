@@ -908,3 +908,126 @@ function getColorForSeason(seasonName) {
 
   return colors[index];
 }
+
+/**
+ * Get machine breakdown by type
+ */
+exports.getMachineBreakdown = async (req, res) => {
+  try {
+    // Get machine count by type
+    const machinesByType = await sequelize.query(
+      `SELECT 
+        machine_type,
+        COUNT(*) as count,
+        SUM(CASE WHEN machine_status = 'Active' THEN 1 ELSE 0 END) as active_count,
+        SUM(CASE WHEN machine_status = 'Inactive' THEN 1 ELSE 0 END) as inactive_count,
+        SUM(CASE WHEN machine_status = 'Maintenance' THEN 1 ELSE 0 END) as maintenance_count,
+        SUM(CASE WHEN machine_status = 'Repair' THEN 1 ELSE 0 END) as repair_count
+      FROM machine
+      WHERE machine_type IS NOT NULL AND machine_type != ''
+      GROUP BY machine_type
+      ORDER BY count DESC`,
+      {
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    // Get total machines
+    const totalMachines = await Machine.count();
+    
+    // Get machines by status (for donut chart)
+    const machinesByStatus = await sequelize.query(
+      `SELECT 
+        COALESCE(machine_status, 'Unknown') as status,
+        COUNT(*) as count
+      FROM machine
+      GROUP BY machine_status`,
+      {
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    // Get top machine brands
+    const topBrands = await sequelize.query(
+      `SELECT 
+        COALESCE(machine_brand, 'Unknown') as brand,
+        COUNT(*) as count
+      FROM machine
+      WHERE machine_brand IS NOT NULL AND machine_brand != ''
+      GROUP BY machine_brand
+      ORDER BY count DESC
+      LIMIT 5`,
+      {
+        type: sequelize.QueryTypes.SELECT
+      }
+    );
+
+    // Format data for frontend
+    const pieChartData = machinesByType.map((item, index) => ({
+      name: item.machine_type || 'Unknown',
+      value: parseInt(item.count),
+      color: GRADIENTS[index % GRADIENTS.length][0],
+      gradient: GRADIENTS[index % GRADIENTS.length]
+    }));
+
+    const donutChartData = machinesByStatus.map((item, index) => ({
+      name: item.status,
+      value: parseInt(item.count),
+      color: getStatusColor(item.status)
+    }));
+
+    // Calculate summary statistics
+    const summary = {
+      totalMachines,
+      totalTypes: machinesByType.length,
+      averageMachinesPerType: totalMachines > 0 ? (totalMachines / machinesByType.length).toFixed(1) : 0,
+      mostCommonType: machinesByType.length > 0 ? machinesByType[0].machine_type : 'None',
+      topBrand: topBrands.length > 0 ? topBrands[0].brand : 'Unknown'
+    };
+
+    res.status(200).json({
+      success: true,
+      data: {
+        byType: machinesByType,
+        byStatus: machinesByStatus,
+        topBrands,
+        charts: {
+          pieChartData,
+          donutChartData
+        },
+        summary
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching machine breakdown:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching machine breakdown",
+      error: error.message,
+    });
+  }
+};
+
+// Helper function for status colors
+function getStatusColor(status) {
+  const colors = {
+    'Active': '#10B981',      // Green
+    'Inactive': '#6B7280',    // Gray
+    'Maintenance': '#F59E0B', // Amber
+    'Repair': '#EF4444',      // Red
+    'Unknown': '#9CA3AF'      // Gray
+  };
+  return colors[status] || '#9CA3AF';
+}
+
+// Add this at the top of your file with other gradient colors
+const GRADIENTS = [
+  ["#6366F1", "#8B5CF6"], // Indigo to Purple
+  ["#3B82F6", "#60A5FA"], // Blue
+  ["#10B981", "#34D399"], // Emerald
+  ["#F59E0B", "#FBBF24"], // Amber
+  ["#EF4444", "#F87171"], // Red
+  ["#8B5CF6", "#D946EF"], // Purple to Pink
+  ["#06B6D4", "#0891B2"], // Cyan
+  ["#84CC16", "#65A30D"], // Lime
+];

@@ -39,4 +39,8 @@ routes.get("/recent-activity", controller.getRecentActivity);
 // Production insights
 routes.get("/production-insights", controller.getProductionInsights);
 
+// to get machine groups
+routes.get("/machine-breakdown", controller.getMachineBreakdown);
+
+
 module.exports = routes;
