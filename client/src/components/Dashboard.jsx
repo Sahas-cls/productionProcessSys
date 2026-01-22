@@ -447,6 +447,28 @@ const Dashboard = () => {
     return null;
   };
 
+  // pie chart custom labels
+  const renderLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, name, value }) => {
+  const RADIAN = Math.PI / 180;
+
+  // Pick a position along the slice area
+  const radius = innerRadius + (outerRadius - innerRadius) * 0.1; // 0.1 → near start, 0.5 → middle, 1 → end
+
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  // Only show label if value > 22
+  if (value > 22) {
+    return (
+      <text x={x} y={y} fill="#000" textAnchor="middle" dominantBaseline="central">
+        {`${name} ${value}`}
+      </text>
+    );
+  }
+  return null; // hides label and its arrow
+};
+
+
   // Season Tooltip Component
   const SeasonTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -471,6 +493,7 @@ const Dashboard = () => {
     }
     return null;
   };
+  
 
   // StatCard Component
   const StatCard = ({ title, value, icon: Icon, color, gradient, onClick }) => (
@@ -953,7 +976,7 @@ const Dashboard = () => {
                           cy="50%"
                           innerRadius={70}
                           outerRadius={120}
-                          paddingAngle={4}
+                          paddingAngle={2}
                           dataKey="value"
                           labelLine={({ value }) => {
                             value > 22 ? true : false;

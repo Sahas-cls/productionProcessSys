@@ -125,9 +125,12 @@ exports.getSBO = async (req, res, next) => {
         style_id: styleId,
       },
     });
+
+    const helperOp = await Helper.findAll({ where: { style_id: styleId } });
+
     console.log("data selected success one ........!");
     // res.status(200).json({ data: [...operations, ...helperOperations] });
-    res.status(200).json({ data: operations });
+    res.status(200).json({ data: operations, helperOp: helperOp });
   } catch (error) {
     console.error("Error fetching operation list:", error);
     // res.status(500).json({ error: "Something went wrong" });

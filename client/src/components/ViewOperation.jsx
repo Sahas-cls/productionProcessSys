@@ -7,13 +7,18 @@ import AddSubOperationOB from "./AddSubOperationOB";
 import { IoCloseOutline } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
+import { MdPersonOff } from "react-icons/md";
+import { FaArrowDown, FaDropbox } from "react-icons/fa";
+import { IoIosArrowDropdown, IoIosArrowDropdownCircle } from "react-icons/io";
 
 const ViewStyleDetails = () => {
   const navigate = useNavigate();
   const { style_id } = useParams();
   const apiUrl = import.meta.env.VITE_API_URL;
-  const location = useLocation();
+  const location = useLocation(); //holds the style id
+  // console.log("location: ", location);
   const [style, setStyle] = useState(null);
+  const [helperOp, setHelperOp] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [expandedOperations, setExpandedOperations] = useState({});
@@ -21,18 +26,20 @@ const ViewStyleDetails = () => {
   const [isAddingMO, setIsAddingMO] = useState(false);
   const [mainOperationId, setMainOperationId] = useState("");
   const { user, loading: userLoading, error } = useAuth();
+  const [helperFocus, setHelperFocus] = useState(false);
+  const [isShowHelperOp, setIsShowHelperOp] = useState(false);
 
   const fetchStyleData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/operationBulleting/getOB/${location.state}`
+        `${apiUrl}/api/operationBulleting/getOB/${location.state}`,
       );
       console.log("fetched data: ", response);
       if (response.data && response.data.data) {
         console.log("Fetched style data:", response.data.data);
         setStyle(response.data.data);
-
+        setHelperOp(response.data.helperOp);
         const initialExpanded = {};
         response.data.data.operations?.forEach((op) => {
           initialExpanded[op.operation_id] = false;
@@ -72,7 +79,7 @@ const ViewStyleDetails = () => {
     try {
       setIsDeleting(true);
       const response = await axios.delete(
-        `${apiUrl}/api/operationBulleting/deleteBO/${operationId}`
+        `${apiUrl}/api/operationBulleting/deleteBO/${operationId}`,
       );
 
       if (response.status === 200) {
@@ -108,7 +115,7 @@ const ViewStyleDetails = () => {
     try {
       const response = await axios.delete(
         `${apiUrl}/api/operationBulleting/delete-sub-operation/${subOperationId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.status === 200) {
@@ -456,7 +463,7 @@ const ViewStyleDetails = () => {
                                               operationId:
                                                 operation.operation_id,
                                             },
-                                          }
+                                          },
                                         )
                                       }
                                       className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium transition-colors duration-200"
@@ -468,7 +475,7 @@ const ViewStyleDetails = () => {
                                       onClick={() =>
                                         handleDeleteSubOperation(
                                           subOp.sub_operation_id,
-                                          operation.operation_id
+                                          operation.operation_id,
                                         )
                                       }
                                       className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition-colors duration-200"
@@ -526,7 +533,8 @@ const ViewStyleDetails = () => {
                                         {/* Needle Types */}
                                         {subOp.needle_types?.filter(
                                           (nt) =>
-                                            nt.machine_id === machine.machine_id
+                                            nt.machine_id ===
+                                            machine.machine_id,
                                         ).length > 0 && (
                                           <div className="mt-2">
                                             <p className="text-xs sm:text-sm font-medium text-gray-700">
@@ -537,7 +545,7 @@ const ViewStyleDetails = () => {
                                                 .filter(
                                                   (nt) =>
                                                     nt.machine_id ===
-                                                    machine.machine_id
+                                                    machine.machine_id,
                                                 )
                                                 .map((nt, idx) => (
                                                   <span
@@ -554,7 +562,8 @@ const ViewStyleDetails = () => {
                                         {/* Needle Treads */}
                                         {subOp.needle_treads?.filter(
                                           (nt) =>
-                                            nt.machine_id === machine.machine_id
+                                            nt.machine_id ===
+                                            machine.machine_id,
                                         ).length > 0 && (
                                           <div className="mt-2">
                                             <p className="text-xs sm:text-sm font-medium text-gray-700">
@@ -565,7 +574,7 @@ const ViewStyleDetails = () => {
                                                 .filter(
                                                   (nt) =>
                                                     nt.machine_id ===
-                                                    machine.machine_id
+                                                    machine.machine_id,
                                                 )
                                                 .map((nt, idx) => (
                                                   <span
@@ -582,7 +591,8 @@ const ViewStyleDetails = () => {
                                         {/* Needle Loopers */}
                                         {subOp.needle_loopers?.filter(
                                           (nl) =>
-                                            nl.machine_id === machine.machine_id
+                                            nl.machine_id ===
+                                            machine.machine_id,
                                         ).length > 0 && (
                                           <div className="mt-2">
                                             <p className="text-xs sm:text-sm font-medium text-gray-700">
@@ -593,7 +603,7 @@ const ViewStyleDetails = () => {
                                                 .filter(
                                                   (nl) =>
                                                     nl.machine_id ===
-                                                    machine.machine_id
+                                                    machine.machine_id,
                                                 )
                                                 .map((nl, idx) => (
                                                   <span
@@ -685,6 +695,87 @@ const ViewStyleDetails = () => {
               No operations found for this style
             </div>
           )}
+        </section>
+
+        {/* helper operation section */}
+        <section className="p-4 sm:p-6">
+          <div className="flex justify-between">
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+              Helper Operations ({helperOp?.length || 0})
+            </h2>
+            <div className="">
+              <button
+                className={`${isShowHelperOp ? "rotate-180" : "rotate-0"} duration-200`}
+                onClick={() => setIsShowHelperOp(!isShowHelperOp)}
+              >
+                <IoIosArrowDropdown className="text-2xl opacity-45" />
+              </button>
+            </div>
+          </div>
+          <AnimatePresence>
+            {isShowHelperOp && (
+              <motion.div
+                className=""
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                {/* helper op card */}
+                {helperOp && helperOp.length > 0 ? (
+                  <div>
+                    {helperOp &&
+                      helperOp.length > 0 &&
+                      helperOp.map((hOp) => (
+                        <div
+                          key={hOp.helper_id}
+                          className="bg-gray-50 p-3 mt-2 mb-3 border rounded-md sm:p-4 sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-gray-100 hover:shadow-md transition-colors duration-200"
+                        >
+                          <div className="">
+                            <h3 className="font-semibold uppercase text-lg">
+                              {hOp.operation_name || "N/A"}
+                            </h3>
+                          </div>
+
+                          <div className="">
+                            <div className="mt-2 relative">
+                              <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                                {`ID: ${hOp.helper_id}` || "N/A"}
+                              </span>
+                              <span className="bg-green-50 text-green-700 px-2 py-1 rounded ml-2">
+                                Type: Helper
+                              </span>
+                              <span className="text-sm ml-3">{`Created: ${formatDate(
+                                hOp.createdAt,
+                              )}`}</span>
+                              <span className="absolute right-8 bg-blue-200/40 px-2 py-1 rounded-full text-blue-800 font-semibold">
+                                {`SMV: ${hOp.mc_smv}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div
+                    className=" w-full border shadow-sm rounded-md flex justify-center items-center p-4"
+                    onBlur={() => setHelperFocus(false)}
+                    onFocus={() => setHelperFocus(true)}
+                    tabIndex={0}
+                  >
+                    <div
+                      className={`flex flex-col items-center text-gray-400 ${helperFocus ? "animate-pulse" : ""}`}
+                    >
+                      <MdPersonOff className={`text-5xl`} />
+                      <h5 className="font-semibold">
+                        No Helper Operations Found
+                      </h5>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
       </div>
     </div>

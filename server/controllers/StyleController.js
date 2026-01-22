@@ -56,7 +56,6 @@ async function saveImageToB2(file, styleNo, imageType, styleId) {
   }
 }
 
-// Helper to delete files from B2
 // Helper function to delete files from B2
 async function deleteFileFromB2(mediaRecord) {
   try {
@@ -219,7 +218,7 @@ exports.getStylesMo = async (req, res, next) => {
   //
   console.log("requesting");
   console.log(req.body);
-  return;
+  // return;
   // return res.status(200);
   const { styleNo } = req.body;
   try {
