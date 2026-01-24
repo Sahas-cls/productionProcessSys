@@ -39,6 +39,7 @@ import DocumentGallery from "./pages/DocumentGallery";
 import NeedleThreatsPage from "./pages/NeedleThreatsPage";
 import NotificationPage from "./pages/NotificationPage";
 import ManageUsersPage from "./pages/admin/ManageUsersPage";
+import AddTechnicalDataPage from "./pages/AddTechnicalDataPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -83,6 +84,8 @@ const App = () => {
             element={<ViewHelperOperation />}
           />
           <Route path="/view-machine" element={<ViewMachinePage />} />
+
+          <Route path="/technical-data" element={<AddTechnicalDataPage />} />
 
           {/* edit main operation */}
           <Route path="/operations/edit/:id" element={<EditMainOperation />} />

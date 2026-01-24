@@ -11,6 +11,7 @@ import { TbReport } from "react-icons/tb";
 import { MdSpaceDashboard } from "react-icons/md";
 import { TbNeedleThread } from "react-icons/tb";
 import { FaUsersCog } from "react-icons/fa";
+import { TbToolsOff } from "react-icons/tb";
 
 export const adminSidebarData = [
   {
@@ -61,13 +62,13 @@ export const adminSidebarData = [
     icon: PiListBulletsFill,
     submenu: [
       {
-        id: 61,
+        id: 71,
         title: "Add New",
         icon: IoAddCircleSharp,
         navigateTo: "/operation-bulletin/add",
       },
       {
-        id: 62,
+        id: 72,
         title: "View Operations",
         icon: FaRegEye,
         navigateTo: "/operation-bulletin/list",
@@ -76,17 +77,23 @@ export const adminSidebarData = [
   },
   {
     id: 8,
+    title: "Technical Data",
+    icon: TbToolsOff,
+    navigateTo: "/technical-data",
+  },
+  {
+    id: 9,
     title: "Layout",
     icon: RiLayoutMasonryFill,
     submenu: [
       {
-        id: 71,
+        id: 91,
         title: "New Layout",
         icon: IoAddCircleSharp,
         navigateTo: "/layout/create-new-layout",
       },
       {
-        id: 72,
+        id: 92,
         title: "View Layout",
         icon: FaRegEye,
         navigateTo: "/layout/list-view",
@@ -94,13 +101,13 @@ export const adminSidebarData = [
     ],
   },
   {
-    id: 9,
+    id: 10,
     title: "Report",
     icon: TbReport,
     navigateTo: "/reports",
   },
   {
-    id: 10,
+    id: 11,
     title: "Manage Users",
     icon: FaUsersCog,
     navigateTo: "/manage-users",
