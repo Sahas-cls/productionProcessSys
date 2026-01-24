@@ -673,7 +673,7 @@ exports.editOperation = async (req, res, next) => {};
 exports.updateSubOperation = async (req, res, next) => {
   // Start transaction
   const t = await sequelize.transaction();
-
+  console.log("edit sub op: ", req.body);
   try {
     const { id } = req.params;
     const {
@@ -789,6 +789,11 @@ exports.updateSubOperation = async (req, res, next) => {
         },
         { transaction: t },
       );
+    } else {
+      await sequelize.models.SubOperationMachine.destroy({
+        where: { sub_operation_id: id },
+        transaction: t,
+      });
     }
 
     await t.commit();
