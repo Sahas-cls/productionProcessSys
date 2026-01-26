@@ -619,11 +619,7 @@ const ViewStyleDetails = () => {
                                       </div>
                                     ))}
                                   </div>
-                                  <h2 className="font-medium mt-4">
-                                    Needle configurations
-                                  </h2>
-                                  <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
-                                    {/* needle size */}
+                                  {/* <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
                                     <div className="">
                                       <p className="text-gray-700">
                                         <span className="font-medium text-sm">
@@ -633,7 +629,6 @@ const ViewStyleDetails = () => {
                                       </p>
                                     </div>
 
-                                    {/* needle type */}
                                     <div className="">
                                       <p className="text-gray-700">
                                         <span className="font-medium text-sm">
@@ -643,7 +638,6 @@ const ViewStyleDetails = () => {
                                       </p>
                                     </div>
 
-                                    {/* needle type */}
                                     <div className="">
                                       <p className="text-gray-700">
                                         <span className="font-medium text-sm">
@@ -653,7 +647,6 @@ const ViewStyleDetails = () => {
                                       </p>
                                     </div>
 
-                                    {/* looper type */}
                                     <div className="">
                                       <p className="text-gray-700">
                                         <span className="font-medium text-sm">
@@ -662,15 +655,17 @@ const ViewStyleDetails = () => {
                                         {subOp?.looper?.thread_category}
                                       </p>
                                     </div>
-                                  </div>
+                                  </div> */}
                                 </div>
                               )}
 
                               {/* Remarks */}
                               {subOp.remark && (
                                 <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
-                                  <div className="text-xs sm:text-sm font-medium text-gray-700 mb-1 bg-green-100 p-4 rounded-md">
-                                    Needle Config:
+                                  <h2 className="font-medium mt-4">
+                                    Needle configurations
+                                  </h2>
+                                  <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
                                     <div className="grid grid-cols-2">
                                       <div className="">
                                         <p className="pt-4">Needle 1</p>
@@ -705,7 +700,7 @@ const ViewStyleDetails = () => {
                                       </div>
                                     </div>
                                   </div>
-                                  <p className="text-xs sm:text-sm font-medium text-gray-700 mb-1">
+                                  <p className="text-xs sm:text-sm font-medium text-gray-700 mb-1 mt-4">
                                     Remarks:
                                   </p>
                                   <p className="text-gray-600 text-xs sm:text-sm">
