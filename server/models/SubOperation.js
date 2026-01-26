@@ -80,7 +80,7 @@ module.exports = (sequelize, DataTypes) => {
       tableName: "sub_operation",
       timestamps: true,
       underscored: false,
-    }
+    },
   );
 
   SubOperation.associate = (models) => {
@@ -138,6 +138,14 @@ module.exports = (sequelize, DataTypes) => {
     SubOperation.hasMany(models.SubOperationMedia, {
       foreignKey: "sub_operation_id",
       as: "medias",
+    });
+
+    //needles
+    SubOperation.hasMany(models.OpNeedles, {
+      foreignKey: "sub_operation_id",
+      as: "needles",
+      // onDelete: "CASCADE",
+      // onUpdate: "CASCADE",
     });
   };
 

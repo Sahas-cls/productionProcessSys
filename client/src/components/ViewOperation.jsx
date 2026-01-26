@@ -669,6 +669,42 @@ const ViewStyleDetails = () => {
                               {/* Remarks */}
                               {subOp.remark && (
                                 <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                                  <div className="text-xs sm:text-sm font-medium text-gray-700 mb-1 bg-green-100 p-4 rounded-md">
+                                    Needle Config:
+                                    <div className="grid grid-cols-2">
+                                      <div className="">
+                                        <p className="pt-4">Needle 1</p>
+                                        <p className="pl-2 text-gray-500">
+                                          Needle type:{" "}
+                                          {subOp?.needles[0]?.needle_type
+                                            ?.needle_type || "N/A"}
+                                        </p>
+                                        <p className="pt-4">Bottom</p>
+                                        {/* Bottom */}
+                                        <p className="pl-2 text-gray-500">
+                                          Thread type:{" "}
+                                          {subOp?.needles[0]?.bottom
+                                            ?.thread_category || "N/A"}
+                                        </p>
+                                      </div>
+                                      <div className="">
+                                        <p className="pt-4">Needle 2</p>
+                                        {/* Needle 2 */}
+                                        <p className="pl-2 text-gray-500">
+                                          Needle type:{" "}
+                                          {subOp?.needles[0]?.needle_type
+                                            ?.needle_type || "N/A"}
+                                        </p>
+                                        <p className="pt-4">Looper</p>
+                                        {/* Looper */}
+                                        <p className="pl-2 text-gray-500">
+                                          Thread type:{" "}
+                                          {subOp?.needles[1]?.looper
+                                            ?.thread_category || "N/A"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
                                   <p className="text-xs sm:text-sm font-medium text-gray-700 mb-1">
                                     Remarks:
                                   </p>

@@ -21,6 +21,7 @@ const {
   UserCategory,
   Thread,
   StyleMedia,
+  OpNeedles,
 } = require("../models");
 const { title } = require("process");
 
@@ -89,41 +90,97 @@ exports.getSBO = async (req, res, next) => {
   try {
     console.log(req.body);
 
+    // const operations = await Style.findOne({
+    //   include: [
+    //     {
+    //       model: MainOperation,
+    //       as: "operations",
+    //       include: [
+    //         {
+    //           model: SubOperation,
+    //           as: "subOperations",
+    //           include: [
+    //             {
+    //               model: Machine,
+    //               as: "machines",
+    //               through: { attributes: [] },
+    //             },
+    //             {
+    //               model: OpNeedles,
+    //               as: "needles",
+    //               include: [
+    //                 {
+    //                   model: Thread,
+    //                   as: "thread",
+    //                 },
+    //               ],
+    //             },
+    //             {
+    //               model: NeedleTypeN,
+    //               as: "needle_type",
+    //             },
+    //             {
+    //               model: Thread,
+    //               as: "thread",
+    //             },
+    //             {
+    //               model: Thread,
+    //               as: "looper",
+    //             },
+    //           ],
+    //         },
+    //       ],
+    //     },
+    //   ],
+    //   where: {
+    //     style_id: styleId,
+    //   },
+    // });
+
     const operations = await Style.findOne({
+      where: { style_id: styleId },
+
       include: [
         {
           model: MainOperation,
           as: "operations",
+
           include: [
             {
               model: SubOperation,
               as: "subOperations",
+
               include: [
                 {
                   model: Machine,
                   as: "machines",
                   through: { attributes: [] },
                 },
+
                 {
-                  model: NeedleTypeN,
-                  as: "needle_type",
-                },
-                {
-                  model: Thread,
-                  as: "thread",
-                },
-                {
-                  model: Thread,
-                  as: "looper",
+                  model: OpNeedles,
+                  as: "needles",
+
+                  include: [
+                    {
+                      model: NeedleTypeN,
+                      as: "needle_type",
+                    },
+                    {
+                      model: Thread,
+                      as: "bottom",
+                    },
+                    {
+                      model: Thread,
+                      as: "looper",
+                    },
+                  ],
                 },
               ],
             },
           ],
         },
       ],
-      where: {
-        style_id: styleId,
-      },
     });
 
     const helperOp = await Helper.findAll({ where: { style_id: styleId } });
@@ -670,12 +727,12 @@ exports.createBulkOperations = async (req, res, next) => {
 exports.editOperation = async (req, res, next) => {};
 
 // to update one single sub operation
-exports.updateSubOperation = async (req, res, next) => {
-  // Start transaction
+exports.updateSubOperation = async (req, res) => {
   const t = await sequelize.transaction();
-  console.log("edit sub op: ", req.body);
+
   try {
     const { id } = req.params;
+
     const {
       sub_operation_name,
       smv,
@@ -685,46 +742,44 @@ exports.updateSubOperation = async (req, res, next) => {
       spi,
       machine_type,
       machine_id,
+
+      // OLD single needle
       needle_type_id,
-      thread_id,
-      looper_id,
+
+      // NEW MULTI NEEDLE FIELDS
+      needle_type_id1,
+      thread_id1,
+      needle_type_id2,
+      thread_id2,
     } = req.body;
 
-    // Basic validation
     if (!id || !sub_operation_name) {
       await t.rollback();
       return res.status(400).json({
-        error: "Missing required fields",
-        details: "SubOperation ID and name are required",
+        error: "SubOperation ID and name are required",
       });
     }
 
-    // 1. FIRST: Get current data BEFORE update (for logging)
+    /* ---------------------------------------------------
+       1) FIND CURRENT SUB OPERATION
+    --------------------------------------------------- */
     const currentSubOperation = await SubOperation.findByPk(id, {
       transaction: t,
-      include: [
-        {
-          model: Machine,
-          as: "machines",
-          through: { attributes: [] },
-        },
-      ],
+      include: [{ model: Machine, as: "machines" }],
     });
 
     if (!currentSubOperation) {
       await t.rollback();
-      return res.status(404).json({
-        error: "Not found",
-        details: "SubOperation not found",
-      });
+      return res.status(404).json({ error: "SubOperation not found" });
     }
 
-    // 2. LOG: Insert old data into log table BEFORE updating
+    /* ---------------------------------------------------
+       2) LOG OLD DATA
+    --------------------------------------------------- */
     await SubOperationLog.create(
       {
         sub_operation_id: currentSubOperation.sub_operation_id,
         main_operation_id: currentSubOperation.main_operation_id,
-        thread_id: currentSubOperation.thread_id,
         sub_operation_number: currentSubOperation.sub_operation_number,
         performed_action: "Update",
         sub_operation_name: currentSubOperation.sub_operation_name,
@@ -734,188 +789,118 @@ exports.updateSubOperation = async (req, res, next) => {
         machine_type: currentSubOperation.machine_type,
         spi: currentSubOperation.spi,
         needle_type_id: currentSubOperation.needle_type_id,
-        looper_id: currentSubOperation.looper_id,
         created_by: req.user.userId,
       },
       { transaction: t },
     );
 
-    // 3. THEN: Update the SubOperation
-    const updateData = {
-      sub_operation_name,
-      smv: smv ? parseFloat(smv) : null,
-      remark: remark || "-",
-      sub_operation_number: sub_operation_number || null,
-      needle_count: needle_count ? parseFloat(needle_count) : null,
-      spi: spi ? parseFloat(spi) : null,
-      machine_type: machine_type || null,
-      needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
-      thread_id: thread_id ? parseInt(thread_id) : null,
-      looper_id: looper_id ? parseInt(looper_id) : null,
-    };
+    /* ---------------------------------------------------
+       3) UPDATE SUB OPERATION TABLE
+    --------------------------------------------------- */
+    await SubOperation.update(
+      {
+        sub_operation_name,
+        smv: smv ? parseFloat(smv) : null,
+        remark: remark || "-",
+        sub_operation_number,
+        needle_count: needle_count ? parseFloat(needle_count) : null,
+        spi: spi ? parseFloat(spi) : null,
+        machine_type,
+        needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
+      },
+      {
+        where: { sub_operation_id: id },
+        transaction: t,
+      },
+    );
 
-    const [updatedRows] = await SubOperation.update(updateData, {
+    /* ---------------------------------------------------
+       4) UPDATE MACHINE MAPPING
+    --------------------------------------------------- */
+    await sequelize.models.SubOperationMachine.destroy({
       where: { sub_operation_id: id },
       transaction: t,
     });
 
-    if (updatedRows === 0) {
-      await t.rollback();
-      throw new Error("SubOperation not found");
-    }
-
-    // 4. Update machine association if machine_id is provided
     if (machine_id) {
-      const machineId = parseInt(machine_id);
-
-      // Check if machine exists
-      const machine = await Machine.findByPk(machineId, { transaction: t });
-      if (!machine) {
-        await t.rollback();
-        throw new Error(`Machine with ID ${machineId} not found`);
-      }
-
-      // Clear existing machine associations
-      await sequelize.models.SubOperationMachine.destroy({
-        where: { sub_operation_id: id },
-        transaction: t,
-      });
-
-      // Create new association
       await sequelize.models.SubOperationMachine.create(
         {
           sub_operation_id: id,
-          machine_id: machineId,
+          machine_id: parseInt(machine_id),
         },
         { transaction: t },
       );
-    } else {
-      await sequelize.models.SubOperationMachine.destroy({
-        where: { sub_operation_id: id },
-        transaction: t,
-      });
     }
 
+    /* ---------------------------------------------------
+       5) DELETE OLD NEEDLES
+    --------------------------------------------------- */
+    await OpNeedles.destroy({
+      where: { sub_operation_id: id },
+      transaction: t,
+    });
+
+    /* ---------------------------------------------------
+       6) INSERT NEEDLE ROW #1
+    --------------------------------------------------- */
+    if (needle_type_id1 && thread_id1) {
+      await OpNeedles.create(
+        {
+          sub_operation_id: id,
+          needle_type_id: parseInt(needle_type_id1),
+          bottom_id: parseInt(thread_id1), // using bottom_id column
+          looper_id: null,
+          description: "Needle 1",
+        },
+        { transaction: t },
+      );
+    }
+
+    /* ---------------------------------------------------
+       7) INSERT NEEDLE ROW #2
+    --------------------------------------------------- */
+    if (needle_type_id2 && thread_id2) {
+      await OpNeedles.create(
+        {
+          sub_operation_id: id,
+          needle_type_id: parseInt(needle_type_id2),
+          bottom_id: null,
+          looper_id: parseInt(thread_id2),
+          description: "Needle 2",
+        },
+        { transaction: t },
+      );
+    }
+
+    /* ---------------------------------------------------
+       8) COMMIT
+    --------------------------------------------------- */
     await t.commit();
 
-    // Fetch updated data for response
+    /* ---------------------------------------------------
+       9) RETURN UPDATED DATA
+    --------------------------------------------------- */
     const updatedSubOperation = await SubOperation.findByPk(id, {
       include: [
-        {
-          model: Machine,
-          as: "machines",
-          through: { attributes: [] },
-        },
-        {
-          model: sequelize.models.NeedleTypeN,
-          as: "needle_type",
-        },
-        {
-          model: Thread,
-          as: "thread",
-        },
-        {
-          model: Thread,
-          as: "looper",
-        },
+        { model: Machine, as: "machines" },
+        { model: OpNeedles, as: "needles" },
       ],
     });
 
-    console.log("updated userId: ", updatedSubOperation.created_by);
-
-    const modifiedUser = await User.findByPk(req.user.userId, {
-      include: [{ model: Department, as: "department" }],
-    });
-
-    console.log("modified user: ", modifiedUser);
-
-    const message =
-      currentSubOperation.sub_operation_name +
-      " has been modified by user " +
-      modifiedUser.user_name +
-      `(${modifiedUser.department.department_name})`;
-
-    // Find all SuperAdmin users to send notifications to
-    const superAdminCategory = await UserCategory.findOne({
-      where: { category_name: "SuperAdmin" },
-      attributes: ["category_id"],
-    });
-
-    if (!superAdminCategory) {
-      console.error("SuperAdmin category not found");
-      return res.status(200).json({
-        success: true,
-        message:
-          "SubOperation updated successfully but SuperAdmin category not found",
-        data: updatedSubOperation,
-        log_created: true,
-      });
-    }
-
-    // Find all users with SuperAdmin category
-    const superAdminUsers = await User.findAll({
-      where: { user_category: superAdminCategory.category_id },
-      attributes: ["user_id"],
-    });
-
-    // Create notifications for all SuperAdmin users
-    if (superAdminUsers.length > 0) {
-      const notificationPromises = superAdminUsers.map((user) =>
-        Notification.create({
-          user_id: user.user_id,
-          title: "Operation Update Alert",
-          operation_id: currentSubOperation.sub_operation_id,
-          message: message,
-          type: "ALERT",
-        }),
-      );
-
-      await Promise.all(notificationPromises);
-      console.log(
-        `Notifications sent to ${superAdminUsers.length} SuperAdmin users`,
-      );
-    } else {
-      console.log("No SuperAdmin users found to send notifications");
-    }
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "SubOperation updated successfully",
       data: updatedSubOperation,
-      log_created: true,
-      notifications_sent: superAdminUsers.length,
     });
   } catch (error) {
-    if (t && !t.finished) {
-      await t.rollback();
-    }
+    if (t && !t.finished) await t.rollback();
 
-    console.error("Update failed:", error);
+    console.error(error);
 
-    // Specific error handling
-    if (error.message.includes("not found")) {
-      return res.status(404).json({
-        error: "Resource not found",
-        details: error.message,
-      });
-    }
-
-    if (
-      error.name === "SequelizeValidationError" ||
-      error.name === "SequelizeForeignKeyConstraintError"
-    ) {
-      return res.status(400).json({
-        error: "Validation error",
-        details: error.message,
-      });
-    }
-
-    res.status(500).json({
-      error: "Internal server error",
-      details:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Something went wrong",
+    return res.status(500).json({
+      success: false,
+      message: "Update failed",
+      error: error.message,
     });
   }
 };

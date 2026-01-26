@@ -9,7 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       thread_category: {
         type: DataTypes.STRING,
-        allowNull: false,  // Changed to false if it's required
+        allowNull: false, // Changed to false if it's required
         validate: { len: [1, 255] },
       },
       description: {
@@ -19,19 +19,29 @@ module.exports = (sequelize, DataTypes) => {
       status: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: true,  // Fixed: toDefaultValue → defaultValue
+        defaultValue: true, // Fixed: toDefaultValue → defaultValue
       },
     },
-    { 
-      tableName: "thread",  // Consistent lowercase table naming
-      timestamps: true 
-    }
+    {
+      tableName: "thread", // Consistent lowercase table naming
+      timestamps: true,
+    },
   );
 
   Thread.associate = (models) => {
     Thread.hasMany(models.SubOperation, {
       foreignKey: "thread_id",
       as: "sub_operations",
+    });
+
+    Thread.hasMany(models.OpNeedles, {
+      foreignKey: "bottom_id",
+      as: "bottomNeedles",
+    });
+
+    Thread.hasMany(models.OpNeedles, {
+      foreignKey: "looper_id",
+      as: "looperNeedles",
     });
   };
 

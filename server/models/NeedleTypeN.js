@@ -38,6 +38,13 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "needle_type_id",
       as: "sub_operations",
     });
+
+     NeedleTypeN.hasMany(models.OpNeedles, {
+      foreignKey: "needle_type_id",
+      as: "needles",
+      // onDelete: "CASCADE",
+      // onUpdate: "CASCADE",
+    });
   };
 
   return NeedleTypeN;
