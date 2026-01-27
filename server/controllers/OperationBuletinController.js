@@ -157,6 +157,10 @@ exports.getSBO = async (req, res, next) => {
                   through: { attributes: [] },
                 },
                 {
+                  model: NeedleTypeN,
+                  as: "needle_type",
+                },
+                {
                   model: Thread,
                   as: "bobbin",
                 },
@@ -170,8 +174,8 @@ exports.getSBO = async (req, res, next) => {
 
                   include: [
                     {
-                      model: NeedleTypeN,
-                      as: "needle_type",
+                      model: Thread,
+                      as: "thread",
                     },
                   ],
                 },
@@ -729,7 +733,7 @@ exports.editOperation = async (req, res, next) => {};
 exports.updateSubOperation = async (req, res) => {
   const t = await sequelize.transaction();
 
-  console.log("sub op update req body: ", req.body);
+  // console.log("sub op update req body: ", req.body);
 
   try {
     const { id } = req.params;

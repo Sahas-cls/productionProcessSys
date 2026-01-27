@@ -45,9 +45,7 @@ const EditSubOperationPage = () => {
 
   // Search states
   const [machineTypeSearch, setMachineTypeSearch] = useState("");
-  const [needleTypeSearch, setNeedleTypeSearch] = useState(
-    subOperation?.needle_type?.needle_type || "",
-  );
+  const [needleTypeSearch, setNeedleTypeSearch] = useState("");
   const [needle1ThreadSearch, setNeedle1ThreadSearch] = useState("");
   const [needle2ThreadSearch, setNeedle2ThreadSearch] = useState("");
   const [bobbinSearch, setBobbinSearch] = useState("");
@@ -71,12 +69,14 @@ const EditSubOperationPage = () => {
   // Initialize selected values from subOperation data
   useEffect(() => {
     if (subOperation) {
+      console.log("Initializing from subOperation:", subOperation);
+
       // Set machine type search
       if (subOperation.machine_type) {
         setMachineTypeSearch(subOperation.machine_type);
       }
 
-      // Set needle type from machine details
+      // Set needle type from needle_type object
       if (subOperation.needle_type) {
         setSelectedNeedleType(subOperation.needle_type);
         setNeedleTypeSearch(subOperation.needle_type.needle_type || "");
@@ -84,44 +84,36 @@ const EditSubOperationPage = () => {
 
       // Find threads from needles array
       const needles = subOperation.needles || [];
-      console.log("Needles found:", needles);
+      console.log("Needles found for initialization:", needles);
 
-      // Find thread for needle 1 (top thread)
-      const needle1ThreadNeedle = needles.find(
-        (n) => n.description === "Needle 1" || n.thread_id !== null,
-      );
-      if (needle1ThreadNeedle && needle1ThreadNeedle.thread) {
-        setSelectedNeedle1Thread(needle1ThreadNeedle.thread);
-        setNeedle1ThreadSearch(
-          needle1ThreadNeedle.thread.thread_category || "",
-        );
+      // Find Needle 1 thread
+      const needle1Needle = needles.find((n) => n.description === "Needle 1");
+      if (needle1Needle && needle1Needle.thread) {
+        console.log("Found Needle 1 thread:", needle1Needle.thread);
+        setSelectedNeedle1Thread(needle1Needle.thread);
+        setNeedle1ThreadSearch(needle1Needle.thread.thread_category || "");
       }
 
-      // Find bobbin thread for needle 1
-      const bobbinNeedle = needles.find((n) => n.bottom_id !== null);
-      if (bobbinNeedle && bobbinNeedle.bottom) {
-        setSelectedBobbin(bobbinNeedle.bottom);
-        setBobbinSearch(bobbinNeedle.bottom.thread_category || "");
+      // Find Needle 2 thread
+      const needle2Needle = needles.find((n) => n.description === "Needle 2");
+      if (needle2Needle && needle2Needle.thread) {
+        console.log("Found Needle 2 thread:", needle2Needle.thread);
+        setSelectedNeedle2Thread(needle2Needle.thread);
+        setNeedle2ThreadSearch(needle2Needle.thread.thread_category || "");
       }
 
-      // Find thread for needle 2 (top thread)
-      const needle2ThreadNeedle = needles.find(
-        (n) =>
-          n.description === "Needle 2" ||
-          (n.thread_id !== null && n.looper_id !== null),
-      );
-      if (needle2ThreadNeedle && needle2ThreadNeedle.thread) {
-        setSelectedNeedle2Thread(needle2ThreadNeedle.thread);
-        setNeedle2ThreadSearch(
-          needle2ThreadNeedle.thread.thread_category || "",
-        );
+      // Find bobbin from the subOperation directly (bobbin_id field)
+      if (subOperation.bobbin) {
+        console.log("Found bobbin thread:", subOperation.bobbin);
+        setSelectedBobbin(subOperation.bobbin);
+        setBobbinSearch(subOperation.bobbin.thread_category || "");
       }
 
-      // Find looper thread for needle 2
-      const looperNeedle = needles.find((n) => n.looper_id !== null);
-      if (looperNeedle && looperNeedle.looper) {
-        setSelectedLooper(looperNeedle.looper);
-        setLooperSearch(looperNeedle.looper.thread_category || "");
+      // Find looper from the subOperation directly (looper_id field)
+      if (subOperation.looper) {
+        console.log("Found looper thread:", subOperation.looper);
+        setSelectedLooper(subOperation.looper);
+        setLooperSearch(subOperation.looper.thread_category || "");
       }
     }
   }, [subOperation]);
@@ -172,23 +164,10 @@ const EditSubOperationPage = () => {
     const needles = subOperation?.needles || [];
     const needleType = subOperation?.needle_type || {};
 
-    // Find thread for needle 1 (top thread)
-    const needle1ThreadNeedle = needles.find(
-      (n) => n.description === "Needle 1" || n.thread_id !== null,
-    );
-
-    // Find bobbin thread for needle 1
-    const bobbinNeedle = needles.find((n) => n.bottom_id !== null);
-
-    // Find thread for needle 2 (top thread)
-    const needle2ThreadNeedle = needles.find(
-      (n) =>
-        n.description === "Needle 2" ||
-        (n.thread_id !== null && n.looper_id !== null),
-    );
-
-    // Find looper thread for needle 2
-    const looperNeedle = needles.find((n) => n.looper_id !== null);
+    // Find Needle 1 thread
+    const needle1Needle = needles.find((n) => n.description === "Needle 1");
+    // Find Needle 2 thread
+    const needle2Needle = needles.find((n) => n.description === "Needle 2");
 
     return {
       // Basic sub-operation data
@@ -199,20 +178,21 @@ const EditSubOperationPage = () => {
       needle_count: subOperation?.needle_count || 0,
       spi: subOperation?.spi || "",
       machine_type: subOperation?.machine_type || "",
+
       // Needle type (from machine details section)
       needle_type_id: needleType.needle_type_id?.toString() || "",
 
-      // Thread for needle 1 (top thread)
-      needle1_thread_id: needle1ThreadNeedle?.thread_id?.toString() || "",
+      // Thread for Needle 1
+      needle1_thread_id: needle1Needle?.thread_id?.toString() || "",
 
-      // Bobbin thread for needle 1
-      bobbin_thread_id: bobbinNeedle?.bottom_id?.toString() || "",
+      // Bobbin thread (from subOperation directly)
+      bobbin_thread_id: subOperation?.bobbin_id?.toString() || "",
 
-      // Thread for needle 2 (top thread)
-      needle2_thread_id: needle2ThreadNeedle?.thread_id?.toString() || "",
+      // Thread for Needle 2
+      needle2_thread_id: needle2Needle?.thread_id?.toString() || "",
 
-      // Looper thread for needle 2
-      looper_thread_id: looperNeedle?.looper_id?.toString() || "",
+      // Looper thread (from subOperation directly)
+      looper_thread_id: subOperation?.looper_id?.toString() || "",
     };
   };
 
@@ -302,7 +282,7 @@ const EditSubOperationPage = () => {
     );
   }, [threadList, looperSearch]);
 
-  // Format data for API submission
+  // Format data for API submission - MATCHING BACKEND EXPECTATIONS
   const formatSubmitData = (values) => {
     return {
       sub_operation_name: values.sub_operation_name,
@@ -310,34 +290,30 @@ const EditSubOperationPage = () => {
       smv: parseFloat(values.smv) || 0,
       remark: values.remark,
       sub_operation_number: values.sub_operation_number,
-      needle_count: parseFloat(values.needle_count) || 0,
+      needle_count: parseInt(values.needle_count) || 0,
       spi: parseFloat(values.spi) || 0,
       machine_type: values.machine_type,
 
-      // Needle type from machine details section
+      // Needle type
       needle_type_id: values.needle_type_id
         ? parseInt(values.needle_type_id)
         : null,
 
-      // Thread for needle 1 (top thread)
+      // Individual thread IDs as expected by backend
       needle1_thread_id: values.needle1_thread_id
         ? parseInt(values.needle1_thread_id)
         : null,
-
-      // Bobbin thread for needle 1
-      bobbin_thread_id: values.bobbin_thread_id
-        ? parseInt(values.bobbin_thread_id)
-        : null,
-
-      // Thread for needle 2 (top thread)
       needle2_thread_id: values.needle2_thread_id
         ? parseInt(values.needle2_thread_id)
         : null,
-
-      // Looper thread for needle 2
+      bobbin_thread_id: values.bobbin_thread_id
+        ? parseInt(values.bobbin_thread_id)
+        : null,
       looper_thread_id: values.looper_thread_id
         ? parseInt(values.looper_thread_id)
         : null,
+
+      // Note: NOT sending needles array as backend doesn't expect it
     };
   };
 
@@ -401,7 +377,7 @@ const EditSubOperationPage = () => {
             enableReinitialize={true}
             onSubmit={async (values, { setSubmitting }) => {
               try {
-                console.log("Form submitted", values);
+                console.log("Form submitted values:", values);
                 const formattedData = formatSubmitData(values);
                 console.log("Formatted data for API:", formattedData);
 
@@ -415,19 +391,24 @@ const EditSubOperationPage = () => {
 
                 if (response.status === 200) {
                   await Swal.fire({
-                    title: "Operation update success.",
+                    title: "Sub-Operation updated successfully",
                     icon: "success",
                   });
+                  navigate(-1);
                 }
 
                 console.log("Response:", response);
-                if (response.status === 200) {
-                  navigate(-1);
-                }
               } catch (error) {
                 console.error("Error updating sub-operation:", error);
                 if (error.response) {
                   console.error("Response error:", error.response.data);
+                  await Swal.fire({
+                    title: "Error",
+                    text:
+                      error.response.data.message ||
+                      "Failed to update sub-operation",
+                    icon: "error",
+                  });
                 }
               } finally {
                 setSubmitting(false);
@@ -958,22 +939,13 @@ const EditSubOperationPage = () => {
                     type="button"
                     onClick={() => {
                       resetForm();
-                      // Reset search states
+                      // Reset search states to original values
                       const needles = subOperation?.needles || [];
-                      const needle1ThreadNeedle = needles.find(
-                        (n) =>
-                          n.description === "Needle 1" || n.thread_id !== null,
+                      const needle1Needle = needles.find(
+                        (n) => n.description === "Needle 1",
                       );
-                      const bobbinNeedle = needles.find(
-                        (n) => n.bottom_id !== null,
-                      );
-                      const needle2ThreadNeedle = needles.find(
-                        (n) =>
-                          n.description === "Needle 2" ||
-                          (n.thread_id !== null && n.looper_id !== null),
-                      );
-                      const looperNeedle = needles.find(
-                        (n) => n.looper_id !== null,
+                      const needle2Needle = needles.find(
+                        (n) => n.description === "Needle 2",
                       );
 
                       setMachineTypeSearch(subOperation?.machine_type || "");
@@ -981,27 +953,23 @@ const EditSubOperationPage = () => {
                         subOperation?.needle_type?.needle_type || "",
                       );
                       setNeedle1ThreadSearch(
-                        needle1ThreadNeedle?.thread?.thread_category || "",
+                        needle1Needle?.thread?.thread_category || "",
                       );
                       setNeedle2ThreadSearch(
-                        needle2ThreadNeedle?.thread?.thread_category || "",
+                        needle2Needle?.thread?.thread_category || "",
                       );
                       setBobbinSearch(
-                        bobbinNeedle?.bottom?.thread_category || "",
+                        subOperation?.bobbin?.thread_category || "",
                       );
                       setLooperSearch(
-                        looperNeedle?.looper?.thread_category || "",
+                        subOperation?.looper?.thread_category || "",
                       );
 
                       setSelectedNeedleType(subOperation?.needle_type || null);
-                      setSelectedNeedle1Thread(
-                        needle1ThreadNeedle?.thread || null,
-                      );
-                      setSelectedNeedle2Thread(
-                        needle2ThreadNeedle?.thread || null,
-                      );
-                      setSelectedBobbin(bobbinNeedle?.bottom || null);
-                      setSelectedLooper(looperNeedle?.looper || null);
+                      setSelectedNeedle1Thread(needle1Needle?.thread || null);
+                      setSelectedNeedle2Thread(needle2Needle?.thread || null);
+                      setSelectedBobbin(subOperation?.bobbin || null);
+                      setSelectedLooper(subOperation?.looper || null);
                     }}
                     className="px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors duration-200 font-medium"
                     disabled={isSubmitting}

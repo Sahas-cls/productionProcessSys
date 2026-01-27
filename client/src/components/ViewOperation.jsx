@@ -681,8 +681,8 @@ const ViewStyleDetails = () => {
                                               <span className="font-medium">
                                                 Type:
                                               </span>{" "}
-                                              {subOp?.needles[0]?.needle_type
-                                                ?.needle_type || (
+                                              {subOp?.needles[0]?.thread
+                                                ?.thread_category || (
                                                 <span className="text-gray-400 italic">
                                                   Not specified
                                                 </span>
@@ -725,8 +725,8 @@ const ViewStyleDetails = () => {
                                               <span className="font-medium">
                                                 Type:
                                               </span>{" "}
-                                              {subOp?.needles[0]?.needle_type
-                                                ?.needle_type || (
+                                              {subOp?.needles[1]?.thread
+                                                ?.thread_category || (
                                                 <span className="text-gray-400 italic">
                                                   Not specified
                                                 </span>
