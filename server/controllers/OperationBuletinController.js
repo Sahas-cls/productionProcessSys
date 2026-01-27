@@ -156,7 +156,14 @@ exports.getSBO = async (req, res, next) => {
                   as: "machines",
                   through: { attributes: [] },
                 },
-
+                {
+                  model: Thread,
+                  as: "bobbin",
+                },
+                {
+                  model: Thread,
+                  as: "looper",
+                },
                 {
                   model: OpNeedles,
                   as: "needles",
@@ -165,14 +172,6 @@ exports.getSBO = async (req, res, next) => {
                     {
                       model: NeedleTypeN,
                       as: "needle_type",
-                    },
-                    {
-                      model: Thread,
-                      as: "bottom",
-                    },
-                    {
-                      model: Thread,
-                      as: "looper",
                     },
                   ],
                 },
@@ -730,6 +729,8 @@ exports.editOperation = async (req, res, next) => {};
 exports.updateSubOperation = async (req, res) => {
   const t = await sequelize.transaction();
 
+  console.log("sub op update req body: ", req.body);
+
   try {
     const { id } = req.params;
 
@@ -743,16 +744,19 @@ exports.updateSubOperation = async (req, res) => {
       machine_type,
       machine_id,
 
-      // OLD single needle
+      // OLD SINGLE NEEDLE
       needle_type_id,
 
-      // NEW MULTI NEEDLE FIELDS
-      needle_type_id1,
-      thread_id1,
-      needle_type_id2,
-      thread_id2,
+      // THREADS
+      needle1_thread_id,
+      needle2_thread_id,
+      bobbin_thread_id,
+      looper_thread_id,
     } = req.body;
 
+    /* ------------------------------------ */
+    /* VALIDATION */
+    /* ------------------------------------ */
     if (!id || !sub_operation_name) {
       await t.rollback();
       return res.status(400).json({
@@ -760,9 +764,9 @@ exports.updateSubOperation = async (req, res) => {
       });
     }
 
-    /* ---------------------------------------------------
-       1) FIND CURRENT SUB OPERATION
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 1) FIND SUB OPERATION */
+    /* ------------------------------------ */
     const currentSubOperation = await SubOperation.findByPk(id, {
       transaction: t,
       include: [{ model: Machine, as: "machines" }],
@@ -773,9 +777,9 @@ exports.updateSubOperation = async (req, res) => {
       return res.status(404).json({ error: "SubOperation not found" });
     }
 
-    /* ---------------------------------------------------
-       2) LOG OLD DATA
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 2) LOG OLD DATA */
+    /* ------------------------------------ */
     await SubOperationLog.create(
       {
         sub_operation_id: currentSubOperation.sub_operation_id,
@@ -789,24 +793,31 @@ exports.updateSubOperation = async (req, res) => {
         machine_type: currentSubOperation.machine_type,
         spi: currentSubOperation.spi,
         needle_type_id: currentSubOperation.needle_type_id,
+        bobbin_id: currentSubOperation.bobbin_id,
+        looper_id: currentSubOperation.looper_id,
         created_by: req.user.userId,
       },
       { transaction: t },
     );
 
-    /* ---------------------------------------------------
-       3) UPDATE SUB OPERATION TABLE
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 3) UPDATE SUB OPERATION */
+    /* ------------------------------------ */
     await SubOperation.update(
       {
         sub_operation_name,
         smv: smv ? parseFloat(smv) : null,
         remark: remark || "-",
         sub_operation_number,
-        needle_count: needle_count ? parseFloat(needle_count) : null,
-        spi: spi ? parseFloat(spi) : null,
+        needle_count: needle_count ? parseInt(needle_count) : null,
+        spi: spi ? parseInt(spi) : null,
         machine_type,
         needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,
+
+        // ✅ FIXED
+        bobbin_id: bobbin_thread_id ? parseInt(bobbin_thread_id) : null,
+
+        looper_id: looper_thread_id ? parseInt(looper_thread_id) : null,
       },
       {
         where: { sub_operation_id: id },
@@ -814,9 +825,9 @@ exports.updateSubOperation = async (req, res) => {
       },
     );
 
-    /* ---------------------------------------------------
-       4) UPDATE MACHINE MAPPING
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 4) UPDATE MACHINE MAPPING */
+    /* ------------------------------------ */
     await sequelize.models.SubOperationMachine.destroy({
       where: { sub_operation_id: id },
       transaction: t,
@@ -832,54 +843,52 @@ exports.updateSubOperation = async (req, res) => {
       );
     }
 
-    /* ---------------------------------------------------
-       5) DELETE OLD NEEDLES
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 5) DELETE OLD NEEDLES */
+    /* ------------------------------------ */
     await OpNeedles.destroy({
       where: { sub_operation_id: id },
       transaction: t,
     });
 
-    /* ---------------------------------------------------
-       6) INSERT NEEDLE ROW #1
-    --------------------------------------------------- */
-    if (needle_type_id1 && thread_id1) {
+    /* ------------------------------------ */
+    /* 6) INSERT NEEDLE 1 */
+    /* ------------------------------------ */
+    if (needle_type_id && needle1_thread_id) {
       await OpNeedles.create(
         {
           sub_operation_id: id,
-          needle_type_id: parseInt(needle_type_id1),
-          bottom_id: parseInt(thread_id1), // using bottom_id column
-          looper_id: null,
+          needle_type_id: parseInt(needle_type_id),
+          thread_id: parseInt(needle1_thread_id),
           description: "Needle 1",
         },
         { transaction: t },
       );
     }
 
-    /* ---------------------------------------------------
-       7) INSERT NEEDLE ROW #2
-    --------------------------------------------------- */
-    if (needle_type_id2 && thread_id2) {
+    /* ------------------------------------ */
+    /* 7) INSERT NEEDLE 2 (OPTIONAL) */
+    /* ------------------------------------ */
+    if (needle2_thread_id) {
       await OpNeedles.create(
         {
           sub_operation_id: id,
-          needle_type_id: parseInt(needle_type_id2),
-          bottom_id: null,
-          looper_id: parseInt(thread_id2),
+          needle_type_id: parseInt(needle_type_id),
+          thread_id: parseInt(needle2_thread_id),
           description: "Needle 2",
         },
         { transaction: t },
       );
     }
 
-    /* ---------------------------------------------------
-       8) COMMIT
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 8) COMMIT */
+    /* ------------------------------------ */
     await t.commit();
 
-    /* ---------------------------------------------------
-       9) RETURN UPDATED DATA
-    --------------------------------------------------- */
+    /* ------------------------------------ */
+    /* 9) RETURN UPDATED RECORD */
+    /* ------------------------------------ */
     const updatedSubOperation = await SubOperation.findByPk(id, {
       include: [
         { model: Machine, as: "machines" },
@@ -895,7 +904,7 @@ exports.updateSubOperation = async (req, res) => {
   } catch (error) {
     if (t && !t.finished) await t.rollback();
 
-    console.error(error);
+    console.error("Update Sub Operation Error:", error);
 
     return res.status(500).json({
       success: false,

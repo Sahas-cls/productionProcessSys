@@ -438,7 +438,7 @@ const AddTechnicalData = ({ userRole }) => {
                     <Field
                       type="number"
                       name="finishWidth"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                       placeholder="EX: 23"
                     />
                   </div>
@@ -448,7 +448,7 @@ const AddTechnicalData = ({ userRole }) => {
                     <Field
                       type="text"
                       name="folderType"
-                      className="py-1 px-2 rounded-md border"
+                      className="px-2 rounded-md border py-2"
                       placeholder="EX: Folder Type"
                     />
                   </div>
@@ -458,7 +458,7 @@ const AddTechnicalData = ({ userRole }) => {
                     <Field
                       type="number"
                       name="folderCW"
-                      className="py-1 px-2 rounded-md border"
+                      className="px-2 rounded-md border py-2"
                       placeholder="Ex: 23.23"
                     />
                   </div>
@@ -474,7 +474,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="needleGage"
                       placeholder="Ex: 23"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                   {/* spreader */}
@@ -482,7 +482,7 @@ const AddTechnicalData = ({ userRole }) => {
                     <label htmlFor="">Spreader:</label>
                     <Field
                       as="select"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                       name="spreader"
                     >
                       <option value="true">Yes</option>
@@ -495,7 +495,7 @@ const AddTechnicalData = ({ userRole }) => {
                     <Field
                       type=""
                       name="noOfNeedles"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                       placeholder="Ex: 2"
                     />
                   </div>
@@ -506,7 +506,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type="text"
                       name="needleCType"
                       placeholder="Ex: 10-11"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                 </fieldset>
@@ -520,7 +520,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="sewingAllowance"
                       placeholder="Ex: 9.9"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                   {/* spreader */}
@@ -530,7 +530,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="cuttingAllowance"
                       placeholder="Ex: 2.2"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                   {/* no of needles */}
@@ -540,7 +540,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="spi"
                       placeholder="Ex: 12"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                 </fieldset>
@@ -554,7 +554,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="needleType"
                       placeholder="Ex: 120tkt"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                   {/* spreader */}
@@ -564,7 +564,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="spreaderType"
                       placeholder="Ex: "
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                   {/* no of needles */}
@@ -574,7 +574,7 @@ const AddTechnicalData = ({ userRole }) => {
                       type=""
                       name="looper"
                       placeholder="Ex: 160tkt"
-                      className="py-1 px-2 rounded-md border"
+                      className="py-2 px-2 rounded-md border"
                     />
                   </div>
                 </fieldset>

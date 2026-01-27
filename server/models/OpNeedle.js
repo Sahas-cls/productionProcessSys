@@ -23,15 +23,7 @@ module.exports = (sequelize, DataTypes) => {
           key: "needle_type_id",
         },
       },
-      bottom_id: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-          model: "thread",
-          key: "thread_id",
-        },
-      },
-      looper_id: {
+      thread_id: {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: {
@@ -58,18 +50,11 @@ module.exports = (sequelize, DataTypes) => {
     OpNeedles.belongsTo(models.NeedleTypeN, {
       foreignKey: "needle_type_id",
       as: "needle_type",
-      //   onDelete: "CASCADE",
-      //   onUpdate: "CASCADE",
     });
 
     OpNeedles.belongsTo(models.Thread, {
-      foreignKey: "bottom_id",
-      as: "bottom", //bottom thread
-    });
-
-    OpNeedles.belongsTo(models.Thread, {
-      foreignKey: "looper_id",
-      as: "looper", //looper thread
+      foreignKey: "thread_id",
+      as: "thread", // alias matches Thread.hasMany
     });
   };
 

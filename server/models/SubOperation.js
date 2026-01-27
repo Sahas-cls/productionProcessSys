@@ -67,6 +67,14 @@ module.exports = (sequelize, DataTypes) => {
           key: "thread_id",
         },
       },
+      bobbin_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "thread",
+          key: "thread_id",
+        },
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -134,6 +142,12 @@ module.exports = (sequelize, DataTypes) => {
       as: "needle_loopers",
     });
 
+    // bobbing thread
+    SubOperation.belongsTo(models.Thread, {
+      foreignKey: "bobbin_id",
+      as: "bobbin",
+    });
+
     // Media
     SubOperation.hasMany(models.SubOperationMedia, {
       foreignKey: "sub_operation_id",
@@ -144,8 +158,6 @@ module.exports = (sequelize, DataTypes) => {
     SubOperation.hasMany(models.OpNeedles, {
       foreignKey: "sub_operation_id",
       as: "needles",
-      // onDelete: "CASCADE",
-      // onUpdate: "CASCADE",
     });
   };
 

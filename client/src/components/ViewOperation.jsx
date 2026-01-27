@@ -663,40 +663,96 @@ const ViewStyleDetails = () => {
                               {subOp.remark && (
                                 <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
                                   <h2 className="font-medium mt-4">
-                                    Needle configurations
+                                    Needle thread configurations
                                   </h2>
-                                  <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
-                                    <div className="grid grid-cols-2">
-                                      <div className="">
-                                        <p className="pt-4">Needle 1</p>
-                                        <p className="pl-2 text-gray-500">
-                                          Needle type:{" "}
-                                          {subOp?.needles[0]?.needle_type
-                                            ?.needle_type || "N/A"}
-                                        </p>
-                                        <p className="pt-4">Bottom</p>
-                                        {/* Bottom */}
-                                        <p className="pl-2 text-gray-500">
-                                          Thread type:{" "}
-                                          {subOp?.needles[0]?.bottom
-                                            ?.thread_category || "N/A"}
-                                        </p>
+                                  <div className="bg-green-50/80 border-l-4 border-green-500 rounded-r-lg w-full mt-3 p-4 shadow-sm">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                      {/* Needle 1 & Bobbin Section */}
+                                      <div className="space-y-4">
+                                        <div className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                            <p className="font-medium text-gray-700">
+                                              Needle 1
+                                            </p>
+                                          </div>
+                                          <div className="pl-4">
+                                            <p className="text-sm text-gray-600">
+                                              <span className="font-medium">
+                                                Type:
+                                              </span>{" "}
+                                              {subOp?.needles[0]?.needle_type
+                                                ?.needle_type || (
+                                                <span className="text-gray-400 italic">
+                                                  Not specified
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                            <p className="font-medium text-gray-700">
+                                              Bobbin
+                                            </p>
+                                          </div>
+                                          <div className="pl-4">
+                                            <p className="text-sm text-gray-600">
+                                              {subOp?.bobbin
+                                                ?.thread_category || (
+                                                <span className="text-gray-400 italic">
+                                                  Not specified
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </div>
                                       </div>
-                                      <div className="">
-                                        <p className="pt-4">Needle 2</p>
-                                        {/* Needle 2 */}
-                                        <p className="pl-2 text-gray-500">
-                                          Needle type:{" "}
-                                          {subOp?.needles[0]?.needle_type
-                                            ?.needle_type || "N/A"}
-                                        </p>
-                                        <p className="pt-4">Looper</p>
-                                        {/* Looper */}
-                                        <p className="pl-2 text-gray-500">
-                                          Thread type:{" "}
-                                          {subOp?.needles[1]?.looper
-                                            ?.thread_category || "N/A"}
-                                        </p>
+
+                                      {/* Needle 2 & Looper Section */}
+                                      <div className="space-y-4">
+                                        <div className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                            <p className="font-medium text-gray-700">
+                                              Needle 2
+                                            </p>
+                                          </div>
+                                          <div className="pl-4">
+                                            <p className="text-sm text-gray-600">
+                                              <span className="font-medium">
+                                                Type:
+                                              </span>{" "}
+                                              {subOp?.needles[0]?.needle_type
+                                                ?.needle_type || (
+                                                <span className="text-gray-400 italic">
+                                                  Not specified
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                                            <p className="font-medium text-gray-700">
+                                              Looper
+                                            </p>
+                                          </div>
+                                          <div className="pl-4">
+                                            <p className="text-sm text-gray-600">
+                                              {subOp?.looper
+                                                ?.thread_category || (
+                                                <span className="text-gray-400 italic">
+                                                  Not specified
+                                                </span>
+                                              )}
+                                            </p>
+                                          </div>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>

@@ -6,7 +6,7 @@ import axios from "axios";
 import useThreads from "../../hooks/useTreads";
 import useNeedles from "../../hooks/useNeedles";
 import useMachineTypes from "../../hooks/useMachineTypes";
-// import SubOperation from "../../../../server/models/SubOperation";
+import Swal from "sweetalert2";
 
 const EditSubOperationPage = () => {
   const location = useLocation();
@@ -21,9 +21,9 @@ const EditSubOperationPage = () => {
   // Refs for suggestion dropdowns
   const machineTypeRef = useRef(null);
   const needleTypeRef = useRef(null);
-  const needle1Ref = useRef(null);
-  const needle2Ref = useRef(null);
-  const bottom1Ref = useRef(null);
+  const needle1ThreadRef = useRef(null);
+  const needle2ThreadRef = useRef(null);
+  const bobbinRef = useRef(null);
   const looperRef = useRef(null);
 
   // Hooks
@@ -36,28 +36,28 @@ const EditSubOperationPage = () => {
     useState(false);
   const [showNeedleTypeSuggestions, setShowNeedleTypeSuggestions] =
     useState(false);
-  const [showNeedle1Suggestions, setShowNeedle1Suggestions] = useState(false);
-  const [showNeedle2Suggestions, setShowNeedle2Suggestions] = useState(false);
-  const [showBottom1Suggestions, setShowBottom1Suggestions] = useState(false);
+  const [showNeedle1ThreadSuggestions, setShowNeedle1ThreadSuggestions] =
+    useState(false);
+  const [showNeedle2ThreadSuggestions, setShowNeedle2ThreadSuggestions] =
+    useState(false);
+  const [showBobbinSuggestions, setShowBobbinSuggestions] = useState(false);
   const [showLooperSuggestions, setShowLooperSuggestions] = useState(false);
 
   // Search states
   const [machineTypeSearch, setMachineTypeSearch] = useState("");
   const [needleTypeSearch, setNeedleTypeSearch] = useState(
-    subOperation?.needles[0]?.needle_type?.needle_type || "",
+    subOperation?.needle_type?.needle_type || "",
   );
-  const [needle1Search, setNeedle1Search] = useState("");
-  const [needle2Search, setNeedle2Search] = useState("");
-  const [bottom1Search, setBottom1Search] = useState(
-    subOperation?.needles[0]?.looper?.thread_category || "",
-  );
+  const [needle1ThreadSearch, setNeedle1ThreadSearch] = useState("");
+  const [needle2ThreadSearch, setNeedle2ThreadSearch] = useState("");
+  const [bobbinSearch, setBobbinSearch] = useState("");
   const [looperSearch, setLooperSearch] = useState("");
 
   // Selected values
   const [selectedNeedleType, setSelectedNeedleType] = useState(null);
-  const [selectedNeedle1, setSelectedNeedle1] = useState(null);
-  const [selectedNeedle2, setSelectedNeedle2] = useState(null);
-  const [selectedBottom1, setSelectedBottom1] = useState(null);
+  const [selectedNeedle1Thread, setSelectedNeedle1Thread] = useState(null);
+  const [selectedNeedle2Thread, setSelectedNeedle2Thread] = useState(null);
+  const [selectedBobbin, setSelectedBobbin] = useState(null);
   const [selectedLooper, setSelectedLooper] = useState(null);
 
   const mainOperation = subOperation.main_operation_id || null;
@@ -68,7 +68,7 @@ const EditSubOperationPage = () => {
 
   const apiUrl = import.meta.env.VITE_API_URL;
 
-  // Initialize selected values from subOperation data - FIXED
+  // Initialize selected values from subOperation data
   useEffect(() => {
     if (subOperation) {
       // Set machine type search
@@ -76,50 +76,48 @@ const EditSubOperationPage = () => {
         setMachineTypeSearch(subOperation.machine_type);
       }
 
-      // Set needle type from main needle_type (machine details)
+      // Set needle type from machine details
       if (subOperation.needle_type) {
         setSelectedNeedleType(subOperation.needle_type);
         setNeedleTypeSearch(subOperation.needle_type.needle_type || "");
       }
 
-      // Find needle 1 and needle 2 from needles array
+      // Find threads from needles array
       const needles = subOperation.needles || [];
       console.log("Needles found:", needles);
 
-      // Needle 1: Should have bottom_id
-      const needle1 = needles.find(
-        (n) => n.description === "Needle 1" || n.bottom_id !== null,
+      // Find thread for needle 1 (top thread)
+      const needle1ThreadNeedle = needles.find(
+        (n) => n.description === "Needle 1" || n.thread_id !== null,
       );
-      if (needle1 && needle1.needle_type) {
-        setSelectedNeedle1(needle1.needle_type);
-        setNeedle1Search(needle1.needle_type.needle_type || "");
-      } else if (subOperation.needle_type) {
-        // Fallback to main needle type
-        setSelectedNeedle1(subOperation.needle_type);
-        setNeedle1Search(subOperation.needle_type.needle_type || "");
+      if (needle1ThreadNeedle && needle1ThreadNeedle.thread) {
+        setSelectedNeedle1Thread(needle1ThreadNeedle.thread);
+        setNeedle1ThreadSearch(
+          needle1ThreadNeedle.thread.thread_category || "",
+        );
       }
 
-      // Needle 2: Should have looper_id
-      const needle2 = needles.find(
-        (n) => n.description === "Needle 2" || n.looper_id !== null,
+      // Find bobbin thread for needle 1
+      const bobbinNeedle = needles.find((n) => n.bottom_id !== null);
+      if (bobbinNeedle && bobbinNeedle.bottom) {
+        setSelectedBobbin(bobbinNeedle.bottom);
+        setBobbinSearch(bobbinNeedle.bottom.thread_category || "");
+      }
+
+      // Find thread for needle 2 (top thread)
+      const needle2ThreadNeedle = needles.find(
+        (n) =>
+          n.description === "Needle 2" ||
+          (n.thread_id !== null && n.looper_id !== null),
       );
-      if (needle2 && needle2.needle_type) {
-        setSelectedNeedle2(needle2.needle_type);
-        setNeedle2Search(needle2.needle_type.needle_type || "");
-      } else if (subOperation.needle_type) {
-        // Fallback to main needle type
-        setSelectedNeedle2(subOperation.needle_type);
-        setNeedle2Search(subOperation.needle_type.needle_type || "");
+      if (needle2ThreadNeedle && needle2ThreadNeedle.thread) {
+        setSelectedNeedle2Thread(needle2ThreadNeedle.thread);
+        setNeedle2ThreadSearch(
+          needle2ThreadNeedle.thread.thread_category || "",
+        );
       }
 
-      // Set bottom thread for needle 1
-      const bottomNeedle = needles.find((n) => n.bottom_id !== null);
-      if (bottomNeedle && bottomNeedle.bottom) {
-        setSelectedBottom1(bottomNeedle.bottom);
-        setBottom1Search(bottomNeedle.bottom.thread_category || "");
-      }
-
-      // Set looper thread for needle 2
+      // Find looper thread for needle 2
       const looperNeedle = needles.find((n) => n.looper_id !== null);
       if (looperNeedle && looperNeedle.looper) {
         setSelectedLooper(looperNeedle.looper);
@@ -143,14 +141,20 @@ const EditSubOperationPage = () => {
       ) {
         setShowNeedleTypeSuggestions(false);
       }
-      if (needle1Ref.current && !needle1Ref.current.contains(event.target)) {
-        setShowNeedle1Suggestions(false);
+      if (
+        needle1ThreadRef.current &&
+        !needle1ThreadRef.current.contains(event.target)
+      ) {
+        setShowNeedle1ThreadSuggestions(false);
       }
-      if (needle2Ref.current && !needle2Ref.current.contains(event.target)) {
-        setShowNeedle2Suggestions(false);
+      if (
+        needle2ThreadRef.current &&
+        !needle2ThreadRef.current.contains(event.target)
+      ) {
+        setShowNeedle2ThreadSuggestions(false);
       }
-      if (bottom1Ref.current && !bottom1Ref.current.contains(event.target)) {
-        setShowBottom1Suggestions(false);
+      if (bobbinRef.current && !bobbinRef.current.contains(event.target)) {
+        setShowBobbinSuggestions(false);
       }
       if (looperRef.current && !looperRef.current.contains(event.target)) {
         setShowLooperSuggestions(false);
@@ -163,19 +167,28 @@ const EditSubOperationPage = () => {
     };
   }, []);
 
-  // Get initial values for Formik - FIXED
+  // Get initial values for Formik
   const getInitialValues = () => {
     const needles = subOperation?.needles || [];
     const needleType = subOperation?.needle_type || {};
 
-    // Find needle 1 (has bottom)
-    const needle1 = needles.find(
-      (n) => n.description === "Needle 1" || n.bottom_id !== null,
+    // Find thread for needle 1 (top thread)
+    const needle1ThreadNeedle = needles.find(
+      (n) => n.description === "Needle 1" || n.thread_id !== null,
     );
-    // Find needle 2 (has looper)
-    const needle2 = needles.find(
-      (n) => n.description === "Needle 2" || n.looper_id !== null,
+
+    // Find bobbin thread for needle 1
+    const bobbinNeedle = needles.find((n) => n.bottom_id !== null);
+
+    // Find thread for needle 2 (top thread)
+    const needle2ThreadNeedle = needles.find(
+      (n) =>
+        n.description === "Needle 2" ||
+        (n.thread_id !== null && n.looper_id !== null),
     );
+
+    // Find looper thread for needle 2
+    const looperNeedle = needles.find((n) => n.looper_id !== null);
 
     return {
       // Basic sub-operation data
@@ -183,26 +196,23 @@ const EditSubOperationPage = () => {
       smv: subOperation?.smv || "",
       remark: subOperation?.remark || "-",
       sub_operation_number: subOperation?.sub_operation_number || "",
-      needle_count: subOperation?.needle_count || "",
+      needle_count: subOperation?.needle_count || 0,
       spi: subOperation?.spi || "",
       machine_type: subOperation?.machine_type || "",
-
       // Needle type (from machine details section)
       needle_type_id: needleType.needle_type_id?.toString() || "",
 
-      // Needle 1 data
-      needle_type_id1:
-        needle1?.needle_type?.needle_type_id?.toString() ||
-        needleType.needle_type_id?.toString() ||
-        "",
-      thread_id1: needle1?.bottom_id?.toString() || "",
+      // Thread for needle 1 (top thread)
+      needle1_thread_id: needle1ThreadNeedle?.thread_id?.toString() || "",
 
-      // Needle 2 data (optional)
-      needle_type_id2:
-        needle2?.needle_type?.needle_type_id?.toString() ||
-        needleType.needle_type_id?.toString() ||
-        "",
-      thread_id2: needle2?.looper_id?.toString() || "",
+      // Bobbin thread for needle 1
+      bobbin_thread_id: bobbinNeedle?.bottom_id?.toString() || "",
+
+      // Thread for needle 2 (top thread)
+      needle2_thread_id: needle2ThreadNeedle?.thread_id?.toString() || "",
+
+      // Looper thread for needle 2
+      looper_thread_id: looperNeedle?.looper_id?.toString() || "",
     };
   };
 
@@ -216,7 +226,7 @@ const EditSubOperationPage = () => {
     );
   }, [machineTList, machineTypeSearch]);
 
-  // Filter needles
+  // Filter needles for machine details
   const filteredNeedleTypes = useMemo(() => {
     if (!needleTypeSearch || !Array.isArray(needleList)) {
       return needleList || [];
@@ -232,52 +242,54 @@ const EditSubOperationPage = () => {
     );
   }, [needleList, needleTypeSearch]);
 
-  const filteredNeedles1 = useMemo(() => {
-    if (!needle1Search || !Array.isArray(needleList)) {
-      return needleList || [];
-    }
-    return needleList.filter(
-      (needle) =>
-        needle.needle_type
-          ?.toLowerCase()
-          .includes(needle1Search.toLowerCase()) ||
-        needle.needle_category
-          ?.toLowerCase()
-          .includes(needle1Search.toLowerCase()),
-    );
-  }, [needleList, needle1Search]);
-
-  const filteredNeedles2 = useMemo(() => {
-    if (!needle2Search || !Array.isArray(needleList)) {
-      return needleList || [];
-    }
-    return needleList.filter(
-      (needle) =>
-        needle.needle_type
-          ?.toLowerCase()
-          .includes(needle2Search.toLowerCase()) ||
-        needle.needle_category
-          ?.toLowerCase()
-          .includes(needle2Search.toLowerCase()),
-    );
-  }, [needleList, needle2Search]);
-
-  // Filter threads
-  const filteredBottom1 = useMemo(() => {
-    if (!bottom1Search || !Array.isArray(threadList)) {
+  // Filter threads for needle 1 thread
+  const filteredNeedle1Threads = useMemo(() => {
+    if (!needle1ThreadSearch || !Array.isArray(threadList)) {
       return threadList || [];
     }
     return threadList.filter(
       (thread) =>
         thread.thread_category
           ?.toLowerCase()
-          .includes(bottom1Search.toLowerCase()) ||
-        thread.description?.toLowerCase().includes(bottom1Search.toLowerCase()),
+          .includes(needle1ThreadSearch.toLowerCase()) ||
+        thread.description
+          ?.toLowerCase()
+          .includes(needle1ThreadSearch.toLowerCase()),
     );
-  }, [threadList, bottom1Search]);
+  }, [threadList, needle1ThreadSearch]);
+
+  // Filter threads for needle 2 thread
+  const filteredNeedle2Threads = useMemo(() => {
+    if (!needle2ThreadSearch || !Array.isArray(threadList)) {
+      return threadList || [];
+    }
+    return threadList.filter(
+      (thread) =>
+        thread.thread_category
+          ?.toLowerCase()
+          .includes(needle2ThreadSearch.toLowerCase()) ||
+        thread.description
+          ?.toLowerCase()
+          .includes(needle2ThreadSearch.toLowerCase()),
+    );
+  }, [threadList, needle2ThreadSearch]);
+
+  // Filter bobbin threads
+  const filteredBobbinThreads = useMemo(() => {
+    if (!bobbinSearch || !Array.isArray(threadList)) {
+      return threadList || [];
+    }
+    return threadList.filter(
+      (thread) =>
+        thread.thread_category
+          ?.toLowerCase()
+          .includes(bobbinSearch.toLowerCase()) ||
+        thread.description?.toLowerCase().includes(bobbinSearch.toLowerCase()),
+    );
+  }, [threadList, bobbinSearch]);
 
   // Filter looper threads
-  const filteredLoopers = useMemo(() => {
+  const filteredLooperThreads = useMemo(() => {
     if (!looperSearch || !Array.isArray(threadList)) {
       return threadList || [];
     }
@@ -307,17 +319,25 @@ const EditSubOperationPage = () => {
         ? parseInt(values.needle_type_id)
         : null,
 
-      // Needle 1 and its bottom thread
-      needle_type_id1: values.needle_type_id1
-        ? parseInt(values.needle_type_id1)
+      // Thread for needle 1 (top thread)
+      needle1_thread_id: values.needle1_thread_id
+        ? parseInt(values.needle1_thread_id)
         : null,
-      thread_id1: values.thread_id1 ? parseInt(values.thread_id1) : null,
 
-      // Needle 2 and its looper thread (optional)
-      needle_type_id2: values.needle_type_id2
-        ? parseInt(values.needle_type_id2)
+      // Bobbin thread for needle 1
+      bobbin_thread_id: values.bobbin_thread_id
+        ? parseInt(values.bobbin_thread_id)
         : null,
-      thread_id2: values.thread_id2 ? parseInt(values.thread_id2) : null,
+
+      // Thread for needle 2 (top thread)
+      needle2_thread_id: values.needle2_thread_id
+        ? parseInt(values.needle2_thread_id)
+        : null,
+
+      // Looper thread for needle 2
+      looper_thread_id: values.looper_thread_id
+        ? parseInt(values.looper_thread_id)
+        : null,
     };
   };
 
@@ -327,45 +347,36 @@ const EditSubOperationPage = () => {
     setFieldValue("needle_type_id", needle.needle_type_id.toString());
     setNeedleTypeSearch(needle.needle_type);
     setShowNeedleTypeSuggestions(false);
-
-    // Auto-populate needle1 and needle2 with the same type
-    setSelectedNeedle1(needle);
-    setFieldValue("needle_type_id1", needle.needle_type_id.toString());
-    setNeedle1Search(needle.needle_type);
-
-    setSelectedNeedle2(needle);
-    setFieldValue("needle_type_id2", needle.needle_type_id.toString());
-    setNeedle2Search(needle.needle_type);
   };
 
-  // Handle needle1 selection
-  const handleNeedle1Select = (needle, setFieldValue) => {
-    setSelectedNeedle1(needle);
-    setFieldValue("needle_type_id1", needle.needle_type_id.toString());
-    setNeedle1Search(needle.needle_type);
-    setShowNeedle1Suggestions(false);
+  // Handle needle 1 thread selection
+  const handleNeedle1ThreadSelect = (thread, setFieldValue) => {
+    setSelectedNeedle1Thread(thread);
+    setFieldValue("needle1_thread_id", thread.thread_id.toString());
+    setNeedle1ThreadSearch(thread.thread_category);
+    setShowNeedle1ThreadSuggestions(false);
   };
 
-  // Handle needle2 selection
-  const handleNeedle2Select = (needle, setFieldValue) => {
-    setSelectedNeedle2(needle);
-    setFieldValue("needle_type_id2", needle.needle_type_id.toString());
-    setNeedle2Search(needle.needle_type);
-    setShowNeedle2Suggestions(false);
+  // Handle needle 2 thread selection
+  const handleNeedle2ThreadSelect = (thread, setFieldValue) => {
+    setSelectedNeedle2Thread(thread);
+    setFieldValue("needle2_thread_id", thread.thread_id.toString());
+    setNeedle2ThreadSearch(thread.thread_category);
+    setShowNeedle2ThreadSuggestions(false);
   };
 
-  // Handle bottom thread selection for needle1
-  const handleBottom1Select = (thread, setFieldValue) => {
-    setSelectedBottom1(thread);
-    setFieldValue("thread_id1", thread.thread_id.toString());
-    setBottom1Search(thread.thread_category);
-    setShowBottom1Suggestions(false);
+  // Handle bobbin thread selection
+  const handleBobbinSelect = (thread, setFieldValue) => {
+    setSelectedBobbin(thread);
+    setFieldValue("bobbin_thread_id", thread.thread_id.toString());
+    setBobbinSearch(thread.thread_category);
+    setShowBobbinSuggestions(false);
   };
 
-  // Handle looper thread selection for needle2
+  // Handle looper thread selection
   const handleLooperSelect = (thread, setFieldValue) => {
     setSelectedLooper(thread);
-    setFieldValue("thread_id2", thread.thread_id.toString());
+    setFieldValue("looper_thread_id", thread.thread_id.toString());
     setLooperSearch(thread.thread_category);
     setShowLooperSuggestions(false);
   };
@@ -401,6 +412,13 @@ const EditSubOperationPage = () => {
                     withCredentials: true,
                   },
                 );
+
+                if (response.status === 200) {
+                  await Swal.fire({
+                    title: "Operation update success.",
+                    icon: "success",
+                  });
+                }
 
                 console.log("Response:", response);
                 if (response.status === 200) {
@@ -457,8 +475,9 @@ const EditSubOperationPage = () => {
                           Sub Operation Number
                         </label>
                         <Field
+                          disabled={true}
                           name="sub_operation_number"
-                          className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                          className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 cursor-not-allowed"
                           placeholder="e.g., Sub OP"
                         />
                       </div>
@@ -642,6 +661,18 @@ const EditSubOperationPage = () => {
                             value={values.needle_type_id || ""}
                           />
                         </div>
+
+                        <div className="flex flex-col">
+                          <label className="font-semibold text-gray-700 mb-2 text-sm">
+                            Needle Count
+                          </label>
+                          <Field
+                            type="number"
+                            name="needle_count"
+                            className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
+                            placeholder="e.g., Sub OP"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -654,111 +685,48 @@ const EditSubOperationPage = () => {
                         Needle & Thread Details
                       </h4>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-                        {/* Needle 1 */}
+                        {/* Thread for Needle 1 */}
                         <div className="flex flex-col">
                           <label className="font-semibold text-gray-700 mb-2 text-sm">
-                            Needle 1
+                            Thread for Needle 1
                           </label>
-                          <div className="relative" ref={needle1Ref}>
+                          <div className="relative" ref={needle1ThreadRef}>
                             <input
                               type="text"
-                              value={needle1Search}
-                              disabled={true}
+                              value={needle1ThreadSearch}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setNeedle1Search(value);
-                                setShowNeedle1Suggestions(true);
-                                if (value && selectedNeedle1) {
-                                  setSelectedNeedle1(null);
-                                  setFieldValue("needle_type_id1", "");
+                                setNeedle1ThreadSearch(value);
+                                setShowNeedle1ThreadSuggestions(true);
+                                if (value && selectedNeedle1Thread) {
+                                  setSelectedNeedle1Thread(null);
+                                  setFieldValue("needle1_thread_id", "");
                                 }
                               }}
-                              onFocus={() => setShowNeedle1Suggestions(true)}
-                              className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 w-full"
-                              placeholder="Needle type for needle 1"
-                            />
-
-                            {selectedNeedle1 && !needle1Search && (
-                              <div className="absolute inset-0 px-4 py-3 text-gray-700 pointer-events-none">
-                                {selectedNeedle1.needle_type} (
-                                {selectedNeedle1.needle_category})
-                              </div>
-                            )}
-
-                            {showNeedle1Suggestions &&
-                              filteredNeedles1.length > 0 && (
-                                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                                  {filteredNeedles1.map((needle) => (
-                                    <button
-                                      key={needle.needle_type_id}
-                                      type="button"
-                                      className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b last:border-b-0"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        handleNeedle1Select(
-                                          needle,
-                                          setFieldValue,
-                                        );
-                                      }}
-                                    >
-                                      <div className="font-medium">
-                                        {needle.needle_type}
-                                      </div>
-                                      <div className="text-sm text-gray-600">
-                                        {needle.needle_category}
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                          </div>
-                          <input
-                            type="hidden"
-                            name="needle_type_id1"
-                            value={values.needle_type_id1 || ""}
-                          />
-                        </div>
-
-                        {/* Bottom for Needle 1 */}
-                        <div className="flex flex-col">
-                          <label className="font-semibold text-gray-700 mb-2 text-sm">
-                            Bottom for Needle 1
-                          </label>
-                          <div className="relative" ref={bottom1Ref}>
-                            <input
-                              type="text"
-                              value={bottom1Search}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                setBottom1Search(value);
-                                setShowBottom1Suggestions(true);
-                                if (value && selectedBottom1) {
-                                  setSelectedBottom1(null);
-                                  setFieldValue("thread_id1", "");
-                                }
-                              }}
-                              onFocus={() => setShowBottom1Suggestions(true)}
+                              onFocus={() =>
+                                setShowNeedle1ThreadSuggestions(true)
+                              }
                               className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 w-full"
                               placeholder="Select thread for needle 1"
                             />
 
-                            {selectedBottom1 && !bottom1Search && (
+                            {selectedNeedle1Thread && !needle1ThreadSearch && (
                               <div className="absolute inset-0 px-4 py-3 text-gray-700 pointer-events-none">
-                                {selectedBottom1.thread_category}
+                                {selectedNeedle1Thread.thread_category}
                               </div>
                             )}
 
-                            {showBottom1Suggestions &&
-                              filteredBottom1.length > 0 && (
+                            {showNeedle1ThreadSuggestions &&
+                              filteredNeedle1Threads.length > 0 && (
                                 <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                                  {filteredBottom1.map((thread) => (
+                                  {filteredNeedle1Threads.map((thread) => (
                                     <button
                                       key={thread.thread_id}
                                       type="button"
                                       className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b last:border-b-0"
                                       onClick={(e) => {
                                         e.preventDefault();
-                                        handleBottom1Select(
+                                        handleNeedle1ThreadSelect(
                                           thread,
                                           setFieldValue,
                                         );
@@ -777,63 +745,61 @@ const EditSubOperationPage = () => {
                           </div>
                           <input
                             type="hidden"
-                            name="thread_id1"
-                            value={values.thread_id1 || ""}
+                            name="needle1_thread_id"
+                            value={values.needle1_thread_id || ""}
                           />
                         </div>
 
-                        {/* Needle 2 (Optional) */}
+                        {/* Bobbin for Needle 1 */}
                         <div className="flex flex-col">
                           <label className="font-semibold text-gray-700 mb-2 text-sm">
-                            Needle 2 (Optional)
+                            Thread for Bobbin
                           </label>
-                          <div className="relative" ref={needle2Ref}>
+                          <div className="relative" ref={bobbinRef}>
                             <input
                               type="text"
-                              disabled={true}
-                              value={needle2Search}
+                              value={bobbinSearch}
                               onChange={(e) => {
                                 const value = e.target.value;
-                                setNeedle2Search(value);
-                                setShowNeedle2Suggestions(true);
-                                if (value && selectedNeedle2) {
-                                  setSelectedNeedle2(null);
-                                  setFieldValue("needle_type_id2", "");
+                                setBobbinSearch(value);
+                                setShowBobbinSuggestions(true);
+                                if (value && selectedBobbin) {
+                                  setSelectedBobbin(null);
+                                  setFieldValue("bobbin_thread_id", "");
                                 }
                               }}
-                              onFocus={() => setShowNeedle2Suggestions(true)}
+                              onFocus={() => setShowBobbinSuggestions(true)}
                               className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 w-full"
-                              placeholder="Needle type for needle 2 (optional)"
+                              placeholder="Select bobbin thread"
                             />
 
-                            {selectedNeedle2 && !needle2Search && (
+                            {selectedBobbin && !bobbinSearch && (
                               <div className="absolute inset-0 px-4 py-3 text-gray-700 pointer-events-none">
-                                {selectedNeedle2.needle_type} (
-                                {selectedNeedle2.needle_category})
+                                {selectedBobbin.thread_category}
                               </div>
                             )}
 
-                            {showNeedle2Suggestions &&
-                              filteredNeedles2.length > 0 && (
+                            {showBobbinSuggestions &&
+                              filteredBobbinThreads.length > 0 && (
                                 <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                                  {filteredNeedles2.map((needle) => (
+                                  {filteredBobbinThreads.map((thread) => (
                                     <button
-                                      key={needle.needle_type_id}
+                                      key={thread.thread_id}
                                       type="button"
                                       className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b last:border-b-0"
                                       onClick={(e) => {
                                         e.preventDefault();
-                                        handleNeedle2Select(
-                                          needle,
+                                        handleBobbinSelect(
+                                          thread,
                                           setFieldValue,
                                         );
                                       }}
                                     >
                                       <div className="font-medium">
-                                        {needle.needle_type}
+                                        {thread.thread_category}
                                       </div>
                                       <div className="text-sm text-gray-600">
-                                        {needle.needle_category}
+                                        {thread.description}
                                       </div>
                                     </button>
                                   ))}
@@ -842,15 +808,80 @@ const EditSubOperationPage = () => {
                           </div>
                           <input
                             type="hidden"
-                            name="needle_type_id2"
-                            value={values.needle_type_id2 || ""}
+                            name="bobbin_thread_id"
+                            value={values.bobbin_thread_id || ""}
+                          />
+                        </div>
+
+                        {/* Thread for Needle 2 */}
+                        <div className="flex flex-col">
+                          <label className="font-semibold text-gray-700 mb-2 text-sm">
+                            Thread for Needle 2
+                          </label>
+                          <div className="relative" ref={needle2ThreadRef}>
+                            <input
+                              type="text"
+                              value={needle2ThreadSearch}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setNeedle2ThreadSearch(value);
+                                setShowNeedle2ThreadSuggestions(true);
+                                if (value && selectedNeedle2Thread) {
+                                  setSelectedNeedle2Thread(null);
+                                  setFieldValue("needle2_thread_id", "");
+                                }
+                              }}
+                              onFocus={() =>
+                                setShowNeedle2ThreadSuggestions(true)
+                              }
+                              className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 w-full"
+                              placeholder="Select thread for needle 2"
+                            />
+
+                            {selectedNeedle2Thread && !needle2ThreadSearch && (
+                              <div className="absolute inset-0 px-4 py-3 text-gray-700 pointer-events-none">
+                                {selectedNeedle2Thread.thread_category}
+                              </div>
+                            )}
+
+                            {showNeedle2ThreadSuggestions &&
+                              filteredNeedle2Threads.length > 0 && (
+                                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                  {filteredNeedle2Threads.map((thread) => (
+                                    <button
+                                      key={thread.thread_id}
+                                      type="button"
+                                      className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b last:border-b-0"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleNeedle2ThreadSelect(
+                                          thread,
+                                          setFieldValue,
+                                        );
+                                      }}
+                                    >
+                                      <div className="font-medium">
+                                        {thread.thread_category}
+                                      </div>
+                                      <div className="text-sm text-gray-600">
+                                        {thread.description}
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                          </div>
+                          <input
+                            type="hidden"
+                            name="needle2_thread_id"
+                            value={values.needle2_thread_id || ""}
                           />
                         </div>
 
                         {/* Looper for Needle 2 */}
                         <div className="flex flex-col">
                           <label className="font-semibold text-gray-700 mb-2 text-sm">
-                            Looper for Needle 2
+                            Thread for Looper
                           </label>
                           <div className="relative" ref={looperRef}>
                             <input
@@ -862,12 +893,12 @@ const EditSubOperationPage = () => {
                                 setShowLooperSuggestions(true);
                                 if (value && selectedLooper) {
                                   setSelectedLooper(null);
-                                  setFieldValue("thread_id2", "");
+                                  setFieldValue("looper_thread_id", "");
                                 }
                               }}
                               onFocus={() => setShowLooperSuggestions(true)}
                               className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 w-full"
-                              placeholder="Select looper thread for needle 2"
+                              placeholder="Select looper thread"
                             />
 
                             {selectedLooper && !looperSearch && (
@@ -877,9 +908,9 @@ const EditSubOperationPage = () => {
                             )}
 
                             {showLooperSuggestions &&
-                              filteredLoopers.length > 0 && (
+                              filteredLooperThreads.length > 0 && (
                                 <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                                  {filteredLoopers.map((thread) => (
+                                  {filteredLooperThreads.map((thread) => (
                                     <button
                                       key={thread.thread_id}
                                       type="button"
@@ -905,8 +936,8 @@ const EditSubOperationPage = () => {
                           </div>
                           <input
                             type="hidden"
-                            name="thread_id2"
-                            value={values.thread_id2 || ""}
+                            name="looper_thread_id"
+                            value={values.looper_thread_id || ""}
                           />
                         </div>
                       </div>
@@ -927,40 +958,50 @@ const EditSubOperationPage = () => {
                     type="button"
                     onClick={() => {
                       resetForm();
-                      // Reset search states from needles array
+                      // Reset search states
                       const needles = subOperation?.needles || [];
-                      const needle1 = needles.find((n) => n.bottom_id !== null);
-                      const needle2 = needles.find((n) => n.looper_id !== null);
+                      const needle1ThreadNeedle = needles.find(
+                        (n) =>
+                          n.description === "Needle 1" || n.thread_id !== null,
+                      );
+                      const bobbinNeedle = needles.find(
+                        (n) => n.bottom_id !== null,
+                      );
+                      const needle2ThreadNeedle = needles.find(
+                        (n) =>
+                          n.description === "Needle 2" ||
+                          (n.thread_id !== null && n.looper_id !== null),
+                      );
+                      const looperNeedle = needles.find(
+                        (n) => n.looper_id !== null,
+                      );
 
                       setMachineTypeSearch(subOperation?.machine_type || "");
                       setNeedleTypeSearch(
                         subOperation?.needle_type?.needle_type || "",
                       );
-                      setNeedle1Search(
-                        needle1?.needle_type?.needle_type ||
-                          subOperation?.needle_type?.needle_type ||
-                          "",
+                      setNeedle1ThreadSearch(
+                        needle1ThreadNeedle?.thread?.thread_category || "",
                       );
-                      setNeedle2Search(
-                        needle2?.needle_type?.needle_type ||
-                          subOperation?.needle_type?.needle_type ||
-                          "",
+                      setNeedle2ThreadSearch(
+                        needle2ThreadNeedle?.thread?.thread_category || "",
                       );
-                      setBottom1Search(needle1?.bottom?.thread_category || "");
-                      setLooperSearch(needle2?.looper?.thread_category || "");
+                      setBobbinSearch(
+                        bobbinNeedle?.bottom?.thread_category || "",
+                      );
+                      setLooperSearch(
+                        looperNeedle?.looper?.thread_category || "",
+                      );
+
                       setSelectedNeedleType(subOperation?.needle_type || null);
-                      setSelectedNeedle1(
-                        needle1?.needle_type ||
-                          subOperation?.needle_type ||
-                          null,
+                      setSelectedNeedle1Thread(
+                        needle1ThreadNeedle?.thread || null,
                       );
-                      setSelectedNeedle2(
-                        needle2?.needle_type ||
-                          subOperation?.needle_type ||
-                          null,
+                      setSelectedNeedle2Thread(
+                        needle2ThreadNeedle?.thread || null,
                       );
-                      setSelectedBottom1(needle1?.bottom || null);
-                      setSelectedLooper(needle2?.looper || null);
+                      setSelectedBobbin(bobbinNeedle?.bottom || null);
+                      setSelectedLooper(looperNeedle?.looper || null);
                     }}
                     className="px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors duration-200 font-medium"
                     disabled={isSubmitting}
