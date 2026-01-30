@@ -22,13 +22,13 @@ console.log("B2_BUCKET_NAME:", process.env.B2_BUCKET_NAME || "not set");
 if (process.env.B2_KEY_ID) {
   console.log(
     "B2_KEY_ID (first 10 chars):",
-    process.env.B2_KEY_ID.substring(0, 10) + "..."
+    process.env.B2_KEY_ID.substring(0, 10) + "...",
   );
 }
 if (process.env.B2_APP_KEY) {
   console.log(
     "B2_APP_KEY (first 10 chars):",
-    process.env.B2_APP_KEY.substring(0, 10) + "..."
+    process.env.B2_APP_KEY.substring(0, 10) + "...",
   );
 }
 
@@ -57,7 +57,7 @@ app.use(
   cors({
     origin: true,
     credentials: true,
-  })
+  }),
 );
 
 app.use(helmet());
@@ -100,7 +100,7 @@ app.use(
         res.setHeader("Content-Type", mimeTypes[ext]);
       }
     },
-  })
+  }),
 );
 
 app.use(
@@ -125,7 +125,7 @@ app.use(
         res.setHeader("Content-Type", mimeTypes[ext]);
       }
     },
-  })
+  }),
 );
 
 app.use(
@@ -162,14 +162,14 @@ app.use(
         // Set download headers for certain file types
         if (
           [".xls", ".xlsx", ".csv", ".ods", ".pdf", ".doc", ".docx"].includes(
-            ext
+            ext,
           )
         ) {
           res.setHeader("Content-Disposition", "inline");
         }
       },
-    }
-  )
+    },
+  ),
 );
 
 app.use(
@@ -219,8 +219,8 @@ app.use(
           res.setHeader("Content-Disposition", "inline");
         }
       },
-    }
-  )
+    },
+  ),
 );
 
 // ==================== ROUTES ====================
@@ -313,16 +313,18 @@ app.get("/api/b2-files/*", async (req, res) => {
 
     console.log("🔑 [B2 Proxy] Fetching:", params.Key);
 
-    // Set CORS headers first
+    // **CRITICAL FIX: Set proper CORS headers for video streaming**
     const corsHeaders = {
-      "Access-Control-Allow-Origin":
-        req.headers.origin || "http://localhost:5173",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Range, Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Origin": "*", // CHANGED: Allow all origins for video
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers":
+        "Range, Content-Type, Authorization, Accept",
+      "Access-Control-Allow-Credentials": "false", // CHANGED: Must be false when Allow-Origin is *
       "Access-Control-Expose-Headers":
-        "Content-Range, Accept-Ranges, Content-Length, Content-Type",
+        "Content-Range, Accept-Ranges, Content-Length, Content-Type, Content-Disposition",
       "Cache-Control": "public, max-age=31536000",
+      "Cross-Origin-Resource-Policy": "cross-origin", // **ADD THIS**
+      "Cross-Origin-Embedder-Policy": "credentialless", // **ADD THIS - allows cross-origin video**
     };
 
     // Handle OPTIONS preflight immediately
@@ -337,35 +339,48 @@ app.get("/api/b2-files/*", async (req, res) => {
       const fileSize = headResult.ContentLength;
 
       // IMPORTANT: Override Content-Type based on file extension for video files
-      // B2 sometimes returns application/octet-stream which breaks video playback
       const fileExtension = path.extname(filePath).toLowerCase();
       let contentType = headResult.ContentType;
 
       // Force correct Content-Type for known video formats
-      if (fileExtension === ".webm") {
-        contentType = "video/webm";
-      } else if (fileExtension === ".mp4") {
-        contentType = "video/mp4";
-      } else if (fileExtension === ".mov") {
-        contentType = "video/quicktime";
-      } else if (fileExtension === ".avi") {
-        contentType = "video/x-msvideo";
-      }
+      const videoMimeTypes = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".mkv": "video/x-matroska",
+        ".flv": "video/x-flv",
+        ".wmv": "video/x-ms-wmv",
+        ".m4v": "video/x-m4v",
+        ".ogv": "video/ogg",
+        ".3gp": "video/3gpp",
+      };
 
-      // If still not set, use extension-based detection
-      if (!contentType || contentType === "application/octet-stream") {
+      if (videoMimeTypes[fileExtension]) {
+        contentType = videoMimeTypes[fileExtension];
+      } else if (!contentType || contentType === "application/octet-stream") {
         contentType = getContentTypeFromExtension(filePath);
       }
 
       const isVideo = isVideoExtension(filePath);
 
       console.log(
-        `📊 [B2 Proxy] File found: ${fileSize} bytes, Type: ${contentType}, Video: ${isVideo}`
+        `📊 [B2 Proxy] File found: ${fileSize} bytes, Type: ${contentType}, Video: ${isVideo}`,
       );
 
-      // Always set Accept-Ranges for video files
+      // **CRITICAL: Add headers for video streaming**
       if (isVideo) {
         corsHeaders["Accept-Ranges"] = "bytes";
+        corsHeaders["Content-Type"] = contentType;
+
+        // Additional headers for proper video playback
+        corsHeaders["Access-Control-Allow-Headers"] =
+          "Range, Content-Type, Authorization, Accept, Origin, X-Requested-With";
+
+        // For progressive download support
+        if (!req.headers.range) {
+          corsHeaders["Content-Length"] = fileSize;
+        }
       }
 
       // Handle Range request (for video seeking)
@@ -390,7 +405,7 @@ app.get("/api/b2-files/*", async (req, res) => {
         const chunkSize = end - start + 1;
 
         console.log(
-          `🎯 [B2 Proxy] Streaming bytes ${start}-${end} of ${fileSize}`
+          `🎯 [B2 Proxy] Streaming bytes ${start}-${end} of ${fileSize}`,
         );
 
         // Stream specific range
@@ -404,6 +419,7 @@ app.get("/api/b2-files/*", async (req, res) => {
           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
           "Content-Length": chunkSize,
           "Content-Type": contentType,
+          "Accept-Ranges": "bytes",
         };
 
         res.writeHead(206, headers);
@@ -434,6 +450,7 @@ app.get("/api/b2-files/*", async (req, res) => {
 
         if (isVideo) {
           headers["Accept-Ranges"] = "bytes";
+          headers["Content-Disposition"] = "inline"; // Play in browser, don't download
         }
 
         res.writeHead(200, headers);
@@ -465,11 +482,11 @@ app.get("/api/b2-files/*", async (req, res) => {
     console.error("❌ [B2 Proxy] Unexpected error:", error.message);
 
     res.set({
-      "Access-Control-Allow-Origin":
-        req.headers.origin || "http://localhost:5173",
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
       "Content-Type": "application/json",
+      "Cross-Origin-Resource-Policy": "cross-origin",
     });
 
     return res.status(500).json({
@@ -477,6 +494,21 @@ app.get("/api/b2-files/*", async (req, res) => {
       message: error.message,
     });
   }
+});
+
+// **CRITICAL: Add these options handler**
+app.options("/api/b2-files/*", (req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "Range, Content-Type, Authorization, Accept, Origin, X-Requested-With",
+    "Access-Control-Allow-Credentials": "false",
+    "Access-Control-Max-Age": "86400",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Cross-Origin-Embedder-Policy": "credentialless",
+  });
+  res.status(204).end();
 });
 
 // Add OPTIONS method for CORS preflight requests
@@ -590,7 +622,7 @@ app.get("/api/b2-test", async (req, res) => {
       } catch (bucketError) {
         console.log(
           "Note: Could not list bucket contents:",
-          bucketError.message
+          bucketError.message,
         );
       }
     }

@@ -1,3 +1,4 @@
+// Frontend: SimpleVideoPlayer.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -6,6 +7,12 @@ import {
   FaArrowLeft,
   FaExclamationTriangle,
   FaPause,
+  FaExpand,
+  FaCompress,
+  FaVolumeUp,
+  FaVolumeMute,
+  FaRedo,
+  FaDownload,
 } from "react-icons/fa";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
@@ -23,6 +30,7 @@ const VideoGallery = () => {
   const [loading, setLoading] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
   const [videoErrors, setVideoErrors] = useState({});
+  const [playerStates, setPlayerStates] = useState({});
   const videoRefs = useRef({});
 
   useEffect(() => {
@@ -36,10 +44,8 @@ const VideoGallery = () => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getVideos/${subOpId}`,
-        { withCredentials: true }
+        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getVideos/${subOpId}`,
+        { withCredentials: true },
       );
       setVideos(response.data?.data || []);
     } catch (error) {
@@ -49,149 +55,141 @@ const VideoGallery = () => {
     }
   };
 
-  // Get URL with proper CORS handling
+  // Get URL - Fixed CORS URL
   const getVideoUrl = (item) => {
     if (item.media_url) {
-      return `${import.meta.env.VITE_API_URL}/api/b2-files/${item.media_url}`;
+      // Clean the URL path
+      const cleanPath = item.media_url.replace(/^\//, "");
+      return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}`;
     }
     return "";
   };
 
-  // Handle play - load video only when clicked
-  const handlePlayVideo = async (id) => {
-    const videoElement = videoRefs.current[id];
+  // Simple video player with controls
+  const handlePlayVideo = (id) => {
     const item = videos.find((v) => v.so_media_id === id);
-
     if (!item) return;
 
-    // If already playing, pause it
-    if (activeVideo === id && videoElement) {
-      videoElement.pause();
-      setActiveVideo(null);
+    // If already active, toggle play/pause
+    if (activeVideo === id && videoRefs.current[id]) {
+      const video = videoRefs.current[id];
+      if (video.paused) {
+        video.play();
+        setPlayerStates((prev) => ({
+          ...prev,
+          [id]: { ...prev[id], playing: true },
+        }));
+      } else {
+        video.pause();
+        setPlayerStates((prev) => ({
+          ...prev,
+          [id]: { ...prev[id], playing: false },
+        }));
+      }
       return;
     }
 
     // Stop any currently playing video
     if (activeVideo && videoRefs.current[activeVideo]) {
       videoRefs.current[activeVideo].pause();
-      setActiveVideo(null);
+      setPlayerStates((prev) => ({
+        ...prev,
+        [activeVideo]: { ...prev[activeVideo], playing: false },
+      }));
     }
 
-    // Set active video first for UI feedback
+    // Set new active video
     setActiveVideo(id);
     setVideoErrors((prev) => ({ ...prev, [id]: null }));
 
-    if (videoElement && item) {
-      try {
-        const videoUrl = getVideoUrl(item);
-
-        // Clear any existing source
-        videoElement.src = "";
-        videoElement.load();
-
-        // Set new source with proper CORS
-        videoElement.crossOrigin = "anonymous";
-        videoElement.preload = "metadata"; // Only load metadata first
-
-        // For large videos, you might want to add quality monitoring
-        videoElement.addEventListener("loadedmetadata", () => {
-          console.log(
-            `Video ready: ${videoElement.videoWidth}x${videoElement.videoHeight}`
-          );
-        });
-
-        videoElement.addEventListener("canplay", () => {
-          console.log(`Video can play: ${item.so_media_id}`);
-        });
-
-        // Handle video errors
-        videoElement.onerror = (e) => {
-          console.error("Video element error:", e);
-          setVideoErrors((prev) => ({
-            ...prev,
-            [id]: "Failed to load video. Try downloading instead.",
-          }));
-          setActiveVideo(null);
-        };
-
-        // Set source and play
-        videoElement.src = videoUrl;
-
-        const playPromise = videoElement.play();
-
-        if (playPromise !== undefined) {
-          playPromise.catch((error) => {
-            console.error("Video play failed:", error);
-            // Auto-play might fail due to browser policies
-            // Just set to active and let user click play button
-            if (error.name === "NotAllowedError") {
-              // Browser blocked auto-play, just show controls
-              videoElement.controls = true;
-            } else {
-              setVideoErrors((prev) => ({
-                ...prev,
-                [id]: "Failed to play video. Try downloading instead.",
-              }));
-              setActiveVideo(null);
-            }
-          });
-        }
-      } catch (error) {
-        console.error("Video setup failed:", error);
-        setVideoErrors((prev) => ({
-          ...prev,
-          [id]: "Failed to load video.",
-        }));
-        setActiveVideo(null);
-      }
-    }
-  };
-
-  const testVideoPlayback = async (item) => {
-    const videoUrl = getVideoUrl(item);
-    console.log("Testing video playback for:", item.so_media_id);
-    console.log("Video URL:", videoUrl);
-    console.log("File extension:", item.media_url?.split(".").pop());
-
-    try {
-      // Test if video is accessible
-      const testResponse = await fetch(videoUrl, {
-        method: "HEAD",
-        mode: "cors",
-        credentials: "include",
-      });
-
-      console.log("HEAD response:", {
-        status: testResponse.status,
-        statusText: testResponse.statusText,
-        headers: Object.fromEntries(testResponse.headers.entries()),
-        ok: testResponse.ok,
-      });
-
-      // Test a small range request
-      const rangeResponse = await fetch(videoUrl, {
-        headers: { Range: "bytes=0-1000" },
-        credentials: "include",
-      });
-
-      console.log("Range response:", {
-        status: rangeResponse.status,
-        statusText: rangeResponse.statusText,
-        headers: Object.fromEntries(rangeResponse.headers.entries()),
-      });
-    } catch (error) {
-      console.error("Test failed:", error);
-    }
-  };
-
-  // Handle video errors
-  const handleVideoError = (id, error) => {
-    console.error(`Video ${id} error:`, error);
-    setVideoErrors((prev) => ({
+    // Initialize state
+    setPlayerStates((prev) => ({
       ...prev,
-      [id]: "Video playback failed. The file may be corrupted or unsupported.",
+      [id]: {
+        playing: true,
+        volume: 0.8,
+        muted: false,
+        fullscreen: false,
+        duration: 0,
+        currentTime: 0,
+        rotation: 0,
+      },
     }));
-    setActiveVideo(null);
+  };
+
+  // Simple video controls
+  const togglePlayPause = (id) => {
+    const video = videoRefs.current[id];
+    if (!video) return;
+
+    if (video.paused) {
+      video.play();
+      setPlayerStates((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], playing: true },
+      }));
+    } else {
+      video.pause();
+      setPlayerStates((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], playing: false },
+      }));
+    }
+  };
+
+  const toggleMute = (id) => {
+    const video = videoRefs.current[id];
+    if (video) {
+      video.muted = !video.muted;
+      setPlayerStates((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], muted: video.muted },
+      }));
+    }
+  };
+
+  const toggleFullscreen = (id) => {
+    const container = document.getElementById(`video-container-${id}`);
+    if (!container) return;
+
+    if (!document.fullscreenElement) {
+      container.requestFullscreen().catch((err) => {
+        console.log("Fullscreen error:", err);
+      });
+      setPlayerStates((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], fullscreen: true },
+      }));
+    } else {
+      document.exitFullscreen();
+      setPlayerStates((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], fullscreen: false },
+      }));
+    }
+  };
+
+  const handleRotate = (id) => {
+    const currentRotation = playerStates[id]?.rotation || 0;
+    const newRotation = (currentRotation + 90) % 360;
+
+    setPlayerStates((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], rotation: newRotation },
+    }));
+
+    const video = videoRefs.current[id];
+    if (video) {
+      video.style.transform = `rotate(${newRotation}deg)`;
+      video.style.transformOrigin = "center center";
+    }
+  };
+
+  const formatTime = (seconds) => {
+    if (isNaN(seconds) || !seconds) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
   const getFileName = (item) => {
@@ -216,7 +214,6 @@ const VideoGallery = () => {
     });
   };
 
-  // Handle download video
   const handleDownloadVideo = (item) => {
     const videoUrl = getVideoUrl(item);
     const fileName = getFileName(item);
@@ -238,9 +235,87 @@ const VideoGallery = () => {
     }
   };
 
+  // Custom Controls Component
+  const CustomControls = ({ item }) => {
+    const id = item.so_media_id;
+    const state = playerStates[id] || {};
+    const video = videoRefs.current[id];
+
+    if (!state.playing || !video) return null;
+
+    return (
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/80 to-transparent p-3 transition-all duration-300">
+        {/* Progress bar */}
+        <div className="mb-2">
+          <input
+            type="range"
+            min={0}
+            max={video.duration || 0}
+            step="any"
+            value={video.currentTime || 0}
+            onChange={(e) => {
+              video.currentTime = parseFloat(e.target.value);
+            }}
+            className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white hover:[&::-webkit-slider-thumb]:scale-110"
+          />
+          <div className="flex justify-between text-xs text-white/90 mt-1 px-1">
+            <span>{formatTime(video.currentTime)}</span>
+            <span>{formatTime(video.duration)}</span>
+          </div>
+        </div>
+
+        {/* Control buttons */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => togglePlayPause(id)}
+              className="text-white hover:text-blue-300 transition-colors p-1"
+              title={state.playing ? "Pause" : "Play"}
+            >
+              {state.playing ? <FaPause size={20} /> : <FaPlay size={20} />}
+            </button>
+
+            <button
+              onClick={() => toggleMute(id)}
+              className="text-white hover:text-blue-300 transition-colors p-1"
+              title={state.muted ? "Unmute" : "Mute"}
+            >
+              {state.muted ? (
+                <FaVolumeMute size={20} />
+              ) : (
+                <FaVolumeUp size={20} />
+              )}
+            </button>
+
+            <button
+              onClick={() => handleRotate(id)}
+              className="text-white hover:text-purple-300 transition-colors p-1 flex items-center gap-2"
+              title={`Rotate (${state.rotation || 0}°)`}
+            >
+              <FaRedo size={18} />
+              <span className="text-xs">Rotate</span>
+            </button>
+          </div>
+
+          <button
+            onClick={() => toggleFullscreen(id)}
+            className="text-white hover:text-blue-300 transition-colors p-1"
+            title="Fullscreen"
+          >
+            {state.fullscreen ? (
+              <FaCompress size={20} />
+            ) : (
+              <FaExpand size={20} />
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6">
-      {/* Header with warning */}
+      {/* Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate(-1)}
@@ -257,17 +332,10 @@ const VideoGallery = () => {
               {videos.length} video{videos.length !== 1 ? "s" : ""}
             </p>
           </div>
-
-          <div className="flex items-center gap-3 text-red-600 bg-red-50 px-4 py-2 rounded-lg">
-            {/* <FaExclamationTriangle />
-            <span className="text-sm font-medium">
-              Bandwidth Critical: Videos load on click only
-            </span> */}
-          </div>
         </div>
       </div>
 
-      {/* Videos Grid - LAZY LOAD */}
+      {/* Videos Grid */}
       {loading ? (
         <div className="text-center py-20">
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -284,6 +352,9 @@ const VideoGallery = () => {
             const fileName = getFileName(item);
             const isActive = activeVideo === item.so_media_id;
             const error = videoErrors[item.so_media_id];
+            const playerState = playerStates[item.so_media_id] || {};
+            const rotation = playerState.rotation || 0;
+            const videoUrl = getVideoUrl(item);
 
             return (
               <motion.div
@@ -293,86 +364,87 @@ const VideoGallery = () => {
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-blue-100"
               >
                 {/* Video Container */}
-                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
+                <div
+                  id={`video-container-${item.so_media_id}`}
+                  className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video"
+                >
                   {isActive ? (
-                    <div className="relative w-full h-full">
-                      {/* // Update the video element in your JSX: */}
+                    <div className="relative w-full h-full bg-black">
                       <video
                         ref={(el) => {
                           if (el) {
                             videoRefs.current[item.so_media_id] = el;
+                            // Set up event listeners
+                            el.onloadedmetadata = () => {
+                              setPlayerStates((prev) => ({
+                                ...prev,
+                                [item.so_media_id]: {
+                                  ...prev[item.so_media_id],
+                                  duration: el.duration,
+                                },
+                              }));
+                            };
+                            el.ontimeupdate = () => {
+                              setPlayerStates((prev) => ({
+                                ...prev,
+                                [item.so_media_id]: {
+                                  ...prev[item.so_media_id],
+                                  currentTime: el.currentTime,
+                                },
+                              }));
+                            };
+                            el.onplay = () => {
+                              setPlayerStates((prev) => ({
+                                ...prev,
+                                [item.so_media_id]: {
+                                  ...prev[item.so_media_id],
+                                  playing: true,
+                                },
+                              }));
+                            };
+                            el.onpause = () => {
+                              setPlayerStates((prev) => ({
+                                ...prev,
+                                [item.so_media_id]: {
+                                  ...prev[item.so_media_id],
+                                  playing: false,
+                                },
+                              }));
+                            };
+                            el.onerror = (e) => {
+                              console.error("Video error:", e);
+                              setVideoErrors((prev) => ({
+                                ...prev,
+                                [item.so_media_id]: "Failed to play video",
+                              }));
+                              setActiveVideo(null);
+                            };
                           } else {
                             delete videoRefs.current[item.so_media_id];
                           }
                         }}
+                        src={videoUrl}
                         className="w-full h-full object-contain"
-                        controls
-                        controlsList="nodownload"
+                        style={{
+                          transform: `rotate(${rotation}deg)`,
+                          transformOrigin: "center center",
+                          transition: "transform 0.3s ease",
+                        }}
                         playsInline
                         preload="metadata"
                         crossOrigin="anonymous"
-                        onLoadStart={() => {
-                          console.log(`Video ${item.so_media_id} load started`);
-                          // Show loading indicator
-                        }}
-                        onLoadedData={() => {
-                          console.log(`Video ${item.so_media_id} loaded data`);
-                          // Hide loading indicator
-                        }}
+                        controls={false}
+                        autoPlay
                         onCanPlay={() => {
-                          console.log(`Video ${item.so_media_id} can play`);
-                          // Auto-play if possible
-                          if (activeVideo === item.so_media_id) {
-                            videoRefs.current[item.so_media_id]
-                              ?.play()
-                              .catch((e) => {
-                                console.log(
-                                  "Auto-play blocked, showing controls"
-                                );
-                                videoRefs.current[
-                                  item.so_media_id
-                                ].controls = true;
-                              });
+                          const video = videoRefs.current[item.so_media_id];
+                          if (video) {
+                            video.volume = 0.8;
                           }
                         }}
-                        onEnded={() => setActiveVideo(null)}
-                        onError={(e) => {
-                          console.error("Video error event:", e);
-                          console.error("Video error details:", {
-                            errorCode:
-                              videoRefs.current[item.so_media_id]?.error?.code,
-                            errorMessage:
-                              videoRefs.current[item.so_media_id]?.error
-                                ?.message,
-                            networkState:
-                              videoRefs.current[item.so_media_id]?.networkState,
-                            readyState:
-                              videoRefs.current[item.so_media_id]?.readyState,
-                          });
-                          handleVideoError(item.so_media_id, e);
-                        }}
-                      >
-                        <source
-                          src={
-                            activeVideo === item.so_media_id
-                              ? getVideoUrl(item)
-                              : ""
-                          }
-                          type={
-                            item.media_url?.endsWith(".webm")
-                              ? "video/webm"
-                              : "video/mp4"
-                          }
-                        />
-                        Your browser does not support the video tag.
-                      </video>
-                      {/* Loading overlay */}
-                      {/* <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                        <div className="text-white text-center">
-                          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
-                          <p className="text-sm">Loading video...</p>
-                        </div>
-                      </div> */}
+                      />
+
+                      {/* Custom Controls */}
+                      <CustomControls item={item} />
                     </div>
                   ) : error ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
@@ -382,8 +454,9 @@ const VideoGallery = () => {
                       </p>
                       <button
                         onClick={() => handleDownloadVideo(item)}
-                        className="mt-3 px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200"
+                        className="mt-3 px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
                       >
+                        <FaDownload size={12} />
                         Try Downloading
                       </button>
                     </div>
@@ -393,11 +466,7 @@ const VideoGallery = () => {
                       onClick={() => handlePlayVideo(item.so_media_id)}
                     >
                       <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors">
-                        {isActive ? (
-                          <FaPause className="text-blue-600 text-3xl" />
-                        ) : (
-                          <FaPlay className="text-blue-600 text-3xl" />
-                        )}
+                        <FaPlay className="text-blue-600 text-3xl" />
                       </div>
                       <p className="text-blue-700 text-sm mt-3 font-medium">
                         Click to load & play
@@ -439,24 +508,57 @@ const VideoGallery = () => {
 
                   {/* Actions */}
                   <div className="mt-4 flex justify-between items-center">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <button
-                        onClick={() => handlePlayVideo(item.so_media_id)}
-                        className={`px-3 py-1 rounded text-sm font-medium ${
+                        onClick={() => {
+                          if (isActive) {
+                            setActiveVideo(null);
+                            const video = videoRefs.current[item.so_media_id];
+                            if (video) {
+                              video.pause();
+                              video.currentTime = 0;
+                            }
+                          } else {
+                            handlePlayVideo(item.so_media_id);
+                          }
+                        }}
+                        className={`px-3 py-1 rounded text-sm font-medium flex items-center gap-2 ${
                           isActive
                             ? "bg-red-100 text-red-700 hover:bg-red-200"
                             : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                         }`}
                       >
-                        {isActive ? "Stop" : "Play"}
+                        {isActive ? (
+                          <>
+                            <FaPause size={12} />
+                            Stop
+                          </>
+                        ) : (
+                          <>
+                            <FaPlay size={12} />
+                            Play
+                          </>
+                        )}
                       </button>
 
                       <button
                         onClick={() => handleDownloadVideo(item)}
-                        className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200"
+                        className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2"
                       >
+                        <FaDownload size={12} />
                         Download
                       </button>
+
+                      {isActive && (
+                        <button
+                          onClick={() => handleRotate(item.so_media_id)}
+                          className="px-3 py-1 rounded text-sm font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 flex items-center gap-2"
+                          title="Rotate Video 90°"
+                        >
+                          <FaRedo size={12} />
+                          Rotate
+                        </button>
+                      )}
                     </div>
 
                     {(userRole === "Admin" || userRole === "SuperAdmin") && (
@@ -475,7 +577,7 @@ const VideoGallery = () => {
                             try {
                               const response = await axios.delete(
                                 `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
-                                { withCredentials: true }
+                                { withCredentials: true },
                               );
 
                               if (response.status === 200) {
@@ -483,7 +585,7 @@ const VideoGallery = () => {
                                   title: "Video Delete Successful...",
                                   icon: "success",
                                 });
-                                fetchVideos(); // Only fetch if successful
+                                fetchVideos();
                               }
                             } catch (error) {
                               console.error("Delete error:", error);

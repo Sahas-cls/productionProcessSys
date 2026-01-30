@@ -8,7 +8,7 @@ import { IoCloseOutline } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { MdPersonOff } from "react-icons/md";
-import { FaArrowDown, FaDropbox } from "react-icons/fa";
+import { FaArrowDown, FaDropbox, FaReact } from "react-icons/fa";
 import { IoIosArrowDropdown, IoIosArrowDropdownCircle } from "react-icons/io";
 
 const ViewStyleDetails = () => {
@@ -21,14 +21,20 @@ const ViewStyleDetails = () => {
   const [helperOp, setHelperOp] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [expandedOperations, setExpandedOperations] = useState({});
+  const [expandedOperations, setExpandedOperations] = useState(() => {
+    const saved = sessionStorage.getItem("expandedOperations");
+    return saved ? JSON.parse(saved) : {};
+  });
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
   const [mainOperationId, setMainOperationId] = useState("");
   const { user, loading: userLoading, error } = useAuth();
   const [helperFocus, setHelperFocus] = useState(false);
   const [isShowHelperOp, setIsShowHelperOp] = useState(false);
-
+  const [lastActiveOp, setLastActiveOp] = useState(
+    sessionStorage.getItem("lastActiveOp") || "",
+  );
+  console.log("last active op id; ", lastActiveOp);
   const fetchStyleData = async () => {
     try {
       setLoading(true);
@@ -44,7 +50,12 @@ const ViewStyleDetails = () => {
         response.data.data.operations?.forEach((op) => {
           initialExpanded[op.operation_id] = false;
         });
-        setExpandedOperations(initialExpanded);
+        setExpandedOperations((prev) => {
+          if (Object.keys(prev || {}).length > 0) {
+            return prev; // keep restored state
+          }
+          return initialExpanded;
+        });
       }
     } catch (error) {
       console.error("Error fetching style data:", error);
@@ -102,6 +113,26 @@ const ViewStyleDetails = () => {
     }
   };
 
+  //! =====================================================================
+  // for scroll handling
+  useEffect(() => {
+    if (!style) return;
+
+    const savedPosition = sessionStorage.getItem("bulletinPosition");
+    const expanded = sessionStorage.getItem("expandedOperations");
+
+    if (savedPosition) {
+      window.scrollTo(0, parseInt(savedPosition, 10));
+      sessionStorage.removeItem("bulletinPosition");
+    }
+
+    if (expanded) {
+      setExpandedOperations(JSON.parse(expanded));
+    }
+  }, [style]);
+
+  //! =====================================================================
+
   const handleDeleteSubOperation = async (subOperationId, operationId) => {
     const confirmation = await Swal.fire({
       title: "Delete Sub-Operation?",
@@ -142,6 +173,15 @@ const ViewStyleDetails = () => {
       [operationId]: !prev[operationId],
     }));
   };
+
+  useEffect(() => {
+    if (Object.keys(expandedOperations).length === 0) return;
+
+    sessionStorage.setItem(
+      "expandedOperations",
+      JSON.stringify(expandedOperations),
+    );
+  }, [expandedOperations]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -413,15 +453,19 @@ const ViewStyleDetails = () => {
                           {operation.subOperations.map((subOp) => (
                             <div
                               key={subOp.sub_operation_id}
-                              className="border border-gray-200 rounded-lg p-3 sm:p-4 hover:bg-gray-50 transition-colors duration-200"
+                              className={`border border-gray-200 rounded-lg p-3 sm:p-4 ${lastActiveOp == subOp.sub_operation_id ? "bg-blue-100/80" : ""} hover:bg-gray-50 transition-colors duration-200`}
                             >
-                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-start gap-3">
+                              <div
+                                className={`flex flex-col lg:flex-row justify-between items-start lg:items-start gap-3 relative`}
+                              >
                                 <div className="flex-1 min-w-0">
                                   <h5 className="font-semibold text-gray-800 text-sm sm:text-base mb-2">
                                     {subOp.sub_operation_name} (
                                     {subOp.sub_operation_number})
                                   </h5>
-                                  <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
+                                  <div
+                                    className={`grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm`}
+                                  >
                                     <p className="text-gray-600">
                                       <span className="font-medium">ID:</span>{" "}
                                       {subOp.sub_operation_id}
@@ -442,6 +486,12 @@ const ViewStyleDetails = () => {
                                       </span>{" "}
                                       {formatDate(subOp.createdAt)}
                                     </p>
+                                    {/* {lastActiveOp == subOp.sub_operation_id && (
+                                      <div className="flex items-center gap-x-2 absolute">
+                                        <div className="w-3 h-3 rounded-full bg-green-700 animate-pulse"></div>
+                                        <div className="right-0">Active</div>
+                                      </div>
+                                    )} */}
                                     {/* <p className="text-gray-600">
                                       <span className="font-medium">
                                         Machines:
@@ -452,9 +502,17 @@ const ViewStyleDetails = () => {
                                 </div>
                                 {(userRole === "Admin" ||
                                   userRole === "SuperAdmin") && (
-                                  <div className="flex gap-2 self-end lg:self-auto">
+                                  <div className="flex gap-2 self-end lg:self-auto relative">
                                     <button
-                                      onClick={() =>
+                                      onClick={() => {
+                                        sessionStorage.setItem(
+                                          "lastActiveOp",
+                                          subOp.sub_operation_id,
+                                        );
+                                        sessionStorage.setItem(
+                                          "bulletinPosition",
+                                          window.scrollY,
+                                        );
                                         navigate(
                                           `/operations/edit-sub-operation`,
                                           {
@@ -464,24 +522,36 @@ const ViewStyleDetails = () => {
                                                 operation.operation_id,
                                             },
                                           },
-                                        )
-                                      }
+                                        );
+                                      }}
                                       className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-medium transition-colors duration-200"
                                     >
                                       Edit
                                     </button>
 
                                     <button
-                                      onClick={() =>
+                                      onClick={() => {
+                                        sessionStorage.setItem(
+                                          "bulletinPosition",
+                                          window.scrollY,
+                                        );
                                         handleDeleteSubOperation(
                                           subOp.sub_operation_id,
                                           operation.operation_id,
-                                        )
-                                      }
+                                        );
+                                      }}
                                       className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-medium transition-colors duration-200"
                                     >
                                       Delete
                                     </button>
+                                    {/* <div className="text-black flex items-center w-6 h-6">
+                                      {lastActiveOp ==
+                                        subOp.sub_operation_id && (
+                                        <div className="w-6 bg-green-500 h-6 rounded-full border animate-pulse [animation-duration:1s] flex items-center justify-center">
+                                          <FaReact className="text-white animate-spin [animation-duration:8s] text-xl m-1" />
+                                        </div>
+                                      )}
+                                    </div> */}
                                   </div>
                                 )}
                               </div>

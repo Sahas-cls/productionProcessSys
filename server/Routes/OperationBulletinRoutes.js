@@ -41,10 +41,10 @@ const fileFilter = (req, file, cb) => {
     cb(
       new Error(
         `Invalid file type. Please upload Excel files only (${allowedExtensions.join(
-          ", "
-        )})`
+          ", ",
+        )})`,
       ),
-      false
+      false,
     );
   }
 };
@@ -88,7 +88,7 @@ routes.get("/getOB/:styleId", controller.getSBO);
 routes.put(
   "/edit-main-operation/:id",
   authMiddleware,
-  controller.editMainOperation
+  controller.editMainOperation,
 );
 
 // to create new operation bulletin
@@ -98,7 +98,7 @@ routes.post("/createOB", authMiddleware, controller.createBulkOperations);
 routes.post(
   "/create/main-operation",
   authMiddleware,
-  controller.createMainOperation
+  controller.createMainOperation,
 );
 
 // to create sub operation for specific main operation
@@ -108,14 +108,14 @@ routes.post("/create/sub-operation", authMiddleware, controller.createSubOp);
 routes.put(
   "/edit-sub-operation/:id",
   authMiddleware,
-  controller.updateSubOperation
+  controller.updateSubOperation,
 );
 
 // to delete specific sub operation with it's needle layout
 routes.delete(
   "/delete-sub-operation/:id",
   authMiddleware,
-  controller.deleteSubOperation
+  controller.deleteSubOperation,
 );
 
 // to create new helper operation
@@ -130,14 +130,30 @@ routes.post(
   "/uploadExcel",
   upload.single("excelFile"),
   handleMulterError,
-  controller.processExcel
+  controller.processExcel,
 );
 
 // to insert provided data to db
 routes.post(
   "/saveOperations/:styleId",
   authMiddleware,
-  controller.saveOperations
+  controller.saveOperations,
 );
 
+// to update technical data
+routes.put(
+  "/update-technical-data",
+  authMiddleware,
+  controller.addTechnicalData,
+);
+
+// to get technical data
+routes.get(
+  "/get-technical-data/:subOperationId",
+  authMiddleware,
+  controller.getTechnicalData,
+);
+
+// to generate technical sheet
+routes.get("/generate-technical-data", controller.generateDataSheet);
 module.exports = routes;

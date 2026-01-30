@@ -75,6 +75,24 @@ module.exports = (sequelize, DataTypes) => {
           key: "thread_id",
         },
       },
+
+      //! technical data fields
+      cuttable_width: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+      },
+      folder_type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
+      finish_width: {
+        type: DataTypes.DECIMAL,
+        allowNull: true,
+      },
+      needle_gauge: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -159,6 +177,8 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "sub_operation_id",
       as: "needles",
     });
+
+    //* technical data fields
   };
 
   return SubOperation;

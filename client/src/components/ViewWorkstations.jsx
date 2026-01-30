@@ -123,6 +123,27 @@ const ViewWorkstations = () => {
     }
   };
 
+  // Remove ALL your existing scroll-related useEffect hooks and replace with:
+
+  //! =====================================================================
+  // for scroll handling
+
+  useEffect(() => {
+    const restoreScroll = () => {
+      const savedScroll = sessionStorage.getItem("listScroll");
+      if (savedScroll) {
+        window.scrollTo(0, parseInt(savedScroll, 10));
+        sessionStorage.removeItem("listScroll");
+      }
+    };
+
+    // Only restore after data is loaded
+    if (!isLoading && workstationList.length > 0) {
+      restoreScroll();
+    }
+  }, [isLoading, workstationList]);
+
+  //! =====================================================================
   const handleUploadData = (moId, sopId, soName) => {
     // alert("handling upload data");
     setUploadingData((prev) => ({
@@ -730,13 +751,17 @@ const ViewWorkstations = () => {
                                           type="button"
                                           className="bg-blue-200 p-1 text-black/60 rounded"
                                           title="Watch videos"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            sessionStorage.setItem(
+                                              "listScroll",
+                                              window.scrollY,
+                                            );
                                             navigate("/sub-operation/videos", {
                                               state: {
                                                 subOpId: subOp.sub_operation_id,
                                               },
-                                            })
-                                          }
+                                            });
+                                          }}
                                         >
                                           <FaPlay className="text-xl hover:scale-125" />
                                         </button>
@@ -746,13 +771,17 @@ const ViewWorkstations = () => {
                                           type="button"
                                           title="Images"
                                           className="bg-blue-200 p-1 text-black/60 rounded"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            sessionStorage.setItem(
+                                              "listScroll",
+                                              window.scrollY,
+                                            );
                                             navigate("/sub-operation/images", {
                                               state: {
                                                 subOpId: subOp.sub_operation_id,
                                               },
-                                            })
-                                          }
+                                            });
+                                          }}
                                         >
                                           <FaImage className="text-xl hover:scale-125" />
                                         </button>
@@ -762,7 +791,11 @@ const ViewWorkstations = () => {
                                           type="button"
                                           title="Tech packs"
                                           className="bg-green-200 p-1 text-black/60 rounded"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            sessionStorage.setItem(
+                                              "listScroll",
+                                              window.scrollY,
+                                            );
                                             navigate(
                                               "/sub-operation/tech_packs",
                                               {
@@ -771,8 +804,8 @@ const ViewWorkstations = () => {
                                                     subOp.sub_operation_id,
                                                 },
                                               },
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
                                           <FaFileExcel className="text-xl hover:scale-125" />
                                         </button>
@@ -782,7 +815,11 @@ const ViewWorkstations = () => {
                                           type="button"
                                           title="Other documents"
                                           className="bg-blue-200 p-1 text-black/60 rounded"
-                                          onClick={() =>
+                                          onClick={() => {
+                                            sessionStorage.setItem(
+                                              "listScroll",
+                                              window.scrollY,
+                                            );
                                             navigate(
                                               "/sub-operation/documents",
                                               {
@@ -791,8 +828,8 @@ const ViewWorkstations = () => {
                                                     subOp.sub_operation_id,
                                                 },
                                               },
-                                            )
-                                          }
+                                            );
+                                          }}
                                         >
                                           <FaFolder className="text-xl hover:scale-125" />
                                         </button>

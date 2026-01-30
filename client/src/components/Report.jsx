@@ -12,6 +12,8 @@ import { BsFillCloudUploadFill } from "react-icons/bs";
 import { useNavigate } from "react-router-dom";
 import { MdPermMedia } from "react-icons/md";
 import { TbReportSearch } from "react-icons/tb";
+import { BsFillFileEarmarkSpreadsheetFill } from "react-icons/bs";
+import { saveAs } from "file-saver";
 
 const Report = () => {
   const [selectedStyle, setSelectedStyle] = useState(null);
@@ -29,6 +31,21 @@ const Report = () => {
 
   // navigator
   const navigate = useNavigate();
+
+  // generate technical data sheet
+  const getTechnicalDataSheet = async () => {
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/operationBulleting/generate-technical-data`,
+        { withCredentials: true, responseType: "blob" },
+      );
+
+      // download file
+      saveAs(response.data, "technical-data.xlsx");
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   // Debounce function for API calls
   const useDebounce = (value, delay) => {
@@ -422,10 +439,22 @@ const Report = () => {
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mb-4 md:mb-6">
+      <div className="mb-4 md:mb-6 flex  justify-between items-center">
         <h1 className="text-lg md:text-xl font-semibold italic">
           Generate a Report
         </h1>
+        <div className="">
+          <button
+            type="button"
+            onClick={() => {
+              getTechnicalDataSheet();
+            }}
+            className="py-3 px-2 rounded-md bg-blue-500 text-yellow-200 font-semibold flex items-center gap-2 hover:bg-blue-800 hover:text-white duration-300"
+          >
+            <BsFillFileEarmarkSpreadsheetFill className="text-xl" />
+            Get Technical Sheet
+          </button>
+        </div>
       </div>
 
       <Formik

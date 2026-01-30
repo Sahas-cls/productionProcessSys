@@ -2,6 +2,7 @@
 const { where } = require("sequelize");
 const { processExcelFile } = require("../utils/excelProcessor");
 const { sequelize } = require("../models");
+const ExcelJs = require("exceljs");
 const fs = require("fs");
 const {
   Style,
@@ -24,6 +25,7 @@ const {
   OpNeedles,
 } = require("../models");
 const { title } = require("process");
+const { singularize } = require("sequelize/lib/utils");
 
 exports.getBOList = async (req, res, next) => {
   try {
@@ -1527,6 +1529,686 @@ exports.saveOperations = async (req, res, next) => {
       error: "Failed to save operations to database",
       details:
         process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+exports.addTechnicalData = async (req, res, next) => {
+  try {
+    // Accept both naming conventions
+    const subOperationId = req.body.sub_operation_id || req.body.subOperationId;
+
+    // Accept both naming conventions for technical fields
+    const cuttableWidth = req.body.cuttable_width || req.body.cuttableWidth;
+    const folderType = req.body.folder_type || req.body.folderType;
+    const finishWidth = req.body.finish_width || req.body.finishWidth;
+    const needleGauge = req.body.needle_gauge || req.body.needleGauge;
+    const createdBy = req.body.created_by || req.body.created_by;
+
+    if (!subOperationId) {
+      return res.status(400).json({
+        success: false,
+        message: "Sub-operation ID is required",
+      });
+    }
+
+    const subOperation = await SubOperation.findByPk(subOperationId);
+    if (!subOperation) {
+      return res.status(404).json({
+        success: false,
+        message: "Sub-operation not found",
+      });
+    }
+
+    // Update only technical data fields
+    const updateData = {
+      cuttable_width: cuttableWidth !== undefined ? cuttableWidth : null,
+      folder_type: folderType !== undefined ? folderType : null,
+      finish_width: finishWidth !== undefined ? finishWidth : null,
+      needle_gauge: needleGauge !== undefined ? needleGauge : null,
+    };
+
+    if (createdBy) {
+      updateData.created_by = createdBy;
+    }
+
+    await subOperation.update(updateData);
+
+    return res.status(200).json({
+      success: true,
+      message: "Technical data updated successfully",
+      data: subOperation,
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update technical data",
+      error: error.message,
+    });
+  }
+};
+
+// to get technical data
+exports.getTechnicalData = async (req, res, next) => {
+  const { subOperationId } = req.params;
+  try {
+    if (!subOperationId) {
+      const error = new Error("Sub operation id is empty");
+      error.status = 400;
+      throw error;
+    }
+
+    const subOperation = await SubOperation.findByPk(subOperationId, {
+      attributes: [
+        "sub_operation_id",
+        "cuttable_width",
+        "folder_type",
+        "finish_width",
+        "needle_gauge",
+        "createdAt",
+        "updatedAt",
+      ],
+    });
+
+    if (!subOperation) {
+      const error = new Error("Sub operation cannot be found");
+      error.status = 404;
+      throw error;
+    }
+
+    res.status(200).json({ data: subOperation });
+  } catch (error) {
+    console.error(error);
+    return;
+  }
+};
+
+// to generate technical data sheet
+exports.generateDataSheet = async (req, res, next) => {
+  console.log("generating technical sheet");
+
+  try {
+    //! create workbook and sheet
+    const workBook = new ExcelJs.Workbook();
+    const sheet = workBook.addWorksheet("Technical Sheet");
+
+    // ============= ROW 1: CONSTRUCTION DETAILS =============
+    sheet.mergeCells("A1:Q1");
+    const constructionCell = sheet.getCell("A1");
+    constructionCell.value = "CONSTRUCTION DETAILS";
+    constructionCell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+    constructionCell.font = {
+      bold: true,
+      size: 16,
+      color: { argb: "FFFFFFFF" },
+    };
+    constructionCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF002060" }, // Dark blue
+    };
+
+    // fetch data from db
+    const style = await Style.findByPk(23, {
+      include: [
+        {
+          model: MainOperation,
+          as: "operations",
+          required: true,
+          include: [
+            {
+              model: SubOperation,
+              as: "subOperations",
+              include: [
+                {
+                  model: Machine,
+                  as: "machines",
+                  through: { attributes: [] },
+                },
+                {
+                  model: NeedleTypeN,
+                  as: "needle_type",
+                },
+                {
+                  model: NeedleLooper,
+                  as: "needle_loopers",
+                },
+                {
+                  model: Thread,
+                  as: "thread",
+                  attributes: [
+                    "thread_id",
+                    "thread_category",
+                    "description",
+                    "status",
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: StyleMedia,
+          as: "style_medias",
+        },
+      ],
+    });
+
+    if (!style) {
+      return res.status(404).json({ error: "Style not found" });
+    }
+
+    // ============= ROW 2: Buyer line =============
+    const row2 = sheet.getRow(2);
+
+    // A2: "Buyer"
+    sheet.getCell("B2").value = "Buyer";
+    sheet.getCell("B2").font = { bold: true };
+
+    // C2: Customer name from style data
+    sheet.mergeCells("C2:E2");
+    sheet.getCell("C2").value = style.customer?.customer_name || "N/A";
+    sheet.getCell("C2").alignment = { horizontal: "left" };
+
+    // F2: "Sample Referred"
+    sheet.getCell("F2").value = "Sample Referred";
+    sheet.getCell("F2").font = { bold: true };
+
+    // G2: "0"
+    sheet.getCell("G2").value = "0";
+
+    // H2: "CONFIRMED"
+    sheet.getCell("H2").value = "CONFIRMED";
+    sheet.getCell("H2").font = { bold: true };
+    sheet.getCell("H2").alignment = { horizontal: "center" };
+
+    // I2: Empty
+    sheet.getCell("I2").value = "";
+
+    // J2: "RT"
+    sheet.mergeCells("J2:K2");
+    sheet.getCell("J2").value = "RT";
+    sheet.getCell("J2").alignment = { horizontal: "center" };
+
+    // N2: "SIGNATURE"
+    sheet.getCell("N2").value = "SIGNATURE";
+    sheet.getCell("N2").font = { bold: true };
+    sheet.getCell("N2").alignment = { horizontal: "center" };
+
+    // O2: "TECHNICAL"
+    sheet.mergeCells("O2:Q2");
+    sheet.getCell("O2").value = "TECHNICAL";
+    sheet.getCell("O2").font = { bold: true };
+    sheet.getCell("O2").alignment = { horizontal: "center" };
+
+    // ============= ROW 3: Date line =============
+    const row3 = sheet.getRow(3);
+
+    // A3: "Date"
+    sheet.getCell("B3").value = "Date";
+    sheet.getCell("B3").font = { bold: true };
+
+    // C3: Current date
+    sheet.mergeCells("C3:E3");
+    sheet.getCell("C3").value = new Date().toLocaleString();
+    sheet.getCell("C3").alignment = { horizontal: "left" };
+
+    // F3: "Size"
+    sheet.getCell("F3").value = "Size";
+    sheet.getCell("F3").font = { bold: true };
+
+    // G3: "0"
+    sheet.getCell("G3").value = "0";
+
+    // O3: "TECHNICAL"
+    sheet.mergeCells("O3:Q3");
+    sheet.getCell("O3").value = "TECHNICAL";
+    sheet.getCell("O3").font = { bold: true };
+    sheet.getCell("O3").alignment = { horizontal: "center" };
+
+    // ============= ROW 4: Style No line =============
+    const row4 = sheet.getRow(4);
+
+    // A4: "Style No"
+    sheet.getCell("B4").value = "Style No";
+    sheet.getCell("B4").font = { bold: true };
+
+    // C4: Style number from database
+    sheet.mergeCells("C4:E4");
+    sheet.getCell("C4").value = style.style_no || "N/A";
+    sheet.getCell("C4").alignment = { horizontal: "left" };
+
+    // F4: "Order Quantity"
+    sheet.getCell("F4").value = "Order Quantity";
+    sheet.getCell("F4").font = { bold: true };
+
+    // G4: "0"
+    sheet.getCell("G4").value = "0";
+
+    // ============= ROW 5: Description line =============
+    const row5 = sheet.getRow(5);
+
+    // A5: "Description"
+    sheet.getCell("B5").value = "Description";
+    sheet.getCell("B5").font = { bold: true };
+
+    // C5: Style description from database
+    sheet.mergeCells("C5:E5");
+    sheet.getCell("C5").value =
+      style.style_description || style.style_name || "N/A";
+    sheet.getCell("C5").alignment = { horizontal: "left" };
+
+    // F5: "Production Factory"
+    sheet.getCell("F5").value = "Production Factory";
+    sheet.getCell("F5").font = { bold: true };
+
+    // G5: Factory name from database
+    sheet.getCell("G5").value = style.factory?.factory_name || "N/A";
+
+    // O5: "TECHNICAL"
+    sheet.mergeCells("O5:Q5");
+    sheet.getCell("O5").value = "TECHNICAL";
+    sheet.getCell("O5").font = { bold: true };
+    sheet.getCell("O5").alignment = { horizontal: "center" };
+
+    // ============= ROW 6: Was/dye line =============
+    const row6 = sheet.getRow(6);
+
+    // A6: "Was/dye"
+    sheet.getCell("B6").value = "Was/dye";
+    sheet.getCell("B6").font = { bold: true };
+
+    // C6: "NO WASH"
+    sheet.mergeCells("C6:E6");
+    sheet.getCell("C6").value = "NO WASH";
+    sheet.getCell("C6").alignment = { horizontal: "left" };
+
+    // F6: "Machines/Line"
+    sheet.getCell("F6").value = "Machines/Line";
+    sheet.getCell("F6").font = { bold: true };
+
+    // G6: "0"
+    sheet.getCell("G6").value = "0";
+
+    // ============= ROW 7: Fabric line =============
+    const row7 = sheet.getRow(7);
+
+    // A7: "Fabric"
+    sheet.getCell("B7").value = "Fabric";
+    sheet.getCell("B7").font = { bold: true };
+
+    // C7: "FLEECE"
+    sheet.mergeCells("C7:E7");
+    sheet.getCell("C7").value = "FLEECE";
+    sheet.getCell("C7").alignment = { horizontal: "left" };
+
+    // F7: "Efficiency"
+    sheet.getCell("F7").value = "Efficiency";
+    sheet.getCell("F7").font = { bold: true };
+
+    // G7: "0"
+    sheet.getCell("G7").value = "0";
+
+    // ============= ROW 8: Discussed with line =============
+    const row8 = sheet.getRow(8);
+
+    // A8: "Discussed with"
+    sheet.getCell("B8").value = "Discussed with";
+    sheet.getCell("B8").font = { bold: true };
+
+    // N8: "END LINE"
+    sheet.getCell("N8").value = "END LINE";
+    sheet.getCell("N8").font = { bold: true };
+    sheet.getCell("N8").alignment = { horizontal: "center" };
+
+    // O8: "PRESSING"
+    sheet.getCell("O8").value = "PRESSING";
+    sheet.getCell("O8").font = { bold: true };
+    sheet.getCell("O8").alignment = { horizontal: "center" };
+
+    // P8: "Not Required"
+    sheet.mergeCells("P8:Q8");
+    sheet.getCell("P8").value = "Not Required";
+    sheet.getCell("P8").alignment = { horizontal: "center" };
+
+    // ============= ROW 9: Column headers =============
+    const row9 = sheet.getRow(9);
+
+    // A9: Empty
+    sheet.getCell("B9").value = "";
+
+    // B9: "Folder"
+    sheet.getCell("B9").value = "Folder";
+    sheet.getCell("B9").font = { bold: true };
+    sheet.getCell("B9").alignment = { horizontal: "center" };
+
+    // C9: Empty
+
+    // D9: "Needles"
+    sheet.getCell("D9").value = "Needles";
+    sheet.getCell("D9").font = { bold: true };
+    sheet.getCell("D9").alignment = { horizontal: "center" };
+
+    // E9: Empty
+
+    // F9: "Sewing"
+    sheet.getCell("F9").value = "Sewing";
+    sheet.getCell("F9").font = { bold: true };
+    sheet.getCell("F9").alignment = { horizontal: "center" };
+
+    // G9: Empty
+
+    // H9: "Thread"
+    sheet.getCell("H9").value = "Thread";
+    sheet.getCell("H9").font = { bold: true };
+    sheet.getCell("H9").alignment = { horizontal: "center" };
+
+    // I9: Empty
+
+    // J9: "Comments"
+    sheet.mergeCells("J9:Q9");
+    sheet.getCell("J9").value = "Comments";
+    sheet.getCell("J9").font = { bold: true };
+    sheet.getCell("J9").alignment = { horizontal: "center" };
+
+    // ============= ROW 10: Sub-headers =============
+    const row10 = sheet.getRow(10);
+
+    // A10: "NO"
+    sheet.getCell("A10").value = "NO";
+    sheet.getCell("A10").font = { bold: true };
+    sheet.getCell("A10").alignment = { horizontal: "center" };
+
+    // B10: "Operation"
+    sheet.getCell("B10").value = "Operation";
+    sheet.getCell("B10").font = { bold: true };
+    sheet.getCell("B10").alignment = { horizontal: "center" };
+
+    // C10: "Machine"
+    sheet.getCell("C10").value = "Machine";
+    sheet.getCell("C10").font = { bold: true };
+    sheet.getCell("C10").alignment = { horizontal: "center" };
+
+    // D10: "Finish width\n/ Raw / Cover" (multiline)
+    sheet.getCell("D10").value = "Finish width\n/ Raw / Cover";
+    sheet.getCell("D10").font = { bold: true };
+    sheet.getCell("D10").alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+
+    // E10: "Folder Type"
+    sheet.getCell("E10").value = "Folder Type";
+    sheet.getCell("E10").font = { bold: true };
+    sheet.getCell("E10").alignment = { horizontal: "center" };
+
+    // F10: "Folder Cuttable Width"
+    sheet.getCell("F10").value = "Folder Cuttable Width";
+    sheet.getCell("F10").font = { bold: true };
+    sheet.getCell("F10").alignment = { horizontal: "center" };
+
+    // G10: "Needle Gauge"
+    sheet.getCell("G10").value = "Needle Gauge";
+    sheet.getCell("G10").font = { bold: true };
+    sheet.getCell("G10").alignment = { horizontal: "center" };
+
+    // H10: "Spreader\n(Yes / No)" (multiline)
+    sheet.getCell("H10").value = "Spreader\n(Yes / No)";
+    sheet.getCell("H10").font = { bold: true };
+    sheet.getCell("H10").alignment = {
+      horizontal: "center",
+      vertical: "middle",
+      wrapText: true,
+    };
+
+    // I10: "No of Needles"
+    sheet.getCell("I10").value = "No of Needles";
+    sheet.getCell("I10").font = { bold: true };
+    sheet.getCell("I10").alignment = { horizontal: "center" };
+
+    // J10: "Needle (Type/Color)"
+    sheet.getCell("J10").value = "Needle (Type/Color)";
+    sheet.getCell("J10").font = { bold: true };
+    sheet.getCell("J10").alignment = { horizontal: "center" };
+
+    // K10: "Sewing Allowance"
+    sheet.getCell("K10").value = "Sewing Allowance";
+    sheet.getCell("K10").font = { bold: true };
+    sheet.getCell("K10").alignment = { horizontal: "center" };
+
+    // L10: "Cutting Allowance"
+    sheet.getCell("L10").value = "Cutting Allowance";
+    sheet.getCell("L10").font = { bold: true };
+    sheet.getCell("L10").alignment = { horizontal: "center" };
+
+    // M10: "SPI"
+    sheet.getCell("M10").value = "SPI";
+    sheet.getCell("M10").font = { bold: true };
+    sheet.getCell("M10").alignment = { horizontal: "center" };
+
+    // N10: "Needle (Type/Color)"
+    sheet.getCell("N10").value = "Needle (Type/Color)";
+    sheet.getCell("N10").font = { bold: true };
+    sheet.getCell("N10").alignment = { horizontal: "center" };
+
+    // O10: "Spread (Type/Color)"
+    sheet.getCell("O10").value = "Spread (Type/Color)";
+    sheet.getCell("O10").font = { bold: true };
+    sheet.getCell("O10").alignment = { horizontal: "center" };
+
+    // P10: "looper (Type/Color)"
+    sheet.getCell("P10").value = "looper (Type/Color)";
+    sheet.getCell("P10").font = { bold: true };
+    sheet.getCell("P10").alignment = { horizontal: "center" };
+
+    // Q10: Empty
+    sheet.getCell("Q10").value = "";
+
+    // ============= Set column widths =============
+    sheet.columns = [
+      { width: 5 }, // A
+      { width: 35 }, // B
+      { width: 20 }, // C
+      { width: 12 }, // D
+      { width: 12 }, // E
+      { width: 20 }, // F
+      { width: 12 }, // G
+      { width: 10 }, // H
+      { width: 12 }, // I
+      { width: 12 }, // J
+      { width: 12 }, // K
+      { width: 12 }, // L
+      { width: 8 }, // M
+      { width: 12 }, // N
+      { width: 12 }, // O
+      { width: 12 }, // P
+      { width: 12 }, // Q
+    ];
+
+    // Add borders to header rows (10)
+    const headerRow = sheet.getRow(10);
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // ============= POPULATE DATA ROWS =============
+    let currentRow = 11; // Start after header row (row 10)
+    let operationNumber = 1;
+
+    // Iterate through main operations
+    if (style.operations && style.operations.length > 0) {
+      for (const mainOperation of style.operations) {
+        // ============= ROW 1: Main Operation Only =============
+        const mainOpRow = sheet.getRow(currentRow);
+
+        // Column A: NO
+        mainOpRow.getCell(1).value = operationNumber++;
+
+        // Column B: Main Operation Name (bold for emphasis)
+        mainOpRow.getCell(2).value = mainOperation.operation_name;
+        mainOpRow.getCell(2).font = { bold: true };
+
+        // Add background color to highlight main operation row
+        mainOpRow.eachCell((cell) => {
+          // cell.fill = {
+          //   type: "pattern",
+          //   pattern: "solid",
+          //   fgColor: { argb: "FFF2F2F2" }, // Light gray background
+          // };
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+
+        currentRow++;
+
+        // ============= SUB-OPERATION ROWS =============
+        if (
+          mainOperation.subOperations &&
+          mainOperation.subOperations.length > 0
+        ) {
+          for (const subOperation of mainOperation.subOperations) {
+            const subOpRow = sheet.getRow(currentRow);
+
+            // Column A: Leave empty for sub-operation (no number)
+            subOpRow.getCell(1).value = "";
+
+            // Column B: Sub-operation name (indented with 2 spaces)
+            subOpRow.getCell(2).value =
+              `  ${subOperation.sub_operation_name || ""}`;
+
+            // Column C: Machine (first machine name)
+            if (subOperation.machines && subOperation.machines.length > 0) {
+              subOpRow.getCell(3).value =
+                subOperation.machines[0].machine_name ||
+                subOperation.machines[0].machine_type ||
+                "N/A";
+            } else if (subOperation.machine_type) {
+              subOpRow.getCell(3).value = subOperation.machine_type;
+            }
+
+            // Column D: Finish width / Raw / Cover
+            subOpRow.getCell(4).value = subOperation.finish_width || "N/A";
+
+            // Column E: Folder Type
+            subOpRow.getCell(5).value = subOperation.folder_type || "N/A";
+
+            // Column F: Folder Cuttable Width
+            subOpRow.getCell(6).value = subOperation.cuttable_width || "N/A";
+
+            // Column G: Needle Gauge
+            subOpRow.getCell(7).value = subOperation.needle_gauge || "N/A";
+
+            // Column H: Spreader (Yes/No)
+            subOpRow.getCell(8).value = "No"; // Default value, update based on your data
+
+            // Column I: No of Needles
+            subOpRow.getCell(9).value = subOperation.needle_count || "N/A";
+
+            // Column J: Needle (Type/Color) - From NeedleTypeN
+            if (subOperation.needle_type) {
+              subOpRow.getCell(10).value =
+                `${subOperation.needle_type.needle_type || ""}/${subOperation.needle_type.color || ""}`.trim();
+            }
+
+            // Column K: Sewing Allowance
+            subOpRow.getCell(11).value = "N/A"; // Add this field to your model if needed
+
+            // Column L: Cutting Allowance
+            subOpRow.getCell(12).value = "N/A"; // Add this field to your model if needed
+
+            // Column M: SPI
+            subOpRow.getCell(13).value = subOperation.spi || "N/A";
+
+            // Column N: Needle (Type/Color) - From thread
+            if (subOperation.thread) {
+              subOpRow.getCell(14).value =
+                `${subOperation.thread.thread_category || ""}/${subOperation.thread.description || ""}`.trim();
+            }
+
+            // Column O: Spread (Type/Color) - From needle_loopers
+            if (
+              subOperation.needle_loopers &&
+              subOperation.needle_loopers.length > 0
+            ) {
+              const looper = subOperation.needle_loopers[0];
+              subOpRow.getCell(15).value =
+                `${looper.type || ""}/${looper.color || ""}`.trim();
+            }
+
+            // Column P: looper (Type/Color) - From looper thread
+            if (subOperation.looper_id && subOperation.looper) {
+              subOpRow.getCell(16).value =
+                `${subOperation.looper.thread_category || ""}/${subOperation.looper.description || ""}`.trim();
+            }
+
+            // Column Q: Comments (from remark)
+            subOpRow.getCell(17).value = subOperation.remark || "";
+
+            // Add borders to sub-operation row
+            subOpRow.eachCell((cell) => {
+              cell.border = {
+                top: { style: "thin" },
+                left: { style: "thin" },
+                bottom: { style: "thin" },
+                right: { style: "thin" },
+              };
+            });
+
+            currentRow++;
+          }
+        } else {
+          // If no sub-operations, still leave an empty row under main operation for spacing
+          const emptyRow = sheet.getRow(currentRow);
+          emptyRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: "thin" },
+              left: { style: "thin" },
+              bottom: { style: "thin" },
+              right: { style: "thin" },
+            };
+          });
+          currentRow++;
+        }
+      }
+    }
+
+    // Auto-fit rows for better visibility
+    for (let i = 11; i < currentRow; i++) {
+      sheet.getRow(i).alignment = { vertical: "middle", wrapText: true };
+    }
+
+    // ============= Send the file =============
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="technical-data-${style.style_no || "sheet"}.xlsx"`,
+    );
+
+    await workBook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error generating Excel sheet:", error);
+    res.status(500).json({
+      error: "Failed to generate Excel sheet",
+      details: error.message,
     });
   }
 };
