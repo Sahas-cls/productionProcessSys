@@ -39,7 +39,7 @@ const Report = () => {
         `${apiUrl}/api/operationBulleting/generate-technical-data`,
         { withCredentials: true, responseType: "blob" },
       );
-
+      console.log(response);
       // download file
       saveAs(response.data, "technical-data.xlsx");
     } catch (error) {

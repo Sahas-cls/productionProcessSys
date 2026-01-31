@@ -9,14 +9,14 @@ module.exports = (sequelize, DataTypes) => {
       },
       workstation_id: {
         type: DataTypes.INTEGER,
-        referecess: {
+        references: {
           model: "workstation",
           key: "workstation_id",
         },
       },
       sub_operation_id: {
         type: DataTypes.INTEGER,
-        referecess: {
+        references: {
           model: "sub_operation",
           key: "sub_operation_id",
         },
