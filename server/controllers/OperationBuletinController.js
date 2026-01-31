@@ -1628,6 +1628,8 @@ exports.getTechnicalData = async (req, res, next) => {
 // GENERATE TECHNICAL DATA SHEET
 // ===============================
 exports.generateDataSheet = async (req, res) => {
+  // console.log(req.params);
+  const { styleId } = req.params;
   try {
     const ExcelJs = require("exceljs");
 
@@ -1680,9 +1682,17 @@ exports.generateDataSheet = async (req, res) => {
       pattern: "solid",
       fgColor: { argb: "FF002060" },
     };
-
+    // style id
+    const fStyle = await Style.findOne({ where: { style_no: styleId } });
+    console.log("styleId: ", fStyle.style_id);
+    // return;
+    if (!fStyle.style_id) {
+      const error = new Error("Cannot found the style");
+      error.status = 400;
+      throw error;
+    }
     // ================= FETCH DATA =================
-    const style = await Style.findByPk(23, {
+    const style = await Style.findByPk(fStyle.style_id, {
       include: [
         {
           model: MainOperation,

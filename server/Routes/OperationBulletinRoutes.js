@@ -155,5 +155,5 @@ routes.get(
 );
 
 // to generate technical sheet
-routes.get("/generate-technical-data", controller.generateDataSheet);
+routes.get("/generate-technical-data/:styleId", controller.generateDataSheet);
 module.exports = routes;

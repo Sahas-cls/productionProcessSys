@@ -28,15 +28,15 @@ const Report = () => {
   // console.log("expanded operations", operations);
   // Memoize API URL
   const memoizedApiUrl = useMemo(() => apiUrl, [apiUrl]);
-
+  // alert(selectedStyle);
   // navigator
   const navigate = useNavigate();
 
   // generate technical data sheet
-  const getTechnicalDataSheet = async () => {
+  const getTechnicalDataSheet = async (styleId) => {
     try {
       const response = await axios.get(
-        `${apiUrl}/api/operationBulleting/generate-technical-data`,
+        `${apiUrl}/api/operationBulleting/generate-technical-data/${styleId}`,
         { withCredentials: true, responseType: "blob" },
       );
       console.log(response);
@@ -419,7 +419,7 @@ const Report = () => {
           </Field>
         </div> */}
 
-        <div className="flex items-end">
+        <div className="flex items-end gap-x-4">
           <button
             type="submit"
             className="bg-blue-600 text-white px-4 md:px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
@@ -430,6 +430,18 @@ const Report = () => {
             ) : (
               <TbReportSearch className="text-2xl" />
             )}
+          </button>
+
+          <button
+            type="button"
+            disabled={!values.styleNo || loading}
+            onClick={() => {
+              getTechnicalDataSheet(values.styleNo);
+            }}
+            className="bg-blue-600 flex gap-x-2 text-white px-4 md:px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm md:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <BsFillFileEarmarkSpreadsheetFill className="text-xl" />
+            Get Technical Sheet
           </button>
         </div>
       </Form>
@@ -443,18 +455,6 @@ const Report = () => {
         <h1 className="text-lg md:text-xl font-semibold italic">
           Generate a Report
         </h1>
-        <div className="">
-          <button
-            type="button"
-            onClick={() => {
-              getTechnicalDataSheet();
-            }}
-            className="py-3 px-2 rounded-md bg-blue-500 text-yellow-200 font-semibold flex items-center gap-2 hover:bg-blue-800 hover:text-white duration-300"
-          >
-            <BsFillFileEarmarkSpreadsheetFill className="text-xl" />
-            Get Technical Sheet
-          </button>
-        </div>
       </div>
 
       <Formik
