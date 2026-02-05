@@ -111,6 +111,8 @@ routes.put(
   controller.updateSubOperation,
 );
 
+routes.delete("/delete-mo/:opId", authMiddleware, controller.deleteMo);
+
 // to delete specific sub operation with it's needle layout
 routes.delete(
   "/delete-sub-operation/:id",

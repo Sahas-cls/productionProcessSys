@@ -8,6 +8,7 @@ const {
   MainOperation,
 } = require("../models");
 const path = require("path");
+const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const B2SubOpStorage = require("../utils/b2SubOpStorage");
 const axios = require("axios");
@@ -15,6 +16,252 @@ const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 // to upload video
 const b2SubOpStorage = require("../utils/b2SubOpStorage");
 require("dotenv").config();
+
+// exports.uploadVideo = async (req, res, next) => {
+//   console.log("📤 [B2] Video upload request received");
+//   console.log("📋 Request body:", req.body);
+//   console.log(
+//     "📁 File details:",
+//     req.file
+//       ? {
+//           originalname: req.file.originalname,
+//           mimetype: req.file.mimetype,
+//           size: req.file.size,
+//           bufferSize: req.file.buffer?.length || 0,
+//         }
+//       : "No file"
+//   );
+
+//   let uploadResult = null;
+//   let dbRecord = null;
+
+//   try {
+//     // Check if file uploaded
+//     if (!req.file) {
+//       console.log("❌ No file uploaded");
+//       return res.status(400).json({
+//         message: "No file uploaded",
+//         success: false,
+//       });
+//     }
+
+//     const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
+
+//     // Validate required fields
+//     if (!styleNo || !moId || !sopId || !subOpId) {
+//       console.log("❌ Missing required fields:", {
+//         styleNo,
+//         moId,
+//         sopId,
+//         subOpId,
+//       });
+//       return res.status(400).json({
+//         message:
+//           "Missing required fields: styleNo, moId, sopId, and subOpId are required",
+//         success: false,
+//       });
+//     }
+
+//     // Generate filename with timestamp
+//     const ext = path.extname(req.file.originalname).toLowerCase();
+//     const now = new Date();
+//     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+//       2,
+//       "0"
+//     )}${String(now.getDate()).padStart(2, "0")}_${String(
+//       now.getHours()
+//     ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
+//       now.getSeconds()
+//     ).padStart(2, "0")}`;
+
+//     const sanitizedSopName = (sopName || "unknown")
+//       .replace(/[/\\?%*:|"<>]/g, "_")
+//       .replace(/\s+/g, "_");
+
+//     // Generate filename - use generatedName from middleware if available
+//     const filename =
+//       req.file.generatedName ||
+//       `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+
+//     console.log("📁 Generated filename:", filename);
+//     console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
+
+//     // Validate file buffer
+//     if (!req.file.buffer || req.file.buffer.length === 0) {
+//       console.log("❌ File buffer is empty");
+//       return res.status(400).json({
+//         message: "Uploaded file is empty or corrupted",
+//         success: false,
+//       });
+//     }
+
+//     // ==================== UPLOAD TO BACKBLAZE B2 ====================
+//     console.log("☁️  Uploading to Backblaze B2...");
+
+//     try {
+//       // Upload file to B2
+//       uploadResult = await b2SubOpStorage.uploadSubOpFile(
+//         req.file.buffer,
+//         filename,
+//         "video", // media type for folder organization
+//         subOpId // subOpId for folder organization
+//       );
+
+//       console.log("✅ B2 Upload Successful:", {
+//         filePath: uploadResult.filePath,
+//         fileId: uploadResult.fileId,
+//         fileName: uploadResult.fileName,
+//       });
+//     } catch (b2Error) {
+//       console.error("❌ B2 Upload Failed:", {
+//         error: b2Error.message,
+//         code: b2Error.code,
+//         stack: b2Error.stack?.split("\n")[0],
+//       });
+
+//       let errorMessage = "Failed to upload video to cloud storage";
+//       let statusCode = 500;
+
+//       if (
+//         b2Error.code === "AccessDenied" ||
+//         b2Error.code === "InvalidAccessKeyId"
+//       ) {
+//         errorMessage = "Cloud storage authentication failed";
+//         statusCode = 503;
+//       } else if (b2Error.code === "NoSuchBucket") {
+//         errorMessage = "Cloud storage bucket not found";
+//         statusCode = 503;
+//       } else if (
+//         b2Error.message.includes("ENOTFOUND") ||
+//         b2Error.message.includes("ECONNREFUSED")
+//       ) {
+//         errorMessage = "Cannot connect to cloud storage";
+//         statusCode = 503;
+//       }
+
+//       return res.status(statusCode).json({
+//         message: errorMessage,
+//         error:
+//           process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+//         success: false,
+//         storage: "backblaze_b2",
+//       });
+//     }
+
+//     // ==================== SAVE TO DATABASE ====================
+//     console.log("💾 Saving to database...");
+
+//     try {
+//       dbRecord = await SubOperationMedia.create({
+//         style_id: styleId,
+//         operation_id: moId,
+//         sub_operation_id: sopId,
+//         sub_operation_name: sopName || null,
+//         media_url: uploadResult.filePath, // Store B2 file path
+//         video_url: uploadResult.filePath, // Store B2 file path
+//         // NEW FIELDS:
+//         b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
+//         file_size: req.file.size,
+//         original_filename: req.file.originalname,
+//         uploaded_by: req.user?.userId || null,
+//         file_type: req.file.mimetype,
+//       });
+
+//       console.log("✅ Database record created:", {
+//         so_media_id: dbRecord.so_media_id,
+//         media_url: dbRecord.media_url,
+//         b2_file_id: dbRecord.b2_file_id,
+//       });
+//     } catch (dbError) {
+//       console.error("❌ Database save failed:", dbError);
+
+//       // Attempt to delete from B2 since DB save failed
+//       if (uploadResult && uploadResult.fileId) {
+//         try {
+//           console.log("🧹 Cleaning up B2 file after DB failure...");
+//           await b2SubOpStorage.deleteFile(
+//             uploadResult.fileId,
+//             uploadResult.filePath
+//           );
+//           console.log("✅ B2 file cleaned up");
+//         } catch (cleanupError) {
+//           console.error("❌ Failed to clean up B2 file:", cleanupError);
+//         }
+//       }
+
+//       return res.status(500).json({
+//         message: "Failed to save video record to database",
+//         error:
+//           process.env.NODE_ENV === "development" ? dbError.message : undefined,
+//         success: false,
+//       });
+//     }
+
+//     // ==================== SUCCESS RESPONSE ====================
+//     console.log("🎉 Video upload completed successfully!");
+
+//     res.status(201).json({
+//       message: "Video uploaded to cloud storage successfully",
+//       success: true,
+//       data: {
+//         so_media_id: dbRecord.so_media_id,
+//         media_url: uploadResult.filePath,
+//         video_url: uploadResult.filePath,
+//         video_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+//         file_name: uploadResult.fileName,
+//         original_filename: req.file.originalname,
+//         file_size: req.file.size,
+//         file_type: req.file.mimetype,
+//         sub_operation_name: dbRecord.sub_operation_name,
+//         uploaded_at: dbRecord.createdAt,
+//         b2_file_id: uploadResult.fileId,
+//       },
+//       storage: {
+//         type: "backblaze_b2",
+//         bucket: process.env.B2_BUCKET_NAME,
+//         region: "eu-central-003",
+//       },
+//     });
+//   } catch (error) {
+//     console.error("❌ Unhandled error in video upload:", {
+//       message: error.message,
+//       stack: error.stack,
+//     });
+
+//     // Final cleanup if anything went wrong
+//     if (uploadResult && uploadResult.fileId) {
+//       try {
+//         console.log("🧹 Final cleanup of B2 file...");
+//         await b2SubOpStorage.deleteFile(
+//           uploadResult.fileId,
+//           uploadResult.filePath
+//         );
+//       } catch (cleanupError) {
+//         console.error("❌ Final cleanup failed:", cleanupError);
+//       }
+//     }
+
+//     // Clean up DB record if it was created
+//     if (dbRecord && dbRecord.so_media_id) {
+//       try {
+//         console.log("🧹 Final cleanup of database record...");
+//         await SubOperationMedia.destroy({
+//           where: { so_media_id: dbRecord.so_media_id },
+//         });
+//       } catch (dbCleanupError) {
+//         console.error("❌ Database cleanup failed:", dbCleanupError);
+//       }
+//     }
+
+//     res.status(500).json({
+//       message: "Failed to upload video",
+//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
+//       success: false,
+//     });
+//   }
+// };
+
+// Helper function to check network path accessibility
 
 exports.uploadVideo = async (req, res, next) => {
   console.log("📤 [B2] Video upload request received");
@@ -28,11 +275,13 @@ exports.uploadVideo = async (req, res, next) => {
           size: req.file.size,
           bufferSize: req.file.buffer?.length || 0,
         }
-      : "No file"
+      : "No file",
   );
 
   let uploadResult = null;
   let dbRecord = null;
+  let tempInputPath = null;
+  let tempOutputPath = null;
 
   try {
     // Check if file uploaded
@@ -61,16 +310,81 @@ exports.uploadVideo = async (req, res, next) => {
       });
     }
 
-    // Generate filename with timestamp
+    // Check if it's a video file
+    const isVideo = req.file.mimetype.startsWith("video/");
     const ext = path.extname(req.file.originalname).toLowerCase();
+
+    // ==================== VIDEO PROCESSING ====================
+    let processedBuffer = req.file.buffer;
+    let finalFilename = "";
+
+    if (isVideo) {
+      console.log("🎬 Video file detected, normalizing orientation...");
+
+      try {
+        // Create temp directory if it doesn't exist
+        const tempDir = path.join(__dirname, "../temp");
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        // Save original buffer to temp file
+        tempInputPath = path.join(tempDir, `input_${Date.now()}${ext}`);
+        tempOutputPath = path.join(tempDir, `output_${Date.now()}${ext}`);
+
+        await fs.promises.writeFile(tempInputPath, req.file.buffer);
+
+        console.log("🔄 Processing video with FFmpeg...");
+
+        // Run FFmpeg to normalize orientation
+        await new Promise((resolve, reject) => {
+          ffmpeg(tempInputPath)
+            .outputOptions("-metadata:s:v rotate=0") // CRITICAL: Remove rotation metadata
+            .videoFilters("scale=iw:ih,format=yuv420p") // Ensure proper pixel format
+            .on("progress", (progress) => {
+              console.log(
+                `🔄 Processing: ${progress.percent?.toFixed(2) || 0}%`,
+              );
+            })
+            .on("end", () => {
+              console.log("✅ Video processing completed successfully");
+              resolve();
+            })
+            .on("error", (err) => {
+              console.error("❌ FFmpeg processing failed:", err.message);
+              reject(new Error(`Video processing failed: ${err.message}`));
+            })
+            .save(tempOutputPath);
+        });
+
+        // Read processed video
+        processedBuffer = await fs.promises.readFile(tempOutputPath);
+
+        // Update file size for processed video
+        req.file.size = processedBuffer.length;
+        console.log(`📊 Processed video size: ${req.file.size} bytes`);
+      } catch (ffmpegError) {
+        console.error(
+          "❌ Video processing error, uploading original:",
+          ffmpegError.message,
+        );
+        // Continue with original file if processing fails
+        // IMPORTANT: Log warning about potential portrait issues
+        console.warn(
+          "⚠️  Portrait videos may appear stretched/rotated without FFmpeg normalization",
+        );
+      }
+    }
+
+    // ==================== GENERATE FILENAME ====================
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours()
+      now.getHours(),
     ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds()
+      now.getSeconds(),
     ).padStart(2, "0")}`;
 
     const sanitizedSopName = (sopName || "unknown")
@@ -78,18 +392,18 @@ exports.uploadVideo = async (req, res, next) => {
       .replace(/\s+/g, "_");
 
     // Generate filename - use generatedName from middleware if available
-    const filename =
+    finalFilename =
       req.file.generatedName ||
       `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
-    console.log("📁 Generated filename:", filename);
-    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
+    console.log("📁 Generated filename:", finalFilename);
+    console.log("📊 Final buffer size:", processedBuffer.length, "bytes");
 
-    // Validate file buffer
-    if (!req.file.buffer || req.file.buffer.length === 0) {
-      console.log("❌ File buffer is empty");
+    // Validate buffer
+    if (!processedBuffer || processedBuffer.length === 0) {
+      console.log("❌ File buffer is empty after processing");
       return res.status(400).json({
-        message: "Uploaded file is empty or corrupted",
+        message: "Processed file is empty or corrupted",
         success: false,
       });
     }
@@ -100,16 +414,17 @@ exports.uploadVideo = async (req, res, next) => {
     try {
       // Upload file to B2
       uploadResult = await b2SubOpStorage.uploadSubOpFile(
-        req.file.buffer,
-        filename,
+        processedBuffer, // Use processed buffer instead of original
+        finalFilename,
         "video", // media type for folder organization
-        subOpId // subOpId for folder organization
+        subOpId, // subOpId for folder organization
       );
 
       console.log("✅ B2 Upload Successful:", {
         filePath: uploadResult.filePath,
         fileId: uploadResult.fileId,
         fileName: uploadResult.fileName,
+        processed: isVideo ? "yes" : "n/a",
       });
     } catch (b2Error) {
       console.error("❌ B2 Upload Failed:", {
@@ -160,16 +475,18 @@ exports.uploadVideo = async (req, res, next) => {
         video_url: uploadResult.filePath, // Store B2 file path
         // NEW FIELDS:
         b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
-        file_size: req.file.size,
+        file_size: req.file.size, // Updated size after processing
         original_filename: req.file.originalname,
         uploaded_by: req.user?.userId || null,
         file_type: req.file.mimetype,
+        processed_with_ffmpeg: isVideo, // Track if video was processed
       });
 
       console.log("✅ Database record created:", {
         so_media_id: dbRecord.so_media_id,
         media_url: dbRecord.media_url,
         b2_file_id: dbRecord.b2_file_id,
+        processed: dbRecord.processed_with_ffmpeg ? "yes" : "no",
       });
     } catch (dbError) {
       console.error("❌ Database save failed:", dbError);
@@ -180,7 +497,7 @@ exports.uploadVideo = async (req, res, next) => {
           console.log("🧹 Cleaning up B2 file after DB failure...");
           await b2SubOpStorage.deleteFile(
             uploadResult.fileId,
-            uploadResult.filePath
+            uploadResult.filePath,
           );
           console.log("✅ B2 file cleaned up");
         } catch (cleanupError) {
@@ -194,6 +511,25 @@ exports.uploadVideo = async (req, res, next) => {
           process.env.NODE_ENV === "development" ? dbError.message : undefined,
         success: false,
       });
+    }
+
+    // ==================== CLEANUP TEMP FILES ====================
+    if (tempInputPath && fs.existsSync(tempInputPath)) {
+      try {
+        await fs.promises.unlink(tempInputPath);
+        console.log("🧹 Cleaned up temp input file");
+      } catch (cleanupError) {
+        console.error("❌ Failed to clean temp input:", cleanupError);
+      }
+    }
+
+    if (tempOutputPath && fs.existsSync(tempOutputPath)) {
+      try {
+        await fs.promises.unlink(tempOutputPath);
+        console.log("🧹 Cleaned up temp output file");
+      } catch (cleanupError) {
+        console.error("❌ Failed to clean temp output:", cleanupError);
+      }
     }
 
     // ==================== SUCCESS RESPONSE ====================
@@ -214,6 +550,7 @@ exports.uploadVideo = async (req, res, next) => {
         sub_operation_name: dbRecord.sub_operation_name,
         uploaded_at: dbRecord.createdAt,
         b2_file_id: uploadResult.fileId,
+        orientation_normalized: isVideo, // Frontend can check this
       },
       storage: {
         type: "backblaze_b2",
@@ -227,13 +564,25 @@ exports.uploadVideo = async (req, res, next) => {
       stack: error.stack,
     });
 
+    // Cleanup temp files on error
+    [tempInputPath, tempOutputPath].forEach(async (tempPath) => {
+      if (tempPath && fs.existsSync(tempPath)) {
+        try {
+          await fs.promises.unlink(tempPath);
+          console.log("🧹 Cleaned up temp file on error:", tempPath);
+        } catch (cleanupError) {
+          console.error("❌ Failed to clean temp file:", cleanupError);
+        }
+      }
+    });
+
     // Final cleanup if anything went wrong
     if (uploadResult && uploadResult.fileId) {
       try {
         console.log("🧹 Final cleanup of B2 file...");
         await b2SubOpStorage.deleteFile(
           uploadResult.fileId,
-          uploadResult.filePath
+          uploadResult.filePath,
         );
       } catch (cleanupError) {
         console.error("❌ Final cleanup failed:", cleanupError);
@@ -260,7 +609,6 @@ exports.uploadVideo = async (req, res, next) => {
   }
 };
 
-// Helper function to check network path accessibility
 async function checkNetworkPath(networkPath) {
   return new Promise((resolve) => {
     // First try fs.access
@@ -273,7 +621,7 @@ async function checkNetworkPath(networkPath) {
       .catch((accessError) => {
         console.log(
           "❌ Network path not accessible via fs.access:",
-          accessError.message
+          accessError.message,
         );
 
         // Alternative check: try to list directory
@@ -283,14 +631,14 @@ async function checkNetworkPath(networkPath) {
             console.log(
               "✅ Network path accessible via readdir, found",
               files.length,
-              "files"
+              "files",
             );
             resolve(true);
           })
           .catch((readError) => {
             console.log(
               "❌ Network path not accessible via readdir:",
-              readError.message
+              readError.message,
             );
             resolve(false);
           });
@@ -430,7 +778,7 @@ exports.deleteVideo = async (req, res, next) => {
         // If file not found in B2, that's okay - we'll still delete DB record
         if (b2Error.response && b2Error.response.status === 404) {
           console.log(
-            "File not found in Backblaze B2, proceeding with DB deletion"
+            "File not found in Backblaze B2, proceeding with DB deletion",
           );
         } else {
           console.error("Backblaze B2 deletion error:", b2Error);
@@ -481,7 +829,7 @@ exports.uploadImage = async (req, res, next) => {
           size: req.file.size,
           bufferSize: req.file.buffer?.length || 0,
         }
-      : "No file"
+      : "No file",
   );
 
   let uploadResult = null;
@@ -519,11 +867,11 @@ exports.uploadImage = async (req, res, next) => {
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours()
+      now.getHours(),
     ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds()
+      now.getSeconds(),
     ).padStart(2, "0")}`;
 
     const sanitizedSopName = (sopName || "unknown")
@@ -556,7 +904,7 @@ exports.uploadImage = async (req, res, next) => {
         req.file.buffer,
         filename,
         "image", // Changed to "image" for folder organization
-        subOpId // subOpId for folder organization
+        subOpId, // subOpId for folder organization
       );
 
       console.log("✅ B2 Upload Successful:", {
@@ -636,7 +984,7 @@ exports.uploadImage = async (req, res, next) => {
           console.log("🧹 Cleaning up B2 file after DB failure...");
           await b2SubOpStorage.deleteFile(
             uploadResult.fileId,
-            uploadResult.filePath
+            uploadResult.filePath,
           );
           console.log("✅ B2 file cleaned up");
         } catch (cleanupError) {
@@ -688,7 +1036,7 @@ exports.uploadImage = async (req, res, next) => {
         console.log("🧹 Final cleanup of B2 file...");
         await b2SubOpStorage.deleteFile(
           uploadResult.fileId,
-          uploadResult.filePath
+          uploadResult.filePath,
         );
       } catch (cleanupError) {
         console.error("❌ Final cleanup failed:", cleanupError);
@@ -810,7 +1158,7 @@ exports.deleteImage = async (req, res, next) => {
 
         await b2SubOpStorage.deleteFile(
           imageRecord.b2_file_id,
-          imageRecord.image_url
+          imageRecord.image_url,
         );
 
         b2Deleted = true;
@@ -833,7 +1181,7 @@ exports.deleteImage = async (req, res, next) => {
           b2DeleteError.message.includes("NoSuchFile")
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)"
+            "ℹ️ File not found in B2 (may have been deleted already)",
           );
           b2Deleted = true; // Consider it "deleted" for our purposes
         } else if (
@@ -854,11 +1202,11 @@ exports.deleteImage = async (req, res, next) => {
       console.log("ℹ️ No B2 file ID or image URL found, skipping B2 deletion");
       console.log(
         "   B2 File ID:",
-        imageRecord.b2_file_id ? "Exists" : "Missing"
+        imageRecord.b2_file_id ? "Exists" : "Missing",
       );
       console.log(
         "   Image URL:",
-        imageRecord.image_url ? "Exists" : "Missing"
+        imageRecord.image_url ? "Exists" : "Missing",
       );
     }
 
@@ -877,7 +1225,7 @@ exports.deleteImage = async (req, res, next) => {
       // If DB deletion fails, but B2 deletion succeeded, we have an orphaned file
       if (b2Deleted) {
         console.error(
-          "⚠️ WARNING: File deleted from B2 but database record remains!"
+          "⚠️ WARNING: File deleted from B2 but database record remains!",
         );
         console.error("⚠️ Image data:", {
           b2_file_id: imageRecord.b2_file_id,
@@ -987,7 +1335,7 @@ exports.uploadTechPack = async (req, res, next) => {
           size: req.file.size,
           bufferSize: req.file.buffer?.length || 0,
         }
-      : "No file"
+      : "No file",
   );
 
   let uploadResult = null;
@@ -1025,11 +1373,11 @@ exports.uploadTechPack = async (req, res, next) => {
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
-      "0"
+      "0",
     )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours()
+      now.getHours(),
     ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds()
+      now.getSeconds(),
     ).padStart(2, "0")}`;
 
     const sanitizedSopName = (sopName || "unknown")
@@ -1062,7 +1410,7 @@ exports.uploadTechPack = async (req, res, next) => {
         req.file.buffer,
         filename,
         "techpack", // Changed to "techpack" for folder organization
-        subOpId // subOpId for folder organization
+        subOpId, // subOpId for folder organization
       );
 
       console.log("✅ B2 Upload Successful:", {
@@ -1119,7 +1467,7 @@ exports.uploadTechPack = async (req, res, next) => {
       } catch (excelError) {
         console.warn(
           "⚠️ Excel processing failed, but file upload succeeded:",
-          excelError.message
+          excelError.message,
         );
         excelProcessingResults = {
           sheetsProcessed: 0,
@@ -1175,7 +1523,7 @@ exports.uploadTechPack = async (req, res, next) => {
           console.log("🧹 Cleaning up B2 file after DB failure...");
           await b2SubOpStorage.deleteFile(
             uploadResult.fileId,
-            uploadResult.filePath
+            uploadResult.filePath,
           );
           console.log("✅ B2 file cleaned up");
         } catch (cleanupError) {
@@ -1228,7 +1576,7 @@ exports.uploadTechPack = async (req, res, next) => {
         console.log("🧹 Final cleanup of B2 file...");
         await b2SubOpStorage.deleteFile(
           uploadResult.fileId,
-          uploadResult.filePath
+          uploadResult.filePath,
         );
       } catch (cleanupError) {
         console.error("❌ Final cleanup failed:", cleanupError);
@@ -1488,7 +1836,7 @@ exports.deleteTechPack = async (req, res, next) => {
       try {
         await b2SubOpStorage.deleteFile(
           techPackRecord.b2_file_id,
-          techPackRecord.tech_pack_url
+          techPackRecord.tech_pack_url,
         );
 
         b2Deleted = true;
@@ -1503,7 +1851,7 @@ exports.deleteTechPack = async (req, res, next) => {
           b2DeleteError.message.includes("not found")
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)"
+            "ℹ️ File not found in B2 (may have been deleted already)",
           );
           b2Deleted = true;
         }
@@ -1588,7 +1936,7 @@ exports.uploadFolder = async (req, res, next) => {
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 Files details:",
-    req.files ? `Total files: ${req.files.length}` : "No files"
+    req.files ? `Total files: ${req.files.length}` : "No files",
   );
 
   try {
@@ -1620,7 +1968,7 @@ exports.uploadFolder = async (req, res, next) => {
     }
 
     console.log(
-      `📦 Processing ${req.files.length} files for subOpId: ${subOpId}`
+      `📦 Processing ${req.files.length} files for subOpId: ${subOpId}`,
     );
 
     const uploadResults = [];
@@ -1645,11 +1993,11 @@ exports.uploadFolder = async (req, res, next) => {
         const ext = path.extname(file.originalname).toLowerCase();
         const now = new Date();
         const dateTime = `${now.getFullYear()}${String(
-          now.getMonth() + 1
+          now.getMonth() + 1,
         ).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(
-          now.getHours()
+          now.getHours(),
         ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-          now.getSeconds()
+          now.getSeconds(),
         ).padStart(2, "0")}`;
 
         const sanitizedSopName = (sopName || "unknown")
@@ -1674,7 +2022,7 @@ exports.uploadFolder = async (req, res, next) => {
             file.buffer,
             filename,
             "document", // Use "document" type for folder files
-            subOpId
+            subOpId,
           );
 
           console.log("✅ B2 Upload Successful:", {
@@ -1691,7 +2039,7 @@ exports.uploadFolder = async (req, res, next) => {
         } catch (b2Error) {
           console.error("❌ B2 Upload Failed:", b2Error.message);
           throw new Error(
-            `Failed to upload file to cloud storage: ${b2Error.message}`
+            `Failed to upload file to cloud storage: ${b2Error.message}`,
           );
         }
 
@@ -1726,7 +2074,7 @@ exports.uploadFolder = async (req, res, next) => {
 
           // Remove from cleanup list since we'll clean up immediately
           const fileIndex = filesToCleanup.findIndex(
-            (f) => f.fileId === uploadResult.fileId
+            (f) => f.fileId === uploadResult.fileId,
           );
           if (fileIndex > -1) {
             filesToCleanup.splice(fileIndex, 1);
@@ -1737,7 +2085,7 @@ exports.uploadFolder = async (req, res, next) => {
             console.log("🧹 Cleaning up B2 file after DB failure...");
             await b2SubOpStorage.deleteFile(
               uploadResult.fileId,
-              uploadResult.filePath
+              uploadResult.filePath,
             );
           } catch (cleanupError) {
             console.error("❌ Failed to clean up B2 file:", cleanupError);
@@ -1763,7 +2111,7 @@ exports.uploadFolder = async (req, res, next) => {
       } catch (fileError) {
         console.error(
           `❌ Failed to process file ${file.originalname}:`,
-          fileError.message
+          fileError.message,
         );
 
         failedFiles.push({
@@ -1785,7 +2133,7 @@ exports.uploadFolder = async (req, res, next) => {
         } catch (cleanupError) {
           console.error(
             `❌ Failed to clean up ${file.filePath}:`,
-            cleanupError.message
+            cleanupError.message,
           );
         }
       }
@@ -1794,7 +2142,7 @@ exports.uploadFolder = async (req, res, next) => {
     // ==================== FINAL RESPONSE ====================
     const totalProcessed = uploadResults.length + failedFiles.length;
     console.log(
-      `\n📊 Upload Summary: ${uploadResults.length} successful, ${failedFiles.length} failed out of ${totalProcessed} total files`
+      `\n📊 Upload Summary: ${uploadResults.length} successful, ${failedFiles.length} failed out of ${totalProcessed} total files`,
     );
 
     if (uploadResults.length === 0) {
@@ -1818,7 +2166,7 @@ exports.uploadFolder = async (req, res, next) => {
         totalFiles: totalProcessed,
         totalSize: uploadResults.reduce(
           (sum, file) => sum + (file.size || 0),
-          0
+          0,
         ),
       },
       storage: {
@@ -2071,7 +2419,7 @@ exports.deleteFolderDocument = async (req, res, next) => {
       try {
         await b2SubOpStorage.deleteFile(
           folderFileRecord.b2_file_id,
-          folderFileRecord.folder_url
+          folderFileRecord.folder_url,
         );
 
         b2Deleted = true;
@@ -2086,7 +2434,7 @@ exports.deleteFolderDocument = async (req, res, next) => {
           b2DeleteError.message.includes("not found")
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)"
+            "ℹ️ File not found in B2 (may have been deleted already)",
           );
           b2Deleted = true;
         }
@@ -2171,7 +2519,7 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
 
   console.log(
     "🗑️ Delete multiple folder documents request for IDs:",
-    documentIds
+    documentIds,
   );
 
   try {
@@ -2251,17 +2599,17 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
     }
 
     const successfulDeletes = deleteResults.filter(
-      (r) => r.status === "success"
+      (r) => r.status === "success",
     ).length;
     const failedDeletes = deleteResults.filter(
-      (r) => r.status === "error"
+      (r) => r.status === "error",
     ).length;
     const notFound = deleteResults.filter(
-      (r) => r.status === "not_found"
+      (r) => r.status === "not_found",
     ).length;
 
     console.log(
-      `\n📊 Bulk delete summary: ${successfulDeletes} successful, ${failedDeletes} failed, ${notFound} not found`
+      `\n📊 Bulk delete summary: ${successfulDeletes} successful, ${failedDeletes} failed, ${notFound} not found`,
     );
 
     res.json({
@@ -2449,7 +2797,7 @@ exports.getTechPacks = async (req, res) => {
     });
 
     console.log(
-      `✅ Found ${techPacks.length} tech packs for subOpId: ${subOpId}`
+      `✅ Found ${techPacks.length} tech packs for subOpId: ${subOpId}`,
     );
 
     // Generate URLs for each tech pack
@@ -2476,7 +2824,7 @@ exports.getTechPacks = async (req, res) => {
 
       // Determine file icon based on extension
       const fileIcon = getFileIcon(
-        techPackData.original_filename || techPackData.tech_pack_url
+        techPackData.original_filename || techPackData.tech_pack_url,
       );
 
       return {
@@ -2493,7 +2841,7 @@ exports.getTechPacks = async (req, res) => {
           techPackData.tech_pack_url?.split("/").pop() ||
           "techpack.xlsx",
         file_extension: getFileExtension(
-          techPackData.original_filename || techPackData.tech_pack_url
+          techPackData.original_filename || techPackData.tech_pack_url,
         ),
         // Human readable file size
         file_size_formatted: formatFileSize(techPackData.file_size),
@@ -2595,7 +2943,7 @@ exports.getFolderDocuments = async (req, res) => {
     });
 
     console.log(
-      `✅ Found ${folderFiles.length} folder files for subOpId: ${subOpId}`
+      `✅ Found ${folderFiles.length} folder files for subOpId: ${subOpId}`,
     );
 
     // Generate URLs for each file
@@ -2621,10 +2969,10 @@ exports.getFolderDocuments = async (req, res) => {
 
       // Determine file type icon
       const fileIcon = getFileIcon(
-        folderFileData.original_filename || folderFileData.folder_url
+        folderFileData.original_filename || folderFileData.folder_url,
       );
       const fileType = getFileType(
-        folderFileData.file_type || folderFileData.original_filename
+        folderFileData.file_type || folderFileData.original_filename,
       );
 
       return {
@@ -2642,7 +2990,7 @@ exports.getFolderDocuments = async (req, res) => {
           folderFileData.folder_url?.split("/").pop() ||
           "file",
         file_extension: getFileExtension(
-          folderFileData.original_filename || folderFileData.folder_url
+          folderFileData.original_filename || folderFileData.folder_url,
         ),
         // Human readable file size
         file_size_formatted: formatFileSize(folderFileData.file_size),

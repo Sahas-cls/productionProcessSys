@@ -91,7 +91,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       needle_gauge: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       created_by: {
         type: DataTypes.INTEGER,
@@ -172,13 +172,30 @@ module.exports = (sequelize, DataTypes) => {
       as: "medias",
     });
 
+    // Media
+    SubOperation.hasMany(models.SubOperationImages, {
+      foreignKey: "sub_operation_id",
+      as: "images",
+    });
+
+    // tech packs
+    SubOperation.hasMany(models.SubOperationTechPack, {
+      foreignKey: "sub_operation_id",
+      as: "excels",
+    });
+
+    // folder
+    // tech packs
+    SubOperation.hasMany(models.SubOperationFolder, {
+      foreignKey: "sub_operation_id",
+      as: "folders",
+    });
+
     //needles
     SubOperation.hasMany(models.OpNeedles, {
       foreignKey: "sub_operation_id",
       as: "needles",
     });
-
-    //* technical data fields
   };
 
   return SubOperation;

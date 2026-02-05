@@ -7,9 +7,10 @@ import AddSubOperationOB from "./AddSubOperationOB";
 import { IoCloseOutline } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
-import { MdPersonOff } from "react-icons/md";
+import { MdDeleteForever, MdPersonOff } from "react-icons/md";
 import { FaArrowDown, FaDropbox, FaReact } from "react-icons/fa";
 import { IoIosArrowDropdown, IoIosArrowDropdownCircle } from "react-icons/io";
+import { FaDeleteLeft } from "react-icons/fa6";
 
 const ViewStyleDetails = () => {
   const navigate = useNavigate();
@@ -164,6 +165,42 @@ const ViewStyleDetails = () => {
         text: "Failed to delete sub-operation",
         icon: "error",
       });
+    }
+  };
+
+  // handle delete main operation
+  const handleDeleteMainOP = async (operation) => {
+    const isConfirmed = await Swal.fire({
+      title: "Are you sure?",
+      html: `Do you really wish to delete <span style="color:red; font-weight:600;">${operation.operation_name}</span>? <br/> this action cannot be undo`,
+      icon: "question",
+      showCancelButton: true,
+    });
+
+    if (!isConfirmed.isConfirmed) {
+      return;
+    }
+
+    // send delete request
+    try {
+      const response = await axios.delete(
+        `${apiUrl}/api/operationBulleting/delete-mo/${operation.operation_id}`,
+        { withCredentials: true },
+      );
+
+      console.log("response delete: ", response);
+
+      if (response.status === 200) {
+        await Swal.fire({
+          title: "Operation delete success",
+          icon: "success",
+          showCancelButton: false,
+        });
+      }
+
+      window.location.reload();
+    } catch (error) {
+      console.error("Error while delete main operation: ", error);
     }
   };
 
@@ -386,9 +423,19 @@ const ViewStyleDetails = () => {
                     }
                   >
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-800 text-base sm:text-lg mb-1 sm:mb-2">
-                        {operation.operation_name}
-                      </h3>
+                      <div className="flex items-center gap-x-4">
+                        <div className="">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMainOP(operation)}
+                          >
+                            <MdDeleteForever className="text-2xl hover:scale-125 duration-300 text-red-600" />
+                          </button>
+                        </div>
+                        <h3 className="font-semibold text-gray-800 text-base sm:text-lg mb-1 sm:mb-2">
+                          {operation.operation_name}
+                        </h3>
+                      </div>
                       <div className="flex flex-wrap gap-2 sm:gap-3 text-xs sm:text-sm text-gray-600">
                         <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
                           ID: {operation.operation_id}
@@ -405,9 +452,11 @@ const ViewStyleDetails = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 self-end sm:self-auto">
-                      <span className="text-xs sm:text-sm bg-blue-100 text-blue-800 px-2 sm:px-3 py-1 rounded-full font-medium">
-                        {operation.subOperations?.length || 0} Sub-Op
-                      </span>
+                      <div className="">
+                        <span className="text-xs sm:text-sm bg-blue-100 text-blue-800 px-2 sm:px-3 py-1 rounded-full font-medium">
+                          {operation.subOperations?.length || 0} Sub-Op
+                        </span>
+                      </div>
                       <svg
                         className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-500 transform transition-transform duration-200 ${
                           expandedOperations[operation.operation_id]

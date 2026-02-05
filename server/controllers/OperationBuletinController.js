@@ -997,6 +997,27 @@ exports.deleteOperation = async (req, res, next) => {
   }
 };
 
+// delete main operation
+exports.deleteMo = async (req, res, next) => {
+  // console.log("deleting main operation ☠️☠️");
+  const { opId } = req.params;
+  try {
+    if (!opId) {
+      const error = new Error("Cannot find the operation");
+      throw error;
+    }
+    const operation = await MainOperation.findByPk(opId);
+    if (!operation) {
+      const error = new Error("Cannot find the operation");
+      throw error;
+    }
+    await operation.destroy();
+    res.status(200).json({ status: "ok", message: "Operation Delete success" });
+  } catch (error) {
+    console.error("error while deleting operation: ", error);
+  }
+};
+
 // to delete sub operation
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
