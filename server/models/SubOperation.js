@@ -178,18 +178,17 @@ module.exports = (sequelize, DataTypes) => {
       as: "images",
     });
 
-    // tech packs
-    SubOperation.hasMany(models.SubOperationTechPack, {
-      foreignKey: "sub_operation_id",
-      as: "excels",
-    });
+    // // tech packs
+    // SubOperation.hasMany(models.SubOperationTechPack, {
+    //   foreignKey: "sub_operation_id",
+    //   as: "excels",
+    // });
 
     // folder
-    // tech packs
-    SubOperation.hasMany(models.SubOperationFolder, {
-      foreignKey: "sub_operation_id",
-      as: "folders",
-    });
+    // SubOperation.hasMany(models.SubOperationFolder, {
+    //   foreignKey: "sub_operation_id",
+    //   as: "folders",
+    // });
 
     //needles
     SubOperation.hasMany(models.OpNeedles, {

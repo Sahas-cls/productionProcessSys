@@ -29,4 +29,10 @@ router.delete(
   controllers.deleteSubOperation
 );
 
+// to update sequence number of the 
+router.put(
+  "/sequence-update",
+  controllers.updateSequenceNo
+)
+
 module.exports = router;

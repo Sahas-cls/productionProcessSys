@@ -7,7 +7,9 @@ const {
   SubOperation,
   MainOperation,
   Machine,
+  SubOperationMedia,
 } = require("../models");
+const { Sequelize } = require("sequelize");
 
 // to create a empty workstation
 exports.createEmptyWS = async (req, res, next) => {
@@ -60,6 +62,7 @@ exports.getWorkstations = async (req, res, next) => {
   try {
     const workstations = await Workstation.findAll({
       where: { layout_id: id },
+
       include: [
         {
           model: WorkstationSubmenu,
@@ -68,6 +71,28 @@ exports.getWorkstations = async (req, res, next) => {
             {
               model: SubOperation,
               as: "suboperatoin",
+
+              attributes: {
+                include: [
+                  [
+                    Sequelize.literal(`(
+                  SELECT COUNT(*)
+                  FROM suboperation_media sm
+                  WHERE sm.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
+                )`),
+                    "media_count",
+                  ],
+                  [
+                    Sequelize.literal(`(
+                  SELECT COUNT(*)
+                  FROM suboperation_images si
+                  WHERE si.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
+                )`),
+                    "image_count",
+                  ],
+                ],
+              },
+
               include: [
                 {
                   model: MainOperation,
@@ -82,9 +107,9 @@ exports.getWorkstations = async (req, res, next) => {
           ],
         },
       ],
+
       order: [["workstation_no", "ASC"]],
     });
-
     res.status(200).json({
       status: "success",
       message: "data selected successfully",
@@ -306,5 +331,49 @@ exports.workstationId = async (req, res, next) => {
       .json({ status: "success", message: "Workstation update success" });
   } catch (error) {
     return next(error);
+  }
+};
+
+// to update sequence number
+exports.updateSequenceNo = async (req, res, next) => {
+  const workstations = req.body;
+
+  try {
+    // 1️⃣ Validate request body
+    if (!Array.isArray(workstations) || workstations.length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "No workstations provided",
+      });
+    }
+
+    // 2️⃣ Build update promises
+    const updatePromises = workstations.map((ws) => {
+      // extra safety (optional but recommended)
+      if (ws.workstation_id === undefined || ws.sequence_number === undefined) {
+        throw new Error("Invalid workstation payload");
+      }
+
+      return Workstation.update(
+        { sequence_number: ws.sequence_number },
+        { where: { workstation_id: ws.workstation_id } },
+      );
+    });
+
+    // 3️⃣ Execute all updates in parallel
+    await Promise.all(updatePromises);
+
+    // 4️⃣ Respond once everything is done
+    return res.status(200).json({
+      status: "ok",
+      message: "Workstation sequence numbers updated successfully",
+    });
+  } catch (error) {
+    console.error("updateSequenceNo error:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message: error.message || "Failed to update sequence numbers",
+    });
   }
 };

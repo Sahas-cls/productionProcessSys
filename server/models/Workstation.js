@@ -18,11 +18,15 @@ module.exports = (sequelize, DataTypes) => {
           key: "layout_id",
         },
       },
+      sequence_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
     },
     {
       tableName: "workstation",
       timestamps: true,
-    }
+    },
   );
 
   Workstation.associate = (models) => {

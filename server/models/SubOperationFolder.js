@@ -15,27 +15,28 @@ module.exports = (sequelize, DataTypes) => {
           key: "style_id",
         },
       },
-      operation_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: "main_operation",
-          key: "operation_id",
-        },
-      },
-      sub_operation_id: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-          model: "sub_operation",
-          key: "sub_operation_id",
-        },
-      },
-      sub_operation_name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: { len: [1, 255] },
-      },
+      // ! REMOVED FIELDS NEED GENERATE MIGRATION FILE FOR REMOVE THESE
+      // operation_id: {
+      //   type: DataTypes.INTEGER,
+      //   allowNull: false,
+      //   references: {
+      //     model: "main_operation",
+      //     key: "operation_id",
+      //   },
+      // },
+      // sub_operation_id: {
+      //   type: DataTypes.INTEGER,
+      //   allowNull: false,
+      //   references: {
+      //     model: "sub_operation",
+      //     key: "sub_operation_id",
+      //   },
+      // },
+      // sub_operation_name: {
+      //   type: DataTypes.STRING,
+      //   allowNull: false,
+      //   validate: { len: [1, 255] },
+      // },
       folder_url: {
         type: DataTypes.STRING(500),
         allowNull: false,
@@ -63,7 +64,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
     },
-    { tableName: "suboperation_folder", timestamps: true }
+    { tableName: "suboperation_folder", timestamps: true },
   );
 
   SubOperationFolder.associate = (models) => {
@@ -72,19 +73,19 @@ module.exports = (sequelize, DataTypes) => {
       as: "style",
     });
 
-    SubOperationFolder.belongsTo(models.MainOperation, {
-      foreignKey: "operation_id",
-      as: "main_operation",
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
-    });
+    // SubOperationFolder.belongsTo(models.MainOperation, {
+    //   foreignKey: "operation_id",
+    //   as: "main_operation",
+    //   onDelete: "CASCADE",
+    //   onUpdate: "CASCADE",
+    // });
 
-    SubOperationFolder.belongsTo(models.SubOperation, {
-      foreignKey: "sub_operation_id",
-      as: "sub_operation",
-      onDelete: "CASCADE",
-      onUpdate: "CASCADE",
-    });
+    // SubOperationFolder.belongsTo(models.SubOperation, {
+    //   foreignKey: "sub_operation_id",
+    //   as: "sub_operation",
+    //   onDelete: "CASCADE",
+    //   onUpdate: "CASCADE",
+    // });
   };
 
   return SubOperationFolder;

@@ -110,7 +110,7 @@ const FolderDocumentsUploader = ({
     if (errors.length > 0) {
       setValidationError(
         errors.slice(0, 3).join(", ") +
-          (errors.length > 3 ? `... and ${errors.length - 3} more` : "")
+          (errors.length > 3 ? `... and ${errors.length - 3} more` : ""),
       );
     }
 
@@ -170,16 +170,19 @@ const FolderDocumentsUploader = ({
     setUploading(true);
     setUploadProgress(0);
 
+    console.log("uploading data: ", uploadingData);
+
     try {
       const formData = new FormData();
 
       // Append the metadata - ADD subOpId HERE!
-      formData.append("styleId", uploadingData.style_id || 1);
+      // formData.append("styleId", uploadingData.style_id || 1);
+      formData.append("styleId", uploadingData.styleId);
       formData.append("styleNo", uploadingData.styleNo);
-      formData.append("moId", uploadingData.moId);
-      formData.append("sopId", uploadingData.sopId);
-      formData.append("sopName", uploadingData.sopName);
-      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // ADD THIS LINE
+      // formData.append("moId", uploadingData.moId);
+      // formData.append("sopId", uploadingData.sopId);
+      // formData.append("sopName", uploadingData.sopName);
+      // formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId);
       formData.append("totalFiles", selectedFiles.length);
       formData.append("folderName", `Style_${uploadingData.styleNo}_Documents`);
 
@@ -190,13 +193,13 @@ const FolderDocumentsUploader = ({
 
       // Validate individual file sizes
       const oversizedFiles = selectedFiles.filter(
-        (file) => file.size > maxIndividualSize
+        (file) => file.size > maxIndividualSize,
       );
       if (oversizedFiles.length > 0) {
         throw new Error(
           `Some files exceed 20MB limit: ${oversizedFiles
             .map((f) => f.name)
-            .join(", ")}`
+            .join(", ")}`,
         );
       }
 
@@ -204,8 +207,8 @@ const FolderDocumentsUploader = ({
       if (totalSize > maxTotalSize) {
         throw new Error(
           `Total upload size (${(totalSize / (1024 * 1024)).toFixed(
-            2
-          )}MB) exceeds 100MB limit`
+            2,
+          )}MB) exceeds 100MB limit`,
         );
       }
 
@@ -217,16 +220,17 @@ const FolderDocumentsUploader = ({
         console.log(
           `📤 Appending file ${index + 1}: ${file.name} (${(
             file.size / 1024
-          ).toFixed(2)}KB)`
+          ).toFixed(2)}KB)`,
         );
       });
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
       console.log(
-        `📦 Starting upload of ${selectedFiles.length} files to Backblaze B2...`
+        `📦 Starting upload of ${selectedFiles.length} files to Backblaze B2...`,
       );
-
+      console.log("form data: ", formData);
+      // return;
       const response = await axios.post(
         `${apiUrl}/api/subOperationMedia/uploadFolder`,
         formData,
@@ -238,14 +242,14 @@ const FolderDocumentsUploader = ({
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
+                (progressEvent.loaded * 100) / progressEvent.total,
               );
               setUploadProgress(percentCompleted);
               console.log(`📊 Upload progress: ${percentCompleted}%`);
             }
           },
           timeout: 300000, // Increased to 5 minutes for multiple files
-        }
+        },
       );
 
       console.log("🔍 Folder documents upload response:", response.data);
@@ -273,7 +277,7 @@ const FolderDocumentsUploader = ({
                 if (response.data.failedFiles) {
                   console.log(
                     "❌ Failed files details:",
-                    response.data.failedFiles
+                    response.data.failedFiles,
                   );
                 }
               }
@@ -328,7 +332,7 @@ const FolderDocumentsUploader = ({
             "📁 Storage provider:",
             response.data.storage?.type ||
               response.data.storageProvider ||
-              "Backblaze B2"
+              "Backblaze B2",
           );
 
           // Log successful files details
@@ -342,7 +346,7 @@ const FolderDocumentsUploader = ({
                 size: (file.size / 1024).toFixed(2) + "KB",
                 b2FileId: file.b2FileId,
                 filePath: file.filePath,
-              }))
+              })),
             );
           }
 
@@ -359,12 +363,12 @@ const FolderDocumentsUploader = ({
         } else if (response.data.success === false) {
           console.error("❌ Server returned failure:", response.data);
           throw new Error(
-            response.data.message || "Folder upload failed on server"
+            response.data.message || "Folder upload failed on server",
           );
         } else {
           console.error(
             "❌ Malformed response - no success flag:",
-            response.data
+            response.data,
           );
           throw new Error("Server response format error");
         }
@@ -509,8 +513,8 @@ const FolderDocumentsUploader = ({
           validationError
             ? "border-red-500 bg-red-900/20"
             : selectedFiles.length > 0
-            ? "border-green-500 bg-green-900/20"
-            : "border-gray-600 bg-gray-800/50 hover:border-gray-500"
+              ? "border-green-500 bg-green-900/20"
+              : "border-gray-600 bg-gray-800/50 hover:border-gray-500"
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}

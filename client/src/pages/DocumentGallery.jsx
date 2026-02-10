@@ -29,37 +29,41 @@ const DocumentGallery = () => {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [subOpId, setSubOpId] = useState(null);
+  const [styleId, setStyleId] = useState(null);
 
+  // Get styleId from params or location state
   useEffect(() => {
-    // Get subOpId from params, location state, or URL query
-    const id =
-      params.subOpId ||
-      location.state?.subOpId ||
-      new URLSearchParams(location.search).get("subOpId");
+    const style = params.styleId || location.state?.styleId;
 
-    if (id) {
-      setSubOpId(id);
-      fetchDocuments(id);
+    if (style) {
+      setStyleId(style);
+      console.log("✅ Style ID found:", style);
     } else {
+      console.error("❌ No style ID found");
       Swal.fire({
         title: "Missing Parameter",
-        text: "Sub-operation ID is required to view documents",
+        text: "Style ID is required to view documents",
         icon: "error",
         confirmButtonText: "Go Back",
       }).then(() => navigate(-1));
     }
-  }, [location, params]);
+  }, [location, params, navigate]);
+
+  // Fetch documents when styleId is available
+  useEffect(() => {
+    if (styleId) {
+      fetchDocuments(styleId);
+    }
+  }, [styleId]);
 
   const fetchDocuments = async (id) => {
     setLoading(true);
     try {
-      // Note: Changed endpoint from getFolderDocuments to getFolderFiles
       const response = await axios.get(
         `${
           import.meta.env.VITE_API_URL
         }/api/subOperationMedia/getFolderDocuments/${id}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -67,7 +71,7 @@ const DocumentGallery = () => {
         console.log(
           `✅ Loaded ${
             response.data.data?.length || 0
-          } documents from Backblaze B2`
+          } documents for styleId: ${id}`,
         );
       } else {
         throw new Error(response.data.message || "Failed to load documents");
@@ -77,9 +81,9 @@ const DocumentGallery = () => {
 
       let errorMessage = "Failed to load documents";
       if (error.response?.status === 404) {
-        errorMessage = "No documents found for this sub-operation";
+        errorMessage = "No documents found for this style";
       } else if (error.response?.status === 400) {
-        errorMessage = "Invalid sub-operation ID";
+        errorMessage = "Invalid style ID";
       }
 
       Swal.fire({
@@ -270,16 +274,15 @@ const DocumentGallery = () => {
     setDeletingId(id);
 
     try {
-      // Note: Changed endpoint from deleteFolderDocument to deleteFolderFile
       const response = await axios.delete(
         `${
           import.meta.env.VITE_API_URL
         }/api/subOperationMedia/deleteFolderDocument/${id}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
-        await fetchDocuments(subOpId);
+        await fetchDocuments(styleId);
 
         let successMessage = "Document has been deleted from cloud storage.";
         if (response.data.warning) {
@@ -335,8 +338,8 @@ const DocumentGallery = () => {
   };
 
   const handleRefresh = () => {
-    if (subOpId) {
-      fetchDocuments(subOpId);
+    if (styleId) {
+      fetchDocuments(styleId);
     }
   };
 
@@ -360,7 +363,7 @@ const DocumentGallery = () => {
               <span className="text-xs text-gray-400">
                 (
                 {formatFileSize(
-                  documents.reduce((sum, doc) => sum + (doc.file_size || 0), 0)
+                  documents.reduce((sum, doc) => sum + (doc.file_size || 0), 0),
                 )}
                 )
               </span>
@@ -386,9 +389,11 @@ const DocumentGallery = () => {
             <span className="bg-orange-100 text-orange-800 text-sm px-3 py-1 rounded-full">
               {documents.length} {documents.length === 1 ? "file" : "files"}
             </span>
-            <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              SubOp ID: {subOpId}
-            </div>
+            {styleId && (
+              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                Style ID: {styleId}
+              </div>
+            )}
           </div>
         </div>
 
@@ -410,7 +415,9 @@ const DocumentGallery = () => {
               No documents found
             </h3>
             <p className="text-gray-500 max-w-md mb-4">
-              There are no documents uploaded for sub-operation {subOpId} yet.
+              {styleId
+                ? `There are no documents uploaded for style ${styleId} yet.`
+                : "No style ID provided."}
             </p>
             <button
               onClick={handleRefresh}
@@ -439,7 +446,6 @@ const DocumentGallery = () => {
                       onClick={() => handlePreview(item)}
                       className="w-full h-full flex flex-col items-center justify-center hover:from-gray-100 hover:to-gray-200 transition-all"
                     >
-                      {/* <div className="text-4xl mb-2">{fileIcon}</div> */}
                       <div className="flex items-center justify-center">
                         {FileIconComponent}
                       </div>
@@ -479,7 +485,7 @@ const DocumentGallery = () => {
 
                   <div className="p-4">
                     <h3 className="font-semibold text-lg mb-2 line-clamp-1">
-                      {item.sub_operation_name || "Document"}
+                      {item.original_filename || "Document"}
                     </h3>
 
                     <div className="text-sm text-gray-600 space-y-2">
@@ -501,14 +507,6 @@ const DocumentGallery = () => {
                           </span>
                         </div>
                       )}
-                      {/* {item.file_type && (
-                        <div className="flex justify-between">
-                          <span className="font-medium">Type:</span>
-                          <span className="text-xs uppercase">
-                            {item.file_type.split("/")[1] || item.file_type}
-                          </span>
-                        </div>
-                      )} */}
                     </div>
 
                     <div className="mt-4 flex justify-between items-center">
@@ -517,14 +515,6 @@ const DocumentGallery = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        {/* <button
-                          onClick={() => handlePreview(item)}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
-                          title="Preview"
-                        >
-                          <FaExternalLinkAlt className="text-sm" />
-                        </button> */}
-
                         <button
                           onClick={() => handleDownload(item)}
                           className="flex items-center gap-1 text-green-600 hover:text-green-800 transition-colors text-sm px-2 py-1 rounded hover:bg-green-50"

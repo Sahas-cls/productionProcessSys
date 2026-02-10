@@ -246,7 +246,7 @@ routes.post(
 routes.delete("/deleteImage/:so_img_id", controller.deleteImage);
 
 // !=============================== TECH PACK ROUTES ===============================
-routes.get("/getTechPacks/:subOpId", controller.getTechPacks);
+routes.get("/getStyleTechPacks/:subOpId", controller.getStyleTechPacks);
 routes.post(
   "/uploadTechPack",
   folderUpload.single("techPack"),
@@ -257,7 +257,7 @@ routes.post(
 routes.delete("/deleteTechPack/:so_tech_id", controller.deleteTechPack);
 
 // !=============================== FOLDER/DOCUMENTS ROUTES ===============================
-routes.get("/getFolderDocuments/:subOpId", controller.getFolderDocuments);
+routes.get("/getFolderDocuments/:styleId", controller.getFolderDocuments);
 routes.post(
   "/uploadFolder",
   folderUpload.array("documents", 10), // max 10 files

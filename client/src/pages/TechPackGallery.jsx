@@ -10,13 +10,13 @@ import {
   FaFilePdf,
   FaFileWord,
   FaFileCsv,
+  FaTag, // Added for style tag
 } from "react-icons/fa";
 import { BeatLoader } from "react-spinners";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
-
 const TechPackGallery = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -27,56 +27,59 @@ const TechPackGallery = () => {
   const [techPacks, setTechPacks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [subOpId, setSubOpId] = useState(null);
+  const [styleId, setStyleId] = useState(null);
+  const [styleNo, setStyleNo] = useState("");
 
   useEffect(() => {
-    // Get subOpId from params, location state, or URL query
-    const id =
-      params.subOpId ||
-      location.state?.subOpId ||
-      new URLSearchParams(location.search).get("subOpId");
+    // Get style info from location state
+    const styleId = location.state?.styleId;
+    const styleNo = location.state?.styleNo;
 
-    if (id) {
-      setSubOpId(id);
-      fetchTechPacks(id);
+    if (styleId) {
+      setStyleId(styleId);
+      setStyleNo(styleNo || "");
+      fetchStyleTechPacks(styleId);
     } else {
       Swal.fire({
-        title: "Missing Parameter",
-        text: "Sub-operation ID is required to view tech packs",
+        title: "Missing Information",
+        text: "Style information is required to view tech packs",
         icon: "error",
         confirmButtonText: "Go Back",
       }).then(() => navigate(-1));
     }
-  }, [location, params]);
+  }, [location]);
 
-  const fetchTechPacks = async (id) => {
+  const fetchStyleTechPacks = async (id) => {
+    // Renamed function
     setLoading(true);
     try {
       const response = await axios.get(
         `${
           import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/getTechPacks/${id}`,
-        { withCredentials: true }
+        }/api/subOperationMedia/getStyleTechPacks/${id}`, // Changed endpoint
+        { withCredentials: true },
       );
+
+      console.log("response: ", response);
 
       if (response.data.success) {
         setTechPacks(response.data.data || []);
         console.log(
           `✅ Loaded ${
             response.data.data?.length || 0
-          } tech packs from Backblaze B2`
+          } style tech packs from Backblaze B2`,
         );
       } else {
         throw new Error(response.data.message || "Failed to load tech packs");
       }
     } catch (error) {
-      console.error("❌ Error fetching tech packs:", error);
+      console.error("❌ Error fetching style tech packs:", error);
 
       let errorMessage = "Failed to load tech packs";
       if (error.response?.status === 404) {
-        errorMessage = "No tech packs found for this sub-operation";
+        errorMessage = "No tech packs found for this style";
       } else if (error.response?.status === 400) {
-        errorMessage = "Invalid sub-operation ID";
+        errorMessage = "Invalid style ID";
       }
 
       Swal.fire({
@@ -90,11 +93,10 @@ const TechPackGallery = () => {
     }
   };
 
-  // Get the best URL for the tech pack - prefers proxy URL for security
+  // Get the best URL for the tech pack
   const getTechPackUrl = (item) => {
     const baseUrl = import.meta.env.VITE_API_URL;
 
-    // Priority: proxy_url -> preview_url -> public_url -> direct_url -> old format
     if (item.proxy_url) {
       return `${baseUrl}${item.proxy_url}`;
     } else if (item.preview_url) {
@@ -104,18 +106,16 @@ const TechPackGallery = () => {
     } else if (item.direct_url) {
       return item.direct_url;
     } else if (item.tech_pack_url) {
-      // Legacy support - check if it's already a full URL
       if (item.tech_pack_url.startsWith("http")) {
         return item.tech_pack_url;
       }
-      // Use B2 proxy endpoint
       return `${baseUrl}/api/b2-files/${item.tech_pack_url}`;
     }
 
     return "";
   };
 
-  // Get URL for download (direct B2 link)
+  // Get URL for download
   const getDownloadUrl = (item) => {
     if (item.public_url) {
       return item.public_url;
@@ -176,7 +176,6 @@ const TechPackGallery = () => {
     const fileName = getFileName(item);
 
     if (downloadUrl) {
-      // Create a temporary link for download
       const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = fileName;
@@ -197,7 +196,6 @@ const TechPackGallery = () => {
     const techPackUrl = getTechPackUrl(item);
 
     if (techPackUrl) {
-      // Open in new tab for preview (if browser can display it)
       window.open(techPackUrl, "_blank");
     } else {
       Swal.fire({
@@ -211,8 +209,8 @@ const TechPackGallery = () => {
 
   const handleDelete = async (id, fileName) => {
     const result = await Swal.fire({
-      title: "Delete tech pack?",
-      text: `Are you sure you want to delete "${fileName}"?`,
+      title: "Delete style tech pack?",
+      text: `Are you sure you want to delete "${fileName}"? This will remove it for all operations in this style.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -230,13 +228,14 @@ const TechPackGallery = () => {
         `${
           import.meta.env.VITE_API_URL
         }/api/subOperationMedia/deleteTechPack/${id}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
-        await fetchTechPacks(subOpId);
+        await fetchStyleTechPacks(styleId);
 
-        let successMessage = "Tech pack has been deleted from cloud storage.";
+        let successMessage =
+          "Style tech pack has been deleted from cloud storage.";
         if (response.data.warning) {
           successMessage += ` (Note: ${response.data.warning})`;
         }
@@ -290,8 +289,8 @@ const TechPackGallery = () => {
   };
 
   const handleRefresh = () => {
-    if (subOpId) {
-      fetchTechPacks(subOpId);
+    if (styleId) {
+      fetchStyleTechPacks(styleId);
     }
   };
 
@@ -308,14 +307,20 @@ const TechPackGallery = () => {
         </button>
 
         <div className="flex items-center gap-4">
+          {/* Style Info Badge */}
+          <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
+            <FaTag className="text-purple-500" />
+            <span>Style: {styleNo || `ID: ${styleId}`}</span>
+          </div>
+
           <div className="text-sm text-gray-600 bg-white px-3 py-1 rounded-full shadow-sm flex items-center gap-2">
             <FaCloud className="text-blue-500" />
-            <span>Total Tech Packs: {techPacks.length}</span>
+            <span>Style Tech Packs: {techPacks.length}</span>
             {techPacks.length > 0 && (
               <span className="text-xs text-gray-400">
                 (
                 {formatFileSize(
-                  techPacks.reduce((sum, tp) => sum + (tp.file_size || 0), 0)
+                  techPacks.reduce((sum, tp) => sum + (tp.file_size || 0), 0),
                 )}
                 )
               </span>
@@ -337,12 +342,13 @@ const TechPackGallery = () => {
         <div className="w-full flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <FaFileExcel className="text-green-500 text-2xl" />
-            <h1 className="text-2xl font-bold">Tech Pack Gallery</h1>
+            <h1 className="text-2xl font-bold">Style Tech Pack Gallery</h1>{" "}
+            {/* Updated title */}
             <span className="bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full">
               {techPacks.length} {techPacks.length === 1 ? "file" : "files"}
             </span>
             <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              SubOp ID: {subOpId}
+              Style ID: {styleId}
             </div>
           </div>
         </div>
@@ -352,7 +358,7 @@ const TechPackGallery = () => {
             <div className="text-center">
               <BeatLoader color="#3b82f6" size={15} />
               <p className="mt-4 text-gray-600">
-                Loading tech packs from cloud storage...
+                Loading style tech packs from cloud storage...
               </p>
             </div>
           </div>
@@ -362,10 +368,12 @@ const TechPackGallery = () => {
               <FaCloud />
             </div>
             <h3 className="text-xl font-medium text-gray-600 mb-2">
-              No tech packs found
+              No style tech packs found
             </h3>
             <p className="text-gray-500 max-w-md mb-4">
-              There are no tech packs uploaded for sub-operation {subOpId} yet.
+              There are no tech packs uploaded for style {styleNo || styleId}{" "}
+              yet. Tech packs uploaded here are available for all operations in
+              this style.
             </p>
             <button
               onClick={handleRefresh}
@@ -401,15 +409,11 @@ const TechPackGallery = () => {
                         {fileName}
                       </span>
 
-                      {/* Excel processing info */}
-                      {item.excel_sheets_processed > 0 && (
-                        <div className="mt-2 text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">
-                          {item.excel_sheets_processed} sheet
-                          {item.excel_sheets_processed !== 1 ? "s" : ""}
-                          {item.excel_total_rows > 0 &&
-                            `, ${item.excel_total_rows} rows`}
-                        </div>
-                      )}
+                      {/* Style-level indicator */}
+                      <div className="mt-2 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full flex items-center gap-1">
+                        <FaTag className="text-xs" />
+                        <span>Style-Level</span>
+                      </div>
                     </button>
 
                     {/* Cloud storage indicator */}
@@ -430,7 +434,7 @@ const TechPackGallery = () => {
 
                   <div className="p-4">
                     <h3 className="font-semibold text-lg mb-2 line-clamp-1">
-                      {item.sub_operation_name || "Tech Pack"}
+                      {fileName}
                     </h3>
 
                     <div className="text-sm text-gray-600 space-y-2">
@@ -452,14 +456,12 @@ const TechPackGallery = () => {
                           </span>
                         </div>
                       )}
-                      {/* {item.file_type && (
-                        <div className="flex justify-between">
-                          <span className="font-medium">Type:</span>
-                          <span className="text-xs uppercase">
-                            {item.file_type.split("/")[1] || item.file_type}
-                          </span>
-                        </div>
-                      )} */}
+                      <div className="flex justify-between">
+                        <span className="font-medium">Scope:</span>
+                        <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">
+                          Style-Level
+                        </span>
+                      </div>
                     </div>
 
                     <div className="mt-4 flex justify-between items-center">
@@ -468,14 +470,6 @@ const TechPackGallery = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        {/* <button
-                          onClick={() => handlePreview(item)}
-                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 transition-colors text-sm px-2 py-1 rounded hover:bg-blue-50"
-                          title="Preview"
-                        >
-                          <FaExternalLinkAlt className="text-sm" />
-                        </button> */}
-
                         <button
                           onClick={() => handleDownload(item)}
                           className="flex items-center gap-1 text-green-600 hover:text-green-800 transition-colors text-sm px-2 py-1 rounded hover:bg-green-50"
@@ -484,7 +478,7 @@ const TechPackGallery = () => {
                           <FaDownload className="text-sm" />
                         </button>
 
-                        {userRole === "Admin" && (
+                        {userRole === "Admin" || userRole === "SuperAdmin" ? (
                           <button
                             onClick={() =>
                               handleDelete(item.so_tech_id, fileName)
@@ -495,7 +489,7 @@ const TechPackGallery = () => {
                           >
                             <FaTrash size={12} />
                           </button>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>

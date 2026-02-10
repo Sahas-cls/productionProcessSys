@@ -1322,54 +1322,39 @@ exports.deleteImage = async (req, res, next) => {
 };
 
 // !================================== tech pack controllers (excel)
-// to upload tech pack
 exports.uploadTechPack = async (req, res, next) => {
   console.log("📤 [B2] Tech pack upload request received");
-  console.log("📋 Request body:", req.body);
-  console.log(
-    "📁 File details:",
-    req.file
-      ? {
-          originalname: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.size,
-          bufferSize: req.file.buffer?.length || 0,
-        }
-      : "No file",
-  );
 
   let uploadResult = null;
   let dbRecord = null;
 
   try {
-    // Check if file uploaded
+    /* -----------------------------------
+       Validate File
+    ----------------------------------- */
+
     if (!req.file) {
-      console.log("❌ No file uploaded");
       return res.status(400).json({
         message: "No file uploaded",
         success: false,
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
+    const { styleId, styleNo } = req.body;
 
-    // Validate required fields
-    if (!styleNo || !moId || !sopId || !subOpId) {
-      console.log("❌ Missing required fields:", {
-        styleNo,
-        moId,
-        sopId,
-        subOpId,
-      });
+    if (!styleId) {
       return res.status(400).json({
-        message:
-          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
+        message: "styleId is required",
         success: false,
       });
     }
 
-    // Generate filename with timestamp
+    /* -----------------------------------
+       Generate Filename
+    ----------------------------------- */
+
     const ext = path.extname(req.file.originalname).toLowerCase();
+
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
@@ -1380,225 +1365,104 @@ exports.uploadTechPack = async (req, res, next) => {
       now.getSeconds(),
     ).padStart(2, "0")}`;
 
-    const sanitizedSopName = (sopName || "unknown")
-      .replace(/[/\\?%*:|"<>]/g, "_")
-      .replace(/\s+/g, "_");
-
-    // Generate filename - use generatedName from middleware if available
     const filename =
       req.file.generatedName ||
-      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+      `${styleNo || "STYLE"}_TECHPACK_${dateTime}${ext}`;
 
-    console.log("📁 Generated filename:", filename);
-    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
+    /* -----------------------------------
+       Upload To Backblaze
+    ----------------------------------- */
 
-    // Validate file buffer
-    if (!req.file.buffer || req.file.buffer.length === 0) {
-      console.log("❌ File buffer is empty");
-      return res.status(400).json({
-        message: "Uploaded file is empty or corrupted",
-        success: false,
-      });
-    }
+    uploadResult = await b2SubOpStorage.uploadSubOpFile(
+      req.file.buffer,
+      filename,
+      "techpack",
+      styleId, // folder by style
+    );
 
-    // ==================== UPLOAD TO BACKBLAZE B2 ====================
-    console.log("☁️ Uploading to Backblaze B2...");
+    /* -----------------------------------
+       Optional Excel Processing
+    ----------------------------------- */
 
-    try {
-      // Upload file to B2 - using "techpack" type for folder organization
-      uploadResult = await b2SubOpStorage.uploadSubOpFile(
-        req.file.buffer,
-        filename,
-        "techpack", // Changed to "techpack" for folder organization
-        subOpId, // subOpId for folder organization
-      );
-
-      console.log("✅ B2 Upload Successful:", {
-        filePath: uploadResult.filePath,
-        fileId: uploadResult.fileId,
-        fileName: uploadResult.fileName,
-      });
-    } catch (b2Error) {
-      console.error("❌ B2 Upload Failed:", {
-        error: b2Error.message,
-        code: b2Error.code,
-        stack: b2Error.stack?.split("\n")[0],
-      });
-
-      let errorMessage = "Failed to upload tech pack to cloud storage";
-      let statusCode = 500;
-
-      if (
-        b2Error.code === "AccessDenied" ||
-        b2Error.code === "InvalidAccessKeyId"
-      ) {
-        errorMessage = "Cloud storage authentication failed";
-        statusCode = 503;
-      } else if (b2Error.code === "NoSuchBucket") {
-        errorMessage = "Cloud storage bucket not found";
-        statusCode = 503;
-      } else if (
-        b2Error.message.includes("ENOTFOUND") ||
-        b2Error.message.includes("ECONNREFUSED")
-      ) {
-        errorMessage = "Cannot connect to cloud storage";
-        statusCode = 503;
-      }
-
-      return res.status(statusCode).json({
-        message: errorMessage,
-        error:
-          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
-        success: false,
-        storage: "backblaze_b2",
-      });
-    }
-
-    // ==================== PROCESS EXCEL DATA (IF NEEDED) ====================
     let excelProcessingResults = null;
 
-    // Check if it's an Excel file and process it if needed
-    const isExcelFile = ext === ".xlsx" || ext === ".xls";
-    if (isExcelFile) {
+    if (ext === ".xlsx" || ext === ".xls") {
       try {
-        console.log("📊 Processing Excel file data...");
         excelProcessingResults = await processTechPackExcel(req.file.buffer);
-        console.log("✅ Excel processing completed:", excelProcessingResults);
-      } catch (excelError) {
-        console.warn(
-          "⚠️ Excel processing failed, but file upload succeeded:",
-          excelError.message,
-        );
+      } catch (err) {
         excelProcessingResults = {
           sheetsProcessed: 0,
           totalRows: 0,
-          error: excelError.message,
-          note: "File uploaded but data extraction failed",
+          error: err.message,
         };
       }
-    } else {
-      excelProcessingResults = {
-        sheetsProcessed: 0,
-        totalRows: 0,
-        note: "Not an Excel file, skipping data processing",
-      };
     }
 
-    // ==================== SAVE TO DATABASE ====================
-    console.log("💾 Saving to database...");
+    /* -----------------------------------
+       Save Database Record
+    ----------------------------------- */
 
-    try {
-      dbRecord = await SubOperationTechPack.create({
-        style_id: styleId || 1,
-        operation_id: moId,
-        sub_operation_id: sopId,
-        sub_operation_name: sopName || null,
-        tech_pack_url: uploadResult.filePath, // Store B2 file path
-        // NEW FIELDS:
-        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
-        file_size: req.file.size,
-        original_filename: req.file.originalname,
-        uploaded_by: req.user?.userId || null,
-        file_type: req.file.mimetype,
-        sub_op_id: subOpId,
-        // Excel processing results
-        excel_sheets_processed: excelProcessingResults?.sheetsProcessed || 0,
-        excel_total_rows: excelProcessingResults?.totalRows || 0,
-        excel_processing_note: excelProcessingResults?.note || null,
-      });
+    dbRecord = await SubOperationTechPack.create({
+      style_id: styleId,
+      tech_pack_url: uploadResult.filePath,
+      b2_file_id: uploadResult.fileId,
+      file_size: req.file.size,
+      original_filename: req.file.originalname,
+      uploaded_by: req.user?.userId || null,
+      file_type: req.file.mimetype,
+    });
 
-      console.log("✅ Database record created:", {
-        so_tech_id: dbRecord.so_tech_id,
-        tech_pack_url: dbRecord.tech_pack_url,
-        b2_file_id: dbRecord.b2_file_id,
-        excel_sheets: dbRecord.excel_sheets_processed,
-        excel_rows: dbRecord.excel_total_rows,
-      });
-    } catch (dbError) {
-      console.error("❌ Database save failed:", dbError);
+    /* -----------------------------------
+       Response
+    ----------------------------------- */
 
-      // Attempt to delete from B2 since DB save failed
-      if (uploadResult && uploadResult.fileId) {
-        try {
-          console.log("🧹 Cleaning up B2 file after DB failure...");
-          await b2SubOpStorage.deleteFile(
-            uploadResult.fileId,
-            uploadResult.filePath,
-          );
-          console.log("✅ B2 file cleaned up");
-        } catch (cleanupError) {
-          console.error("❌ Failed to clean up B2 file:", cleanupError);
-        }
-      }
-
-      return res.status(500).json({
-        message: "Failed to save tech pack record to database",
-        error:
-          process.env.NODE_ENV === "development" ? dbError.message : undefined,
-        success: false,
-      });
-    }
-
-    // ==================== SUCCESS RESPONSE ====================
-    console.log("🎉 Tech pack upload completed successfully!");
-
-    res.status(201).json({
-      message: "Tech pack uploaded to cloud storage successfully",
+    return res.status(201).json({
+      message: "Tech pack uploaded successfully",
       success: true,
       data: {
         so_tech_id: dbRecord.so_tech_id,
+        style_id: dbRecord.style_id,
         tech_pack_url: uploadResult.filePath,
-        tech_pack_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
-        file_name: uploadResult.fileName,
-        original_filename: req.file.originalname,
-        file_size: req.file.size,
-        file_type: req.file.mimetype,
-        sub_operation_name: dbRecord.sub_operation_name,
+        tech_pack_url_proxy: `/api/b2-files/${uploadResult.filePath}`,
+        original_filename: dbRecord.original_filename,
+        file_size: dbRecord.file_size,
+        file_type: dbRecord.file_type,
         uploaded_at: dbRecord.createdAt,
-        b2_file_id: uploadResult.fileId,
         excel_processing: excelProcessingResults,
-      },
-      storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: "eu-central-003", // Adjust if needed
       },
     });
   } catch (error) {
-    console.error("❌ Unhandled error in tech pack upload:", {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error("❌ Tech pack upload failed:", error);
 
-    // Final cleanup if anything went wrong
-    if (uploadResult && uploadResult.fileId) {
+    /* -----------------------------------
+       Cleanup B2
+    ----------------------------------- */
+
+    if (uploadResult?.fileId) {
       try {
-        console.log("🧹 Final cleanup of B2 file...");
         await b2SubOpStorage.deleteFile(
           uploadResult.fileId,
           uploadResult.filePath,
         );
-      } catch (cleanupError) {
-        console.error("❌ Final cleanup failed:", cleanupError);
+      } catch (err) {
+        console.error("Cleanup failed:", err);
       }
     }
 
-    // Clean up DB record if it was created
-    if (dbRecord && dbRecord.so_tech_id) {
-      try {
-        console.log("🧹 Final cleanup of database record...");
-        await SubOperationTechPack.destroy({
-          where: { so_tech_id: dbRecord.so_tech_id },
-        });
-      } catch (dbCleanupError) {
-        console.error("❌ Database cleanup failed:", dbCleanupError);
-      }
+    /* -----------------------------------
+       Cleanup DB
+    ----------------------------------- */
+
+    if (dbRecord?.so_tech_id) {
+      await SubOperationTechPack.destroy({
+        where: { so_tech_id: dbRecord.so_tech_id },
+      });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to upload tech pack",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
       success: false,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -1931,66 +1795,49 @@ exports.deleteTechPack = async (req, res, next) => {
 
 // !================================== folder controllers
 // to upload folder (multiple documents)
-exports.uploadFolder = async (req, res, next) => {
-  console.log("📤 [B2] Folder upload request received");
-  console.log("📋 Request body:", req.body);
-  console.log(
-    "📁 Files details:",
-    req.files ? `Total files: ${req.files.length}` : "No files",
-  );
+exports.uploadFolder = async (req, res) => {
+  console.log("📤 [B2] Folder upload request received", req.body);
 
   try {
-    // Check if files uploaded
+    /* -----------------------------------
+       Validate Files
+    ----------------------------------- */
+
     if (!req.files || req.files.length === 0) {
-      console.log("❌ No files uploaded");
       return res.status(400).json({
         message: "No files uploaded",
         success: false,
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId, folderName, subOpId } =
-      req.body;
+    const { styleId, styleNo, folderName } = req.body;
 
-    // Validate required fields
-    if (!styleNo || !moId || !sopId || !subOpId) {
-      console.log("❌ Missing required fields:", {
-        styleNo,
-        moId,
-        sopId,
-        subOpId,
-      });
+    if (!styleId) {
       return res.status(400).json({
-        message:
-          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
+        message: "styleId is required",
         success: false,
       });
     }
 
     console.log(
-      `📦 Processing ${req.files.length} files for subOpId: ${subOpId}`,
+      `📦 Processing ${req.files.length} files for styleId: ${styleId}`,
     );
 
     const uploadResults = [];
     const failedFiles = [];
-    const dbRecords = [];
-    const filesToCleanup = []; // Track files that need cleanup on error
+    const filesToCleanup = [];
 
-    // Process each file
+    /* -----------------------------------
+       Process Each File
+    ----------------------------------- */
+
     for (const [index, file] of req.files.entries()) {
-      let filename = null;
-      let uploadResult = null;
-      let dbRecord = null;
+      let uploadResult;
+      let dbRecord;
 
       try {
-        console.log(`\n📄 Processing file ${index + 1}/${req.files.length}:`, {
-          originalname: file.originalname,
-          mimetype: file.mimetype,
-          size: file.size,
-        });
-
-        // Generate filename with timestamp and index for uniqueness
         const ext = path.extname(file.originalname).toLowerCase();
+
         const now = new Date();
         const dateTime = `${now.getFullYear()}${String(
           now.getMonth() + 1,
@@ -2000,225 +1847,92 @@ exports.uploadFolder = async (req, res, next) => {
           now.getSeconds(),
         ).padStart(2, "0")}`;
 
-        const sanitizedSopName = (sopName || "unknown")
-          .replace(/[/\\?%*:|"<>]/g, "_")
-          .replace(/\s+/g, "_");
+        const filename = `${styleNo || "STYLE"}_${folderName || "FOLDER"}_${dateTime}_${index}${ext}`;
 
-        // Include index to ensure unique filenames
-        filename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}_${index}${ext}`;
-        console.log("📁 Generated filename:", filename);
-
-        // Validate file buffer
         if (!file.buffer || file.buffer.length === 0) {
           throw new Error("File buffer is empty");
         }
 
-        // ==================== UPLOAD TO BACKBLAZE B2 ====================
-        console.log("☁️ Uploading to Backblaze B2...");
+        /* ---------------- Upload to B2 ---------------- */
 
-        try {
-          // Upload file to B2 - using "document" type for folder organization
-          uploadResult = await b2SubOpStorage.uploadSubOpFile(
-            file.buffer,
-            filename,
-            "document", // Use "document" type for folder files
-            subOpId,
-          );
+        uploadResult = await b2SubOpStorage.uploadSubOpFile(
+          file.buffer,
+          filename,
+          "document",
+          styleId, // store under style
+        );
 
-          console.log("✅ B2 Upload Successful:", {
-            filePath: uploadResult.filePath,
-            fileId: uploadResult.fileId,
-            fileName: uploadResult.fileName,
-          });
+        filesToCleanup.push({
+          fileId: uploadResult.fileId,
+          filePath: uploadResult.filePath,
+        });
 
-          // Add to cleanup list in case of later failures
-          filesToCleanup.push({
-            fileId: uploadResult.fileId,
-            filePath: uploadResult.filePath,
-          });
-        } catch (b2Error) {
-          console.error("❌ B2 Upload Failed:", b2Error.message);
-          throw new Error(
-            `Failed to upload file to cloud storage: ${b2Error.message}`,
-          );
-        }
+        /* ---------------- Save DB ---------------- */
 
-        // ==================== SAVE TO DATABASE ====================
-        try {
-          console.log("💾 Saving to database...");
-          dbRecord = await SubOperationFolder.create({
-            style_id: styleId || 1,
-            operation_id: moId,
-            sub_operation_id: sopId,
-            sub_operation_name: sopName || null,
-            folder_url: uploadResult.filePath, // Store B2 file path
-            // NEW FIELDS:
-            b2_file_id: uploadResult.fileId,
-            file_size: file.size,
-            original_filename: file.originalname,
-            uploaded_by: req.user?.userId || null,
-            file_type: file.mimetype,
-            sub_op_id: subOpId,
-            folder_name: folderName || "Untitled Folder",
-          });
+        dbRecord = await SubOperationFolder.create({
+          style_id: styleId,
+          folder_url: uploadResult.filePath,
+          b2_file_id: uploadResult.fileId,
+          file_size: file.size,
+          original_filename: file.originalname,
+          uploaded_by: req.user?.userId || null,
+          file_type: file.mimetype,
+        });
 
-          console.log("✅ Database record created:", {
-            so_folder_id: dbRecord.so_folder_id,
-            folder_url: dbRecord.folder_url,
-            b2_file_id: dbRecord.b2_file_id,
-          });
-
-          dbRecords.push(dbRecord);
-        } catch (dbError) {
-          console.error("❌ Database save failed:", dbError);
-
-          // Remove from cleanup list since we'll clean up immediately
-          const fileIndex = filesToCleanup.findIndex(
-            (f) => f.fileId === uploadResult.fileId,
-          );
-          if (fileIndex > -1) {
-            filesToCleanup.splice(fileIndex, 1);
-          }
-
-          // Clean up B2 file since DB save failed
-          try {
-            console.log("🧹 Cleaning up B2 file after DB failure...");
-            await b2SubOpStorage.deleteFile(
-              uploadResult.fileId,
-              uploadResult.filePath,
-            );
-          } catch (cleanupError) {
-            console.error("❌ Failed to clean up B2 file:", cleanupError);
-          }
-
-          throw new Error(`Database save failed: ${dbError.message}`);
-        }
-
-        // Add to successful results
         uploadResults.push({
           id: dbRecord.so_folder_id,
           originalName: file.originalname,
           savedName: filename,
           filePath: uploadResult.filePath,
-          b2FileId: uploadResult.fileId,
           size: file.size,
           type: file.mimetype,
           status: "success",
-          uploadTime: new Date().toISOString(),
         });
-
-        console.log(`✅ File ${index + 1} processed successfully`);
-      } catch (fileError) {
-        console.error(
-          `❌ Failed to process file ${file.originalname}:`,
-          fileError.message,
-        );
+      } catch (err) {
+        console.error(`❌ File failed: ${file.originalname}`, err.message);
 
         failedFiles.push({
           originalName: file.originalname,
-          filename: filename,
-          error: fileError.message,
+          error: err.message,
           status: "failed",
         });
-      }
-    }
 
-    // ==================== CLEANUP PARTIAL UPLOADS IF ALL FILES FAILED ====================
-    if (uploadResults.length === 0 && filesToCleanup.length > 0) {
-      console.log("🧹 Cleaning up all B2 files since all uploads failed...");
-      for (const file of filesToCleanup) {
-        try {
-          await b2SubOpStorage.deleteFile(file.fileId, file.filePath);
-          console.log(`✅ Cleaned up: ${file.filePath}`);
-        } catch (cleanupError) {
-          console.error(
-            `❌ Failed to clean up ${file.filePath}:`,
-            cleanupError.message,
-          );
+        if (uploadResult?.fileId) {
+          try {
+            await b2SubOpStorage.deleteFile(
+              uploadResult.fileId,
+              uploadResult.filePath,
+            );
+          } catch (_) {}
         }
       }
     }
 
-    // ==================== FINAL RESPONSE ====================
-    const totalProcessed = uploadResults.length + failedFiles.length;
-    console.log(
-      `\n📊 Upload Summary: ${uploadResults.length} successful, ${failedFiles.length} failed out of ${totalProcessed} total files`,
-    );
+    /* -----------------------------------
+       Final Response
+    ----------------------------------- */
 
     if (uploadResults.length === 0) {
-      // All files failed
-      console.log("❌ All files failed to upload");
       return res.status(500).json({
         message: "All files failed to upload",
         success: false,
-        failedFiles: failedFiles,
-        storage: "backblaze_b2",
+        failedFiles,
       });
     }
 
-    const response = {
-      message: `Folder upload completed: ${uploadResults.length} files uploaded successfully to cloud storage`,
-      data: uploadResults,
+    return res.status(201).json({
+      message: `${uploadResults.length} files uploaded successfully`,
       success: true,
-      uploadResults: {
-        filesProcessed: uploadResults.length,
-        failedFiles: failedFiles.length,
-        totalFiles: totalProcessed,
-        totalSize: uploadResults.reduce(
-          (sum, file) => sum + (file.size || 0),
-          0,
-        ),
-      },
-      storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: "eu-central-003", // Adjust if needed
-      },
-    };
-
-    // Add warnings if some files failed
-    if (failedFiles.length > 0) {
-      response.warnings = `${failedFiles.length} files failed to upload`;
-      response.failedFiles = failedFiles;
-      response.partialSuccess = true;
-    }
-
-    console.log("🎉 Folder upload process completed");
-    res.status(201).json(response);
+      files: uploadResults,
+      failedFilesCount: failedFiles.length,
+    });
   } catch (error) {
-    console.error("❌ Upload process failed:", error.message);
+    console.error("❌ Upload process failed:", error);
 
-    // Final cleanup if anything went wrong
-    console.log("🧹 Performing final cleanup after error...");
-    // Note: Individual file cleanup is handled in the loop
-
-    // Determine appropriate status code and error message
-    let statusCode = 500;
-    let errorMessage = "Server error during folder upload";
-
-    if (
-      error.message.includes("Missing required fields") ||
-      error.message.includes("No files uploaded")
-    ) {
-      statusCode = 400;
-      errorMessage = error.message;
-    } else if (
-      error.message.includes("Failed to upload file to cloud storage")
-    ) {
-      statusCode = 502;
-      errorMessage = "Cloud storage upload failed";
-    }
-
-    console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
-
-    res.status(statusCode).json({
-      message: errorMessage,
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Internal server error",
+    return res.status(500).json({
+      message: "Folder upload failed",
       success: false,
-      storage: "backblaze_b2",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
@@ -2763,28 +2477,27 @@ exports.getImages = async (req, res) => {
   }
 };
 
-exports.getTechPacks = async (req, res) => {
+exports.getStyleTechPacks = async (req, res) => {
   try {
-    const { subOpId } = req.params;
-
+    const { subOpId: styleId } = req.params;
+    console.log("requested style id: ", styleId);
     // Validate parameter
-    if (!subOpId) {
+    if (!styleId) {
       return res.status(400).json({
         success: false,
-        message: "subOpId parameter is required",
+        message: "styleId parameter is required",
       });
     }
 
-    console.log(`📋 Fetching tech packs for subOpId: ${subOpId}`);
+    console.log(`📋 Fetching tech packs for styleId: ${styleId}`);
 
-    // Get tech packs from database
+    // Get tech packs from database - NOW BY STYLE_ID
     const techPacks = await SubOperationTechPack.findAll({
-      where: { sub_operation_id: subOpId }, // Changed from sub_op_id to match your model
+      where: { style_id: styleId },
       order: [["createdAt", "DESC"]],
       attributes: [
         "so_tech_id",
-        "sub_operation_id",
-        "sub_operation_name",
+        "style_id",
         "tech_pack_url",
         "b2_file_id",
         "file_size",
@@ -2797,7 +2510,7 @@ exports.getTechPacks = async (req, res) => {
     });
 
     console.log(
-      `✅ Found ${techPacks.length} tech packs for subOpId: ${subOpId}`,
+      `✅ Found ${techPacks.length} tech packs for styleId: ${styleId}`,
     );
 
     // Generate URLs for each tech pack
@@ -2805,14 +2518,12 @@ exports.getTechPacks = async (req, res) => {
       const techPackData = techPack.toJSON();
 
       // Generate B2 URL
-      let publicUrl = techPackData.public_url; // If already stored in DB
+      let publicUrl = techPackData.public_url;
 
       if (!publicUrl && techPackData.tech_pack_url) {
-        // Check if tech_pack_url is already a full path
         if (techPackData.tech_pack_url.startsWith("http")) {
           publicUrl = techPackData.tech_pack_url;
         } else {
-          // Construct B2 URL
           const bucketName = process.env.B2_BUCKET_NAME;
           const region = process.env.B2_REGION || "eu-central-003";
           publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${techPackData.tech_pack_url}`;
@@ -2831,11 +2542,9 @@ exports.getTechPacks = async (req, res) => {
         ...techPackData,
         public_url: publicUrl,
         proxy_url: proxyUrl,
-        // For frontend compatibility
         direct_url: publicUrl,
         preview_url: proxyUrl,
         file_icon: fileIcon,
-        // File info for display
         file_name:
           techPackData.original_filename ||
           techPackData.tech_pack_url?.split("/").pop() ||
@@ -2843,7 +2552,6 @@ exports.getTechPacks = async (req, res) => {
         file_extension: getFileExtension(
           techPackData.original_filename || techPackData.tech_pack_url,
         ),
-        // Human readable file size
         file_size_formatted: formatFileSize(techPackData.file_size),
       };
     });
@@ -2852,7 +2560,7 @@ exports.getTechPacks = async (req, res) => {
       success: true,
       data: techPacksWithUrls,
       count: techPacks.length,
-      message: "Tech packs fetched successfully",
+      message: "Style tech packs fetched successfully",
       storage: {
         type: "backblaze_b2",
         bucket: process.env.B2_BUCKET_NAME,
@@ -2860,10 +2568,10 @@ exports.getTechPacks = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Error fetching tech packs:", error);
+    console.error("❌ Error fetching style tech packs:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch tech packs",
+      message: "Failed to fetch style tech packs",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
@@ -2909,28 +2617,28 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
+// Get folder documents.
 exports.getFolderDocuments = async (req, res) => {
   try {
-    const { subOpId } = req.params;
+    const { styleId } = req.params;
 
     // Validate parameter
-    if (!subOpId) {
+    if (!styleId) {
       return res.status(400).json({
         success: false,
-        message: "subOpId parameter is required",
+        message: "styleId parameter is required",
       });
     }
 
-    console.log(`📂 Fetching folder files for subOpId: ${subOpId}`);
+    console.log(`📂 Fetching folder files for styleId: ${styleId}`);
 
     // Get folder files from database
     const folderFiles = await SubOperationFolder.findAll({
-      where: { sub_operation_id: subOpId },
+      where: { style_id: styleId },
       order: [["createdAt", "DESC"]],
       attributes: [
         "so_folder_id",
-        "sub_operation_id",
-        "sub_operation_name",
+        "style_id",
         "folder_url",
         "b2_file_id",
         "file_size",
@@ -2943,14 +2651,14 @@ exports.getFolderDocuments = async (req, res) => {
     });
 
     console.log(
-      `✅ Found ${folderFiles.length} folder files for subOpId: ${subOpId}`,
+      `✅ Found ${folderFiles.length} folder files for styleId: ${styleId}`,
     );
 
     // Generate URLs for each file
     const folderFilesWithUrls = folderFiles.map((folderFile) => {
       const folderFileData = folderFile.toJSON();
 
-      // Generate B2 URL
+      // Generate B2 public URL
       let publicUrl = null;
       if (folderFileData.folder_url) {
         if (folderFileData.folder_url.startsWith("http")) {
@@ -2958,46 +2666,43 @@ exports.getFolderDocuments = async (req, res) => {
         } else {
           const bucketName = process.env.B2_BUCKET_NAME;
           const region = process.env.B2_REGION || "eu-central-003";
+
           publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${folderFileData.folder_url}`;
         }
       }
 
-      // Add proxy URL for frontend access
+      // Proxy URL (optional)
       const proxyUrl = folderFileData.folder_url
         ? `/api/b2-files/${folderFileData.folder_url}`
         : null;
 
-      // Determine file type icon
-      const fileIcon = getFileIcon(
-        folderFileData.original_filename || folderFileData.folder_url,
-      );
-      const fileType = getFileType(
-        folderFileData.file_type || folderFileData.original_filename,
-      );
+      // Helpers
+      const fileName =
+        folderFileData.original_filename ||
+        folderFileData.folder_url?.split("/").pop() ||
+        "file";
 
       return {
         ...folderFileData,
+
+        // URLs
         public_url: publicUrl,
         proxy_url: proxyUrl,
-        // For frontend compatibility
         direct_url: publicUrl,
         preview_url: proxyUrl,
-        file_icon: fileIcon,
-        file_type_name: fileType,
-        // File info for display
-        file_name:
-          folderFileData.original_filename ||
-          folderFileData.folder_url?.split("/").pop() ||
-          "file",
-        file_extension: getFileExtension(
-          folderFileData.original_filename || folderFileData.folder_url,
-        ),
-        // Human readable file size
+
+        // File info
+        file_name: fileName,
+        file_extension: getFileExtension(fileName),
+        file_icon: getFileIcon(fileName),
+        file_type_name: getFileType(folderFileData.file_type || fileName),
+
+        // Human readable size
         file_size_formatted: formatFileSize(folderFileData.file_size),
       };
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: folderFilesWithUrls,
       count: folderFiles.length,
@@ -3010,7 +2715,7 @@ exports.getFolderDocuments = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error fetching folder files:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Failed to fetch folder files",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,

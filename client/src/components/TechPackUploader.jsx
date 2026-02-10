@@ -96,10 +96,16 @@ const TechPackUploader = ({
     }
   };
 
-  // Upload file
+  // Upload file - UPDATED FOR NEW BACKEND
   const handleUpload = async () => {
     if (!selectedFile) {
       setValidationError("Please select a file first");
+      return;
+    }
+
+    // Validate required data
+    if (!uploadingData.styleId) {
+      setValidationError("Style information is missing");
       return;
     }
 
@@ -109,18 +115,12 @@ const TechPackUploader = ({
     try {
       const formData = new FormData();
 
-      // Append the metadata - ADD subOpId HERE!
-      formData.append("styleId", uploadingData.style_id || 1);
-      formData.append("styleNo", uploadingData.styleNo);
-      formData.append("moId", uploadingData.moId);
-      formData.append("sopId", uploadingData.sopId);
-      formData.append("sopName", uploadingData.sopName);
-      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId); // ADD THIS LINE
+      // UPDATED: Only send styleId and styleNo (no moId, sopId, sopName, subOpId)
+      formData.append("styleId", uploadingData.styleId);
+      formData.append("styleNo", uploadingData.styleNo || "");
       formData.append("originalFileName", selectedFile.name);
       formData.append("fileSize", selectedFile.size);
       formData.append("fileType", selectedFile.type);
-
-      // Append the Excel file - use "techPack" field name (matching backend)
       formData.append("techPack", selectedFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -141,95 +141,23 @@ const TechPackUploader = ({
               setUploadProgress(percentCompleted);
             }
           },
-          timeout: 120000, // Increased to 120 seconds for larger tech packs
+          timeout: 120000,
         }
       );
 
       console.log("🔍 Tech Pack upload response:", response.data);
 
-      // Enhanced success checking
       if (response.status === 201) {
         if (response.data.success === true) {
-          let successTitle = "Success!";
-          let successText = "Tech Pack uploaded successfully!";
-          let iconType = "success";
-          let timerDuration = 4000;
-
-          // Check for Excel processing results
-          if (response.data.data?.excel_processing) {
-            const results = response.data.data.excel_processing;
-            successText = `Tech Pack processed successfully!`;
-
-            if (results.sheetsProcessed > 0) {
-              successText += ` Sheets: ${results.sheetsProcessed}, Rows: ${results.totalRows}`;
-            }
-
-            if (results.error) {
-              successTitle = "Uploaded with Processing Note";
-              iconType = "info";
-              successText += ` (Data extraction had issues)`;
-            }
-          }
-
-          // Check if it's Backblaze B2 storage
-          if (
-            response.data.storage &&
-            response.data.storage.type === "backblaze_b2"
-          ) {
-            successTitle = "Uploaded to Cloud!";
-            successText = "Tech Pack uploaded to cloud storage successfully!";
-            iconType = "success";
-            timerDuration = 4000;
-
-            console.log("☁️ Stored in Backblaze B2:", {
-              bucket: response.data.storage.bucket,
-              region: response.data.storage.region,
-              fileId: response.data.data?.b2_file_id,
-              fileSize: response.data.data?.file_size,
-            });
-          }
-
-          // Check for any warnings
-          else if (response.data.warning) {
-            successTitle = "Uploaded with Note";
-            successText = response.data.warning;
-            iconType = "warning";
-            timerDuration = 5000;
-          }
-
           Swal.fire({
-            title: successTitle,
-            text: successText,
-            timer: timerDuration,
+            title: "Success!",
+            text: "Style Tech Pack uploaded successfully!",
+            icon: "success",
+            timer: 4000,
             showTimeProgress: true,
-            showCancelButton: false,
-            icon: iconType,
           });
 
-          console.log("✅ Tech Pack upload successful:", response.data);
-          console.log(
-            "📁 Storage provider:",
-            response.data.storage?.type ||
-              response.data.storageProvider ||
-              "Backblaze B2"
-          );
-
-          // Store the returned data for later use if needed
-          if (response.data.data) {
-            console.log("📦 Uploaded tech pack details:", {
-              id: response.data.data.so_tech_id,
-              url:
-                response.data.data.tech_pack_url_proxy ||
-                response.data.data.tech_pack_url,
-              filename: response.data.data.file_name,
-              b2FileId: response.data.data.b2_file_id,
-              fileSize: response.data.data.file_size,
-              excelSheets: response.data.data.excel_processing?.sheetsProcessed,
-              excelRows: response.data.data.excel_processing?.totalRows,
-            });
-          }
-
-          // Reset states after successful upload
+          // Reset states
           setSelectedFile(null);
           setUploading(false);
           setUploadProgress(0);
@@ -240,103 +168,30 @@ const TechPackUploader = ({
             fileInputRef.current.value = "";
           }
 
-          // Optionally trigger a refresh of tech pack list
-          if (typeof onUploadSuccess === "function") {
-            onUploadSuccess(response.data.data);
-          }
-        } else if (response.data.success === false) {
-          console.error("❌ Server returned failure:", response.data);
-          throw new Error(
-            response.data.message || "Tech Pack upload failed on server"
-          );
+          // Close modal after success
+          setTimeout(() => {
+            setUploadingMaterial(null);
+          }, 1500);
         } else {
-          console.error(
-            "❌ Malformed response - no success flag:",
-            response.data
-          );
-          throw new Error("Server response format error");
+          throw new Error(response.data.message || "Upload failed");
         }
-      } else {
-        console.error("❌ Unexpected status code:", response.status);
-        throw new Error(`Upload failed with status: ${response.status}`);
       }
     } catch (error) {
       console.error("❌ Tech Pack upload error:", error);
-      console.error("❌ Error response data:", error.response?.data);
 
       let errorMessage = "Tech Pack upload failed";
-      let errorTitle = "Upload Failed";
-      let timerDuration = 5000;
-
-      if (error.response) {
-        errorMessage =
-          error.response.data?.message ||
-          error.response.statusText ||
-          "Server error occurred";
-
-        if (error.response.status === 400) {
-          errorTitle = "Invalid Request";
-          if (errorMessage?.includes("too large")) {
-            errorMessage = "File is too large. Maximum size is 50MB";
-          } else if (errorMessage?.includes("Missing required fields")) {
-            // More specific error for missing subOpId
-            if (errorMessage?.includes("subOpId")) {
-              errorMessage = "Please provide sub-operation ID";
-            } else {
-              errorMessage = "Please fill all required fields";
-            }
-          } else if (errorMessage?.includes("Invalid file format")) {
-            errorMessage = "Invalid Excel file format. Please check the file";
-          } else if (errorMessage?.includes("corrupted")) {
-            errorMessage = "The Excel file appears to be corrupted";
-          } else if (errorMessage?.includes("No file uploaded")) {
-            errorMessage = "No file selected";
-          } else if (errorMessage?.includes("validation")) {
-            errorMessage = "File validation failed. Please check the format";
-          }
-        } else if (error.response.status === 413) {
-          errorTitle = "File Too Large";
-          errorMessage = "File exceeds size limit. Maximum size is 50MB";
-        } else if (error.response.status === 415) {
-          errorTitle = "Unsupported Format";
-          errorMessage =
-            "File format not supported. Please use XLS, XLSX, or CSV";
-        } else if (error.response.status === 422) {
-          errorTitle = "Processing Error";
-          errorMessage =
-            "The Tech Pack could not be processed. Please check the file structure";
-        } else if (
-          error.response.status === 502 ||
-          error.response.status === 503
-        ) {
-          errorTitle = "Cloud Storage Error";
-          errorMessage = "Unable to upload to cloud storage. Please try again.";
-          timerDuration = 6000;
-        } else if (error.response.status >= 500) {
-          errorTitle = "Server Error";
-          errorMessage = "Server encountered an error. Please try again later.";
-          timerDuration = 6000;
-        }
-      } else if (error.request) {
-        errorTitle = "Network Error";
-        errorMessage =
-          "Unable to connect to server. Please check your internet connection.";
-      } else if (error.code === "ECONNABORTED") {
-        errorTitle = "Timeout Error";
-        errorMessage =
-          "Upload took too long. Please try again with a smaller file.";
-      } else {
-        errorTitle = "Upload Error";
-        errorMessage = error.message || "An unexpected error occurred";
+      
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
       }
 
       Swal.fire({
-        title: errorTitle,
+        title: "Upload Failed",
         text: errorMessage,
-        timer: timerDuration,
-        showTimeProgress: true,
-        showCancelButton: false,
         icon: "error",
+        timer: 5000,
       });
 
       setUploading(false);
@@ -376,7 +231,6 @@ const TechPackUploader = ({
         <button
           className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
           onClick={() => {
-            // setIsUploading(false);
             setUploadingMaterial(null);
           }}
           disabled={uploading}
@@ -385,10 +239,25 @@ const TechPackUploader = ({
         </button>
       </div>
 
-      <h2 className="text-2xl font-bold mb-2 text-center">Upload Tech Pack</h2>
+      <h2 className="text-2xl font-bold mb-2 text-center">Upload Style Tech Pack</h2>
       <p className="text-gray-400 text-center mb-6">
-        Upload Excel files containing technical specifications
+        Upload Excel files for the entire style (all operations)
       </p>
+
+      {/* Style Info */}
+      <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold mb-2 text-blue-300">Style Information</h3>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <span className="text-blue-200">Style ID:</span>
+            <span className="ml-2 font-medium">{uploadingData.styleId}</span>
+          </div>
+          <div>
+            <span className="text-blue-200">Style No:</span>
+            <span className="ml-2 font-medium">{uploadingData.styleNo}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Upload progress */}
       {uploading && (
@@ -471,22 +340,22 @@ const TechPackUploader = ({
       )}
 
       {/* Instructions */}
-      <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold mb-2 text-blue-300">
-          📋 Tech Pack Requirements:
+      <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
+        <h3 className="font-semibold mb-2 text-green-300">
+          ℹ️ Style Tech Pack Information:
         </h3>
-        <ul className="text-sm text-blue-200 space-y-1">
+        <ul className="text-sm text-green-200 space-y-1">
+          <li>• This tech pack will be available for ALL operations in this style</li>
           <li>• File must be in Excel format (.xls, .xlsx, .csv, .ods)</li>
           <li>• Maximum file size: 10MB</li>
-          <li>• Ensure all required columns are present</li>
-          <li>• Data should be properly formatted</li>
+          <li>• File will be stored as a style-level document</li>
         </ul>
       </div>
 
       {/* Action Buttons */}
       <div className="flex gap-3">
         <button
-          onClick={() => setIsUploading(false)}
+          onClick={() => setUploadingMaterial(null)}
           className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-6 py-3 rounded-lg font-medium transition flex-1 justify-center"
           disabled={uploading}
         >
@@ -499,7 +368,7 @@ const TechPackUploader = ({
           className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-medium transition flex-1 justify-center"
         >
           {uploading ? <ClipLoader size={16} color="white" /> : <FaCheck />}
-          {uploading ? "Uploading..." : "Upload Tech Pack"}
+          {uploading ? "Uploading..." : "Upload Style Tech Pack"}
         </button>
       </div>
     </div>

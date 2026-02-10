@@ -127,18 +127,12 @@ const App = () => {
           <Route path="/sub-operation/allMedia" element={<WatchVideos />} />
           <Route path="/sub-operation/videos" element={<VideoGallery />} />
           <Route path="/sub-operation/images" element={<ImageGallery />} />
+          <Route path="/style/tech-packs" element={<TechPackGallery />} />
           <Route
             path="/sub-operation/tech_packs"
             element={<TechPackGallery />}
           />
-          <Route
-            path="/sub-operation/tech_packs"
-            element={<TechPackGallery />}
-          />
-          <Route
-            path="/sub-operation/documents"
-            element={<DocumentGallery />}
-          />
+          <Route path="/style/documents" element={<DocumentGallery />} />
 
           <Route path="/user/notifications" element={<NotificationPage />} />
         </Routes>

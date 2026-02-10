@@ -25,7 +25,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "workstation_submenu",
       timestamps: true,
-    }
+    },
   );
 
   WorkstationSubmenu.associate = (models) => {

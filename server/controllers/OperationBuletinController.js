@@ -1655,7 +1655,7 @@ exports.generateDataSheet = async (req, res) => {
     const ExcelJs = require("exceljs");
 
     // ================= HELPERS =================
-    const TOTAL_COLS = 17;
+    const TOTAL_COLS = 15; // Changed from 17 to 15 (removed 2 spreader columns)
 
     function applyHeader(cell, text) {
       cell.value = text;
@@ -1693,7 +1693,7 @@ exports.generateDataSheet = async (req, res) => {
     const sheet = workbook.addWorksheet("Technical Sheet");
 
     // ================= TITLE =================
-    sheet.mergeCells("A1:Q1");
+    sheet.mergeCells("A1:O1"); // Changed from Q1 to O1 (15 columns)
     const title = sheet.getCell("A1");
     title.value = "CONSTRUCTION DETAILS";
     title.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
@@ -1771,19 +1771,17 @@ exports.generateDataSheet = async (req, res) => {
       "NO",
       "Operation",
       "Machine",
-      "Finish Width / Raw / Cover",
       "Folder Type",
-      "Folder Cuttable Width",
-      "Needle Gauge",
-      "Spreader",
-      "No Of Needles",
+      "Cuttable Width",
+      "Finish Width",
       "Needle Type",
+      "No Of Needles",
+      "Needle Gauge",
       "SPI",
       "Needle 1 Thread",
       "Needle 2 Thread",
-      "Spread",
-      "Looper",
-      "Bobbin",
+      "Looper Thread",
+      "Bobbin Thread",
       "Comments",
     ];
 
@@ -1795,23 +1793,21 @@ exports.generateDataSheet = async (req, res) => {
 
     // ================= COLUMN WIDTHS =================
     sheet.columns = [
-      { width: 10 },
-      { width: 35 },
-      { width: 20 },
-      { width: 18 },
-      { width: 14 },
-      { width: 18 },
-      { width: 14 },
-      { width: 10 },
-      { width: 14 },
-      { width: 18 },
-      { width: 10 },
-      { width: 14 },
-      { width: 14 },
-      { width: 18 },
-      { width: 18 },
-      { width: 18 },
-      { width: 25 },
+      { width: 10 }, // NO
+      { width: 35 }, // Operation
+      { width: 20 }, // Machine
+      { width: 14 }, // Folder Type
+      { width: 18 }, // Cuttable Width
+      { width: 18 }, // Finish Width
+      { width: 18 }, // Needle Type
+      { width: 14 }, // No Of Needles
+      { width: 14 }, // Needle Gauge
+      { width: 10 }, // SPI
+      { width: 14 }, // Needle 1 Thread
+      { width: 14 }, // Needle 2 Thread
+      { width: 18 }, // Looper
+      { width: 18 }, // Bobbin
+      { width: 25 }, // Comments
     ];
 
     // ================= DATA =================
@@ -1844,21 +1840,21 @@ exports.generateDataSheet = async (req, res) => {
         r.getCell(3).value =
           sub.machines?.[0]?.machine_name || sub.machine_type || "";
 
-        r.getCell(4).value = sub.finish_width || "";
-        r.getCell(5).value = sub.folder_type || "";
-        r.getCell(6).value = sub.cuttable_width || "";
-        r.getCell(7).value = sub.needle_gauge || "";
-        r.getCell(8).value = "No";
-        r.getCell(9).value = sub.needle_count || "";
-        r.getCell(10).value = sub.needle_type?.needle_type || "";
-        r.getCell(11).value = sub.spi || "";
+        // NEW SEQUENCE
+        r.getCell(4).value = sub.folder_type || ""; // Folder Type
+        r.getCell(5).value = sub.cuttable_width || ""; // Cuttable Width
+        r.getCell(6).value = sub.finish_width || ""; // Finish Width
+        r.getCell(7).value = sub.needle_type?.needle_type || ""; // Needle Type
+        r.getCell(8).value = sub.needle_count || ""; // No Of Needles
+        r.getCell(9).value = sub.needle_gauge || ""; // Needle Gauge
+        r.getCell(10).value = sub.spi || ""; // SPI
 
-        r.getCell(12).value = sub.needles?.[0]?.thread?.thread_category || "";
-        r.getCell(13).value = sub.needles?.[1]?.thread?.thread_category || "";
+        r.getCell(11).value = sub.needles?.[0]?.thread?.thread_category || ""; // Needle 1 Thread
+        r.getCell(12).value = sub.needles?.[1]?.thread?.thread_category || ""; // Needle 2 Thread
 
-        r.getCell(15).value = sub.looper?.thread_category || "";
-        r.getCell(16).value = sub.bobbin?.thread_category || "";
-        r.getCell(17).value = sub.remark || "";
+        r.getCell(13).value = sub.looper?.thread_category || ""; // Looper
+        r.getCell(14).value = sub.bobbin?.thread_category || ""; // Bobbin
+        r.getCell(15).value = sub.remark || ""; // Comments
 
         // Zebra
         if (rowIndex % 2 === 0) {
