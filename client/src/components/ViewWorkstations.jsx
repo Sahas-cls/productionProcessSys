@@ -76,7 +76,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const fileUploadRef = useRef();
   const { state } = location;
   const { layoutId, styleId, styleNo: pStyleNo } = useParams();
-
+  console.log("state:;;;:;: ; ", state);
   useEffect(() => {
     if (state?.layout) {
       console.log("setting up parent values using useLocation");
@@ -85,7 +85,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     }
   }, [state]);
 
-  console.log("state:-- ", state);
+  // console.log("state:-- ", state?.style?.style_id);
 
   const [workstationList, setWorkstationList] = useState([]);
   const [originalWorkstationList, setOriginalWorkstationList] = useState([]);
@@ -1360,7 +1360,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
             */}
             <div className="p-4">
               <AddHelperOperations
-                styleId={state?.layout || styleId}
+                styleId={state?.style?.style_id || styleId}
                 layoutId={state?.layout || layoutId}
                 workstationId={selectedWorkstation?.workstation_id}
                 onClose={() => setIsAddingHM(false)}

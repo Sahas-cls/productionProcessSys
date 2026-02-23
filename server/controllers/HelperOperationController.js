@@ -3,7 +3,7 @@ const { Style, Helper } = require("../models");
 exports.getHelperOperations = async (req, res, next) => {
   console.log("getting helper operations");
   const { styleId } = req.params;
-
+  console.log(`style id ${styleId} **`);
   try {
     if (!styleId) {
       const error = new Error(
@@ -12,7 +12,7 @@ exports.getHelperOperations = async (req, res, next) => {
       error.status = 400;
       throw error;
     }
-    const style = await Style.findOne({ where: { style_no: styleId } });
+    const style = await Style.findOne({ where: { style_id: styleId } });
     if (!style.style_id) {
       const error = new Error(
         `Provided style number ${styleId} cannot find in database please try again`,

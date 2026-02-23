@@ -40,7 +40,7 @@ const ViewWorkstationPage = () => {
             exit="exit"
             className="bg-gray-200 w-full min-h-screen"
           >
-            <div className="">
+            {/* <div className="">
               <div className="flex gap-x-2 text-blue-600 pt-2 px-8">
                 <button
                   className="hover:underline font-semibold disabled:cursor-not-allowed"
@@ -60,7 +60,7 @@ const ViewWorkstationPage = () => {
                   Helper operations
                 </button>
               </div>
-            </div>
+            </div> */}
             <ViewWorkstations
               setLayoutId={setLayoutId}
               setStyleNo={setStyleNo}

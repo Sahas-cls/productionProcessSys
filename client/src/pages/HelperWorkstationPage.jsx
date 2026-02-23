@@ -33,7 +33,7 @@ const HelperWorkstationPage = () => {
             className="bg-gray-200 w-full min-h-screen"
           >
             <div className="">
-              <div className="flex gap-x-2 text-blue-600 pt-2 px-8">
+              {/* <div className="flex gap-x-2 text-blue-600 pt-2 px-8">
                 <button
                   className="hover:underline font-semibold disabled:cursor-not-allowed"
                   onClick={() => {
@@ -53,7 +53,7 @@ const HelperWorkstationPage = () => {
                 >
                   Helper operations
                 </button>
-              </div>
+              </div> */}
             </div>
             <HelperWorkstations styleId={styId} />
           </motion.div>

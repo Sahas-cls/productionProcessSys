@@ -7,6 +7,7 @@ import { useAuth } from "../hooks/useAuth";
 import axios from "axios";
 import { MdOutlineNotificationsActive } from "react-icons/md";
 import useNotifications from "../hooks/useNotifications";
+import { FaDAndD } from "react-icons/fa6";
 
 const Header = ({ toggleSidebar, setToggleSidebar }) => {
   const { user: loggedUser, loading } = useAuth();
@@ -44,7 +45,7 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
     const response = await axios.post(
       `${apiUrl}/api/user/logout`,
       {},
-      { withCredentials: true }
+      { withCredentials: true },
     );
     if (response.status === 200) {
       navigate("/", { replace: true });
@@ -62,6 +63,9 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
           {loggedUser?.userRole === "Admin" ? "Admin " : "User "}
           Panel
         </h1>
+        <button onClick={navigate("/test")}>
+          <FaDAndD />
+        </button>
       </div>
 
       {/* Right section */}

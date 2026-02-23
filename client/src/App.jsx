@@ -43,6 +43,7 @@ import AddTechnicalDataPage from "./pages/AddTechnicalDataPage";
 import HelperWorkstationPage from "./pages/HelperWorkstationPage";
 import HelperVideoGallery from "./pages/HelperVideoGallery";
 import HelperImageGallery from "./pages/HelperImageGallery";
+import TestUpload from "./pages/TestUpload";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -68,7 +69,7 @@ const App = () => {
           <Route path="/needleThreats" element={<NeedleThreatsPage />} />
           <Route path="/open-camera" element={<CameraOrBrowse />} />
           <Route path="/user/registration" element={<Register />} />
-          <Route path="/test" element={<VideoPage />} />
+          <Route path="/test" element={<TestUpload />} />
 
           <Route
             path="/operation-bulletin/add"

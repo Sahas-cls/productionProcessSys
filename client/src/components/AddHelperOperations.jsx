@@ -19,7 +19,7 @@ const AddHelperOperations = ({
   const [operationSearchKey, setOperationSearchKey] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
+  // alert(styleId);
   // Fetch helper operations for the style
   useEffect(() => {
     const fetchHelperOperations = async () => {
@@ -48,36 +48,7 @@ const AddHelperOperations = ({
 
         // Fallback: If you don't have the endpoint, use mock data
         console.log("Using fallback data...");
-        setFilteredOperations([
-          {
-            helper_id: 16,
-            operation_name: "Pouch cut & turn *2",
-            operation_code: "H1",
-            mc_smv: "0.7",
-            mc_type: "CAL Manual Standing",
-          },
-          {
-            helper_id: 17,
-            operation_name: "Pouch tape attch mark *2",
-            operation_code: "H2",
-            mc_smv: "0.36",
-            mc_type: "CAL Manual Standing",
-          },
-          {
-            helper_id: 18,
-            operation_name: "Pouch tape mark *2",
-            operation_code: "H3",
-            mc_smv: "0.12",
-            mc_type: "CAL Manual Standing",
-          },
-          {
-            helper_id: 19,
-            operation_name: "pouch thred cut *2",
-            operation_code: "H4",
-            mc_smv: "0.3",
-            mc_type: "CAL Manual Standing",
-          },
-        ]);
+        setFilteredOperations([]);
       } finally {
         setIsLoading(false);
       }
@@ -391,21 +362,27 @@ const SearchInputWithSuggestions = ({
             transition={{ duration: 0.2 }}
             className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto"
           >
-            {suggestions.map((op) => (
-              <div
-                key={op.sub_operation_id}
-                onClick={() => handleSuggestionClick(op)}
-                className="p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
-              >
-                <div className="font-medium text-gray-900">
-                  {op.operation_code} - {op.sub_operation_name}
+            {suggestions && suggestions.length > 0 ? (
+              suggestions.map((op) => (
+                <div
+                  key={op.sub_operation_id}
+                  onClick={() => handleSuggestionClick(op)}
+                  className="p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                >
+                  <div className="font-medium text-gray-900">
+                    {op.operation_code} - {op.sub_operation_name}
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-500 mt-1">
+                    <span>SMV: {op.mc_smv}</span>
+                    <span className="truncate ml-2">{op.mc_type}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-sm text-gray-500 mt-1">
-                  <span>SMV: {op.mc_smv}</span>
-                  <span className="truncate ml-2">{op.mc_type}</span>
-                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-gray-500">
+                No helper available
               </div>
-            ))}
+            )}
           </motion.div>
         )}
 
