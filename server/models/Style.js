@@ -64,7 +64,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "styles",
       timestamps: true,
-    }
+    },
   );
 
   Style.associate = (models) => {
@@ -102,6 +102,16 @@ module.exports = (sequelize, DataTypes) => {
     Style.hasMany(models.MainOperation, {
       foreignKey: "style_no",
       as: "operations",
+    });
+
+    Style.hasMany(models.HelperVideo, {
+      foreignKey: "style_id",
+      as: "helper_videos",
+    });
+
+    Style.hasMany(models.HelperImage, {
+      foreignKey: "style_id",
+      as: "helper_images",
     });
   };
 

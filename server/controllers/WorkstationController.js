@@ -1,4 +1,4 @@
-const { where } = require("sequelize");
+const { where, Op } = require("sequelize");
 // const {Workstation, WorkstationSubmenu} = require("../models")
 const {
   WorkstationSubmenu,
@@ -7,26 +7,47 @@ const {
   SubOperation,
   MainOperation,
   Machine,
+  Style,
   SubOperationMedia,
+  HelperVideo,
+  HelperImage,
+  Helper,
+  sequelize,
 } = require("../models");
 const { Sequelize } = require("sequelize");
 
 // to create a empty workstation
 exports.createEmptyWS = async (req, res, next) => {
-  //
   const { layoutId } = req.params;
   const { workstation_no } = req.body;
-  console.log(req.body);
+
+  const t = await sequelize.transaction(); // start transaction
+
   try {
-    const createWs = await Workstation.create({
-      workstation_no,
-      layout_id: layoutId,
+    // 1️⃣ Create workstation
+    const createWs = await Workstation.create(
+      {
+        workstation_no,
+        layout_id: layoutId,
+      },
+      { transaction: t },
+    );
+
+    // 2️⃣ Increment workstation_count safely
+    await Layout.increment("workstation_count", {
+      by: 1,
+      where: { layout_id: layoutId },
+      transaction: t,
     });
 
-    res
-      .status(200)
-      .json({ status: "success", message: "Workstation create success" });
+    await t.commit(); // commit if everything success
+
+    res.status(200).json({
+      status: "success",
+      message: "Workstation create success",
+    });
   } catch (error) {
+    await t.rollback(); // rollback if anything fails
     return next(error);
   }
 };
@@ -59,19 +80,41 @@ exports.getWorkstations = async (req, res, next) => {
   console.log(req.params);
   const { id } = req.params;
   console.log("param id: ", id);
+  // const t = await sequelize.transaction();
   try {
     const workstations = await Workstation.findAll({
-      where: { layout_id: id },
+      where: { layout_id: id, is_helper_operation: false },
 
       include: [
         {
           model: WorkstationSubmenu,
           as: "subOperations",
+          required: false,
+          // where: {
+          //   sub_operation_id: {
+          //     [Op.ne]: null,
+          //   },
+          // },
           include: [
+            {
+              model: Helper,
+              as: "helper",
+              include: [
+                {
+                  model: HelperVideo,
+                  as: "videos",
+                  attributes: ["helper_video_id"],
+                },
+                {
+                  model: HelperImage,
+                  as: "images",
+                  attributes: ["helper_image_id"],
+                },
+              ],
+            },
             {
               model: SubOperation,
               as: "suboperatoin",
-
               attributes: {
                 include: [
                   [
@@ -107,17 +150,57 @@ exports.getWorkstations = async (req, res, next) => {
           ],
         },
       ],
-
       order: [["workstation_no", "ASC"]],
+      // transaction: t,
     });
+
+    // const HWorkstations = await Workstation.findAll({
+    //   where: { layout_id: id, is_helper_operation: true },
+    //   include: [
+    //     {
+    //       model: WorkstationSubmenu,
+    //       as: "subOperations",
+    //       required: false,
+    //       where: {
+    //         helper_id: {
+    //           [Op.ne]: null,
+    //         },
+    //       },
+    //       include: [
+    //         {
+    //           model: Helper,
+    //           as: "helper",
+    //           include: [
+    //             {
+    //               model: HelperVideo,
+    //               as: "videos",
+    //               attributes: ["helper_video_id"],
+    //             },
+    //             {
+    //               model: HelperImage,
+    //               as: "images",
+    //               attributes: ["helper_image_id"],
+    //             },
+    //           ],
+    //         },
+    //       ],
+    //     },
+    //   ],
+    //   transaction: t,
+    // });
+
+    // await t.commit();
+
     res.status(200).json({
       status: "success",
       message: "data selected successfully",
       data: workstations,
+      // helperOp: HWorkstations,
     });
 
     // console.log("workstations: ", workstations);
   } catch (error) {
+    // await t.rollback();
     return next(error);
   }
 };
@@ -306,7 +389,26 @@ exports.deleteSubOperation = async (req, res, next) => {
   }
 };
 
-// to rename workstaion
+exports.deleteHOperation = async (req, res, next) => {
+  //
+  console.log(req.body);
+  console.log(req.params);
+  const { helperId, wsId } = req.params;
+
+  try {
+    const isdelete = await WorkstationSubmenu.destroy({
+      where: { helper_id: helperId, workstation_id: wsId },
+    });
+
+    res
+      .status(200)
+      .json({ status: "succes", message: "Operation delete success" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to rename workstation
 exports.workstationId = async (req, res, next) => {
   //
   const { workstationId } = req.params;
@@ -375,5 +477,135 @@ exports.updateSequenceNo = async (req, res, next) => {
       status: "error",
       message: error.message || "Failed to update sequence numbers",
     });
+  }
+};
+
+// to create new helper workstation
+exports.createHelperWorkstation = async (req, res, next) => {
+  // const { workstationNo, layoutId } = req.body;
+  console.log("req body: ", req.body);
+  console.log(req.user);
+  const { userRole } = req.user;
+  // return;
+
+  // return;
+  const { workstationNo, layoutId } = req.body;
+  try {
+    if (userRole != "SuperAdmin" && userRole != "Admin") {
+      const error = new Error(
+        "You don't have permission to perform this action",
+      );
+      error.status = 401;
+      throw error;
+    }
+    const isNameTaken = await Workstation.findOne({
+      where: { layout_id: layoutId, workstation_no: workstationNo },
+    });
+
+    if (isNameTaken) {
+      const error = new Error(
+        "The provided name is already exist in current layout",
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    const createWS = await Workstation.create({
+      workstation_no: workstationNo,
+      layout_id: layoutId,
+      is_helper_operation: true,
+    });
+
+    res
+      .status(201)
+      .json({ status: "Ok", message: "Workstation create success" });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(error.status || 500)
+      .json({ status: "Failed", message: `${error}` });
+    return;
+  }
+  // console.log(`workstation no:${workstationNo} | layoutId:${layoutId}`);
+};
+
+// to get helper operation workstation
+exports.getHelperWorkstation = async (req, res, next) => {
+  // NOTE get all helper workstations with layout id
+  const { layoutId } = req.params;
+  console.log("layout id: ", layoutId);
+  try {
+    const workstations = await Workstation.findAll({
+      where: { layout_id: layoutId, is_helper_operation: true },
+      include: [
+        {
+          model: WorkstationSubmenu,
+          as: "subOperations",
+          required: false,
+          where: {
+            helper_id: {
+              [Op.ne]: null,
+            },
+          },
+          include: [
+            {
+              model: Helper,
+              as: "helper",
+              include: [
+                {
+                  model: HelperVideo,
+                  as: "videos",
+                  attributes: ["helper_video_id"],
+                },
+                {
+                  model: HelperImage,
+                  as: "images",
+                  attributes: ["helper_image_id"],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (workstations) {
+      res.status(200).json({ data: workstations, message: "Ok" });
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+// Add helper operation to station
+exports.addHelperOperation = async (req, res, next) => {
+  //
+  console.log("helper add");
+  console.log(req.body);
+  console.log(req.params);
+  const { workstation_id, sub_operation_id, layout_id } = req.body;
+  // return;
+  const { userRole } = req.user;
+  console.log(userRole);
+  if (userRole != "Admin" && userRole != "SuperAdmin") {
+    return res.status(400).json({
+      status: "Failed",
+      message: "You don't have access to perform this action",
+    });
+  }
+  // const { workstation_id, sub_operation_id } = req.body;
+  try {
+    const createSO = await WorkstationSubmenu.create({
+      workstation_id,
+      helper_id: sub_operation_id,
+      sub_operation_id: null,
+    });
+    console.log(createSO);
+    res
+      .status(200)
+      .json({ status: "success", message: "sub operation created" });
+  } catch (error) {
+    console.error(error);
+    return next(error);
   }
 };

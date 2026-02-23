@@ -1,13 +1,6 @@
 import axios from "axios";
 import React, { useState, useRef, useEffect } from "react";
-import {
-  FaCamera,
-  FaUpload,
-  FaSyncAlt,
-  FaCheck,
-  FaRedo,
-  FaDownload,
-} from "react-icons/fa";
+import { FaCamera, FaUpload, FaSyncAlt, FaCheck, FaRedo } from "react-icons/fa";
 import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
@@ -16,6 +9,7 @@ const ImageCaptureorBrows = ({
   setIsUploading,
   uploadingData,
   setUploadingMaterial,
+  operationType,
 }) => {
   const [mediaStream, setMediaStream] = useState(null);
   const [capturedImage, setCapturedImage] = useState(null);
@@ -25,10 +19,15 @@ const ImageCaptureorBrows = ({
   const [isMobile, setIsMobile] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [imageError, setImageError] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
+  const imagePreviewRef = useRef(null);
+
+  console.log("uploading data from image component: ", uploadingData);
+  console.log("operation type: ", operationType);
 
   // Check if mobile device
   useEffect(() => {
@@ -48,6 +47,8 @@ const ImageCaptureorBrows = ({
   // Start camera
   const startCamera = async () => {
     setStatus("loading");
+    setImageError(false);
+
     try {
       stopCamera();
 
@@ -64,7 +65,7 @@ const ImageCaptureorBrows = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch((e) => console.error("Play error:", e));
+        await videoRef.current.play();
       }
 
       setStatus("ready");
@@ -73,7 +74,7 @@ const ImageCaptureorBrows = ({
       setStatus("error");
       Swal.fire({
         title: "Camera Error",
-        text: error.message,
+        text: error.message || "Unable to access camera",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -83,7 +84,10 @@ const ImageCaptureorBrows = ({
   // Stop camera
   const stopCamera = () => {
     if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
       setMediaStream(null);
     }
   };
@@ -106,7 +110,15 @@ const ImageCaptureorBrows = ({
     // Convert canvas to blob
     canvas.toBlob(
       (blob) => {
-        if (!blob) return;
+        if (!blob) {
+          Swal.fire({
+            title: "Capture Failed",
+            text: "Failed to capture image. Please try again.",
+            icon: "error",
+            confirmButtonText: "OK",
+          });
+          return;
+        }
 
         // Check file size (5MB limit for images)
         if (blob.size > 5 * 1024 * 1024) {
@@ -117,10 +129,11 @@ const ImageCaptureorBrows = ({
           setCapturedImage(imageUrl);
           setImageBlob(blob);
           setStatus("preview");
+          stopCamera();
         }
       },
       "image/jpeg",
-      0.9, // 90% quality
+      0.92,
     );
   };
 
@@ -161,6 +174,7 @@ const ImageCaptureorBrows = ({
             setCapturedImage(imageUrl);
             setImageBlob(originalBlob);
             setStatus("preview");
+            stopCamera();
             return;
           }
 
@@ -168,11 +182,37 @@ const ImageCaptureorBrows = ({
           setCapturedImage(imageUrl);
           setImageBlob(compressedBlob);
           setStatus("preview");
+          stopCamera();
+
+          // Show compression success
+          const savedMB = (
+            (originalBlob.size - compressedBlob.size) /
+            (1024 * 1024)
+          ).toFixed(1);
+          if (savedMB > 0.5) {
+            Swal.fire({
+              title: "Image Compressed",
+              text: `Saved ${savedMB}MB`,
+              icon: "success",
+              timer: 2000,
+              showConfirmButton: false,
+            });
+          }
         },
         "image/jpeg",
-        0.8, // 80% quality after resize
+        0.85,
       );
 
+      URL.revokeObjectURL(img.src);
+    };
+
+    img.onerror = () => {
+      // Fallback to original
+      const imageUrl = URL.createObjectURL(originalBlob);
+      setCapturedImage(imageUrl);
+      setImageBlob(originalBlob);
+      setStatus("preview");
+      stopCamera();
       URL.revokeObjectURL(img.src);
     };
   };
@@ -207,6 +247,79 @@ const ImageCaptureorBrows = ({
     setCapturedImage(imageUrl);
     setImageBlob(file);
     setStatus("preview");
+    setImageError(false);
+  };
+
+  // Validate upload data based on operation type
+  const validateUploadData = () => {
+    if (!uploadingData) {
+      Swal.fire({
+        title: "Missing Data",
+        text: "Operation data is missing",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
+
+    // Helper Operation validation - matches the operationType from props
+    const isHelperOp =
+      operationType === "helperOp" ||
+      operationType === "HelperOp" ||
+      operationType === "HelperOperation";
+
+    if (isHelperOp) {
+      // ONLY check for Helper Operation fields
+      if (!uploadingData.hoId) {
+        console.error("Missing hoId:", uploadingData);
+        Swal.fire({
+          title: "Missing Data",
+          text: "Helper Operation ID is missing",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return false;
+      }
+      if (!uploadingData.hOpName) {
+        console.error("Missing hOpName:", uploadingData);
+        Swal.fire({
+          title: "Missing Data",
+          text: "Helper Operation name is missing",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return false;
+      }
+      return true;
+    }
+
+    // Sub Operation validation - only runs for non-helper operations
+    else {
+      // Check for sopId or subOpId (both possible field names)
+      const hasSubOpId = uploadingData.sopId || uploadingData.subOpId;
+      if (!hasSubOpId) {
+        console.error("Missing sub operation ID:", uploadingData);
+        Swal.fire({
+          title: "Missing Data",
+          text: "Sub Operation ID is missing",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return false;
+      }
+
+      if (!uploadingData.moId) {
+        console.error("Missing moId:", uploadingData);
+        Swal.fire({
+          title: "Missing Data",
+          text: "Main Operation ID is missing",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return false;
+      }
+      return true;
+    }
   };
 
   // Handle image upload
@@ -217,7 +330,14 @@ const ImageCaptureorBrows = ({
         text: "Please capture or select an image first",
         icon: "warning",
         timer: 3000,
+        showConfirmButton: false,
       });
+      return;
+    }
+
+    // Validate upload data
+    if (!validateUploadData()) {
+      setUploading(false);
       return;
     }
 
@@ -227,93 +347,199 @@ const ImageCaptureorBrows = ({
     try {
       const formData = new FormData();
 
-      // Append metadata
-      formData.append("styleId", uploadingData.style_id || 1);
-      formData.append("styleNo", uploadingData.styleNo);
-      formData.append("moId", uploadingData.moId);
-      formData.append("sopId", uploadingData.sopId);
-      formData.append("sopName", uploadingData.sopName);
-      formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId);
+      // Check if it's Helper Operation
+      const isHelperOp =
+        operationType === "helperOp" ||
+        operationType === "HelperOp" ||
+        operationType === "HelperOperation";
 
-      // Determine file extension
+      // Append operation-specific data
+      if (isHelperOp) {
+        // ONLY Helper Operation fields
+        formData.append("hOpName", uploadingData.hOpName || "");
+        formData.append("hoId", String(uploadingData.hoId || ""));
+        formData.append("styleNo", uploadingData.styleNo || "");
+        formData.append(
+          "styleId",
+          uploadingData.styleId || uploadingData.style_id || "1",
+        );
+        // Optional fields
+        if (uploadingData.helperId) {
+          formData.append("helperId", String(uploadingData.helperId));
+        }
+      } else {
+        // Sub Operation fields
+        formData.append(
+          "styleId",
+          uploadingData.style_id || uploadingData.styleId || "1",
+        );
+        formData.append("styleNo", uploadingData.styleNo || "");
+        formData.append("moId", String(uploadingData.moId || ""));
+        formData.append(
+          "sopId",
+          String(uploadingData.sopId || uploadingData.subOpId || ""),
+        );
+        formData.append(
+          "sopName",
+          uploadingData.sopName || uploadingData.subOpName || "",
+        );
+        formData.append(
+          "subOpId",
+          String(uploadingData.sopId || uploadingData.subOpId || ""),
+        );
+      }
+
+      // Add image metadata
+      formData.append("originalSize", String(imageBlob.size || 0));
+      formData.append("imageQuality", "high");
+      formData.append("uploadType", "image");
+
+      // Determine file extension and MIME type
       const timestamp = new Date().getTime();
-      const fileName = `image-${timestamp}.jpg`;
+      let fileName, mimeType, fileExtension;
 
-      // Append image file
-      formData.append("image", imageBlob, fileName);
+      if (imageBlob instanceof File) {
+        fileName = imageBlob.name;
+        mimeType = imageBlob.type;
+      } else {
+        mimeType = imageBlob.type || "image/jpeg";
+
+        if (mimeType.includes("png")) {
+          fileExtension = "png";
+        } else if (mimeType.includes("gif")) {
+          fileExtension = "gif";
+        } else if (mimeType.includes("webp")) {
+          fileExtension = "webp";
+        } else {
+          fileExtension = "jpg";
+          mimeType = "image/jpeg";
+        }
+
+        fileName = `operation-image-${timestamp}.${fileExtension}`;
+      }
+
+      // Create File object if needed
+      let imageFile;
+      if (imageBlob instanceof File) {
+        imageFile = imageBlob;
+      } else {
+        imageFile = new File([imageBlob], fileName, {
+          type: mimeType,
+          lastModified: Date.now(),
+        });
+      }
+
+      console.log("Image upload details:", {
+        mimeType: mimeType,
+        fileName: fileName,
+        size: imageBlob.size,
+        operationType: operationType,
+        isHelperOp: isHelperOp,
+        formDataEntries: [...formData.entries()],
+      });
+
+      formData.append("image", imageFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
-      const response = await axios.post(
-        `${apiUrl}/api/subOperationMedia/uploadImages`,
-        formData,
-        {
-          withCredentials: true,
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total,
-              );
-              setUploadProgress(percentCompleted);
-            }
-          },
-          timeout: 60000, // 1 minute for images
+      // Determine endpoint based on operation type
+      const endpoint = isHelperOp
+        ? `${apiUrl}/api/helperOpMedia/uploadImages`
+        : `${apiUrl}/api/subOperationMedia/uploadImages`;
+
+      console.log("Upload endpoint:", endpoint);
+
+      const response = await axios.post(endpoint, formData, {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      );
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total,
+            );
+            setUploadProgress(percentCompleted);
+          }
+        },
+        timeout: 60000,
+      });
 
-      if (response.status === 201 && response.data.success === true) {
-        Swal.fire({
-          title: "Success!",
-          text: "Image uploaded successfully",
-          icon: "success",
-          timer: 4000,
-          showConfirmButton: false,
-        });
+      console.log("Upload response:", response.data);
 
-        // Cleanup
-        if (capturedImage) {
-          URL.revokeObjectURL(capturedImage);
-        }
+      if (response.status === 201 || response.status === 200) {
+        if (response.data?.success === true) {
+          await Swal.fire({
+            title: "Success!",
+            text: "Image uploaded successfully",
+            icon: "success",
+            timer: 4000,
+            showConfirmButton: false,
+          });
 
-        setImageBlob(null);
-        setCapturedImage(null);
-        setStatus("idle");
-        setUploading(false);
-        setUploadProgress(0);
+          // Cleanup
+          if (capturedImage) {
+            URL.revokeObjectURL(capturedImage);
+          }
 
-        // Optionally close the modal
-        if (setUploadingMaterial) {
-          setUploadingMaterial(null);
+          // Reset state
+          setImageBlob(null);
+          setCapturedImage(null);
+          setStatus("idle");
+          setUploading(false);
+          setUploadProgress(0);
+
+          // Close the component
+          if (setUploadingMaterial) {
+            setUploadingMaterial(null);
+          }
+        } else {
+          throw new Error(response.data?.message || "Upload failed");
         }
       } else {
-        throw new Error(response.data.message || "Upload failed");
+        throw new Error(`Server responded with status ${response.status}`);
       }
     } catch (error) {
       console.error("Upload error:", error);
 
-      let errorMessage = "Upload failed";
+      let errorMessage = "Upload failed. Please try again.";
       let errorTitle = "Upload Failed";
 
-      if (error.response) {
-        errorMessage =
-          error.response.data?.message || error.response.statusText;
-
-        if (error.response.status === 413) {
-          errorTitle = "File Too Large";
-          errorMessage = "Image exceeds server size limit.";
-        } else if (error.response.status === 415) {
-          errorTitle = "Unsupported Format";
-          errorMessage = "Image format not supported.";
-        }
-      } else if (error.code === "ECONNABORTED") {
+      if (error.code === "ECONNABORTED") {
         errorTitle = "Timeout";
         errorMessage = "Upload took too long. Please try again.";
-      } else if (!error.response) {
+      } else if (error.response) {
+        switch (error.response.status) {
+          case 413:
+            errorTitle = "File Too Large";
+            errorMessage = "Image exceeds server size limit.";
+            break;
+          case 415:
+            errorTitle = "Unsupported Format";
+            errorMessage = "Image format not supported.";
+            break;
+          case 400:
+            errorMessage = error.response.data?.message || "Invalid request.";
+            break;
+          case 401:
+            errorTitle = "Authentication Error";
+            errorMessage = "Please login again.";
+            break;
+          case 403:
+            errorTitle = "Permission Denied";
+            errorMessage = "You don't have permission to upload.";
+            break;
+          case 404:
+            errorTitle = "Endpoint Not Found";
+            errorMessage = "Upload endpoint not configured.";
+            break;
+          default:
+            errorMessage = `Server error (${error.response.status}). Please try again.`;
+        }
+      } else if (error.request) {
         errorTitle = "Network Error";
-        errorMessage = "Unable to connect to server.";
+        errorMessage =
+          "Cannot connect to server. Please check your connection.";
       }
 
       Swal.fire({
@@ -336,6 +562,7 @@ const ImageCaptureorBrows = ({
     setCapturedImage(null);
     setImageBlob(null);
     setStatus("idle");
+    setImageError(false);
     stopCamera();
 
     if (fileInputRef.current) {
@@ -348,33 +575,52 @@ const ImageCaptureorBrows = ({
     setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
   };
 
+  // Handle image error
+  const handleImageError = () => {
+    setImageError(true);
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (capturedImage) {
+        URL.revokeObjectURL(capturedImage);
+      }
+      stopCamera();
+    };
+  }, []);
+
   return (
-    <div className="bg-gray-900 min-h-screen w-[800px] p-10 lg:min-h-[50vh] sm:p-4 lg:p-6 mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
+    <div className="bg-gray-900 min-h-screen w-full max-w-2xl mx-auto p-4 md:p-6 text-white rounded-lg shadow-xl shadow-black/20">
       {/* Close button */}
-      <div className="text-right relative">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">
+          {status === "preview"
+            ? "Image Preview"
+            : operationType === "helperOp" ||
+                operationType === "HelperOp" ||
+                operationType === "HelperOperation"
+              ? "Upload Helper Operation Image"
+              : "Upload Sub Operation Image"}
+        </h2>
         <button
-          className="hover:bg-red-600 px-3 py-1 sm:px-4 sm:py-2 rounded-full absolute -top-1 -right-1 sm:-top-2 sm:-right-2 z-10 transition-colors"
+          className="p-2 hover:bg-red-600 rounded-full transition-colors"
           onClick={() => {
             reset();
             setUploadingMaterial?.(null);
           }}
           disabled={uploading}
         >
-          <RxCross2 className="text-xl sm:text-2xl" />
+          <RxCross2 className="text-xl" />
         </button>
       </div>
-
-      {/* Title */}
-      <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 text-center">
-        {status === "preview" ? "Image Preview" : "Capture or Upload Image"}
-      </h2>
 
       {/* Upload progress */}
       {uploading && (
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
-            <span>Uploading...</span>
-            <span>{uploadProgress}%</span>
+            <span className="text-blue-400">Uploading image...</span>
+            <span className="text-blue-400">{uploadProgress}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-2">
             <div
@@ -385,12 +631,47 @@ const ImageCaptureorBrows = ({
         </div>
       )}
 
+      {/* Operation Info */}
+      {uploadingData && status !== "idle" && (
+        <div className="mb-4 p-3 bg-gray-800/50 rounded-lg text-sm">
+          <div className="flex items-center gap-2 text-gray-300">
+            <span className="font-semibold">
+              {operationType === "helperOp" ||
+              operationType === "HelperOp" ||
+              operationType === "HelperOperation"
+                ? "Helper Op:"
+                : "Sub Op:"}
+            </span>
+            <span className="truncate">
+              {operationType === "helperOp" ||
+              operationType === "HelperOp" ||
+              operationType === "HelperOperation"
+                ? uploadingData.hOpName
+                : uploadingData.sopName || uploadingData.subOpName}
+            </span>
+          </div>
+          {(operationType === "helperOp" ||
+            operationType === "HelperOp" ||
+            operationType === "HelperOperation") &&
+            uploadingData.styleNo && (
+              <div className="text-xs text-gray-400 mt-1">
+                Style: {uploadingData.styleNo}
+              </div>
+            )}
+        </div>
+      )}
+
       {/* Image Preview Area */}
-      <div className="relative rounded-lg overflow-hidden border-2 border-gray-700 mb-4 sm:mb-6 bg-black">
+      <div className="relative rounded-lg overflow-hidden border-2 border-gray-700 mb-4 bg-black">
         <div className="relative w-full" style={{ paddingTop: "75%" }}>
-          {" "}
-          {/* 4:3 aspect ratio for images */}
-          {status !== "preview" ? (
+          {status === "loading" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+              <ClipLoader size={40} color="#3B82F6" />
+              <p className="mt-2 text-sm text-gray-300">Loading camera...</p>
+            </div>
+          )}
+
+          {status === "ready" && (
             <video
               ref={videoRef}
               autoPlay
@@ -398,21 +679,61 @@ const ImageCaptureorBrows = ({
               muted
               className="absolute top-0 left-0 w-full h-full object-cover"
             />
-          ) : (
-            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center">
+          )}
+
+          {status === "preview" && capturedImage && !imageError && (
+            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center bg-black">
               <img
+                ref={imagePreviewRef}
                 src={capturedImage}
                 alt="Captured preview"
                 className="max-w-full max-h-full object-contain"
+                onError={handleImageError}
               />
+            </div>
+          )}
+
+          {status === "preview" && imageError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+              <div className="text-center">
+                <p className="text-red-400 mb-2">⚠️ Image failed to load</p>
+                <button
+                  onClick={reset}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm"
+                >
+                  Retake Image
+                </button>
+              </div>
+            </div>
+          )}
+
+          {status === "error" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+              <div className="text-center p-4">
+                <p className="text-red-400 mb-2">⚠️ Camera Error</p>
+                <button
+                  onClick={startCamera}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm"
+                >
+                  Try Again
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         {/* Image size info */}
-        {status === "preview" && imageBlob && (
-          <div className="absolute bottom-2 left-2 sm:bottom-3 sm:left-3 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
-            Size: {(imageBlob.size / (1024 * 1024)).toFixed(2)} MB
+        {status === "preview" && imageBlob && !imageError && (
+          <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
+            {(imageBlob.size / (1024 * 1024)).toFixed(2)} MB
+          </div>
+        )}
+
+        {/* Camera indicator */}
+        {status === "ready" && (
+          <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs flex items-center gap-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            Camera Ready
           </div>
         )}
       </div>
@@ -420,31 +741,37 @@ const ImageCaptureorBrows = ({
       {/* Hidden canvas for image capture */}
       <canvas ref={canvasRef} className="hidden" />
 
-      {/* Instructions */}
-      <div className="mb-4 sm:mb-6 text-gray-300 text-xs sm:text-sm text-center px-2">
-        {status === "idle" && <p>Open camera or upload an image (max 5MB)</p>}
-        {status === "ready" && <p>Camera ready. Tap capture when prepared</p>}
-        {status === "preview" && <p>Review your image</p>}
+      {/* Status message */}
+      <div className="mb-4 text-gray-300 text-sm text-center px-2">
+        {status === "idle" && (
+          <p>📸 Open camera or upload an image (max 5MB)</p>
+        )}
+        {status === "ready" && <p>Camera ready. Position and tap capture</p>}
+        {status === "preview" && !imageError && (
+          <p>✅ Review your image and upload</p>
+        )}
+        {status === "loading" && <p>⏳ Initializing camera...</p>}
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+      <div className="flex flex-wrap justify-center gap-3">
         {/* Idle state */}
         {status === "idle" && (
           <>
             <button
               onClick={startCamera}
-              className="flex items-center gap-1 sm:gap-2 bg-blue-600 hover:bg-blue-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center min-w-[120px] text-sm sm:text-base"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center text-sm"
               disabled={uploading}
             >
-              <FaCamera className="text-sm sm:text-base" /> Open Camera
+              <FaCamera /> Open Camera
             </button>
-            <label className="flex items-center gap-1 sm:gap-2 bg-gray-700 hover:bg-gray-800 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium cursor-pointer transition flex-1 justify-center min-w-[120px] text-sm sm:text-base">
-              <FaUpload className="text-sm sm:text-base" /> Upload Image
+            <label className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-3 rounded-lg font-medium cursor-pointer transition flex-1 justify-center text-sm">
+              <FaUpload /> Upload Image
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
+                capture="environment"
                 onChange={handleFileUpload}
                 className="hidden"
                 disabled={uploading}
@@ -458,7 +785,7 @@ const ImageCaptureorBrows = ({
           <>
             <button
               onClick={captureImage}
-              className="flex items-center gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-medium transition flex-1 justify-center text-sm"
               disabled={uploading}
             >
               📸 Capture Image
@@ -466,15 +793,15 @@ const ImageCaptureorBrows = ({
             {isMobile && (
               <button
                 onClick={switchCamera}
-                className="flex items-center gap-1 sm:gap-2 bg-purple-600 hover:bg-purple-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition min-w-[80px] sm:min-w-[100px] justify-center text-sm sm:text-base"
+                className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-3 rounded-lg font-medium transition min-w-[100px] justify-center text-sm"
                 disabled={uploading}
               >
-                <FaSyncAlt className="text-sm sm:text-base" /> Flip
+                <FaSyncAlt /> Flip
               </button>
             )}
             <button
               onClick={reset}
-              className="flex items-center gap-1 sm:gap-2 bg-gray-700 hover:bg-gray-800 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition min-w-[80px] sm:min-w-[100px] justify-center text-sm sm:text-base"
+              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-3 rounded-lg font-medium transition min-w-[100px] justify-center text-sm"
               disabled={uploading}
             >
               Cancel
@@ -483,53 +810,58 @@ const ImageCaptureorBrows = ({
         )}
 
         {/* Preview state */}
-        {status === "preview" && (
-          <div className="flex gap-2 sm:gap-3 w-full">
+        {status === "preview" && !imageError && (
+          <>
             <button
               onClick={reset}
-              className="flex items-center gap-1 sm:gap-2 bg-yellow-600 hover:bg-yellow-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
+              className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center text-sm"
               disabled={uploading}
             >
-              <FaRedo className="text-sm sm:text-base" /> Retake
+              <FaRedo /> Retake
             </button>
             <button
               onClick={handleUpload}
-              className="flex items-center gap-1 sm:gap-2 bg-green-600 hover:bg-green-700 px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-medium transition flex-1 justify-center text-sm sm:text-base"
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-medium transition flex-1 justify-center text-sm"
               disabled={uploading}
             >
               {uploading ? (
                 <>
                   <ClipLoader size={14} color="white" />
-                  <span>Uploading...</span>
+                  Uploading... {uploadProgress}%
                 </>
               ) : (
                 <>
-                  <FaCheck className="text-sm sm:text-base" /> Upload
+                  <FaCheck /> Upload
                 </>
               )}
             </button>
-          </div>
-        )}
-
-        {/* Loading state */}
-        {status === "loading" && (
-          <div className="w-full text-center py-3">
-            <ClipLoader size={20} color="white" />
-            <p className="mt-2 text-sm">Loading camera...</p>
-          </div>
+          </>
         )}
       </div>
 
       {/* Camera facing mode indicator */}
       {status === "ready" && (
-        <div className="mt-3 sm:mt-4 text-center text-xs sm:text-sm text-gray-400">
+        <div className="mt-4 text-center text-xs text-gray-400">
           Using {cameraFacing === "environment" ? "back" : "front"} camera
         </div>
       )}
 
-      {/* Size warning */}
-      <div className="mt-3 text-center text-xs text-yellow-400">
-        ⚠️ Maximum image size: 5MB
+      {/* Footer info */}
+      <div className="mt-6 pt-4 border-t border-gray-800">
+        <div className="flex flex-wrap justify-between items-center text-xs text-gray-500">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              Ready
+            </span>
+            <span className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+              Preview
+            </span>
+          </div>
+          <span className="text-yellow-400">⚠️ Max 5MB</span>
+          <span>{isMobile ? "📱 Mobile" : "💻 Desktop"}</span>
+        </div>
       </div>
     </div>
   );

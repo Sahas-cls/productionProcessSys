@@ -18,7 +18,7 @@ const ViewLayout = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
   const apiUrl = import.meta.env.VITE_API_URL;
-
+  console.log("layout list: ", layoutList);
   // console.log("layout list: ", layoutList);
 
   // Close menu when clicking outside
@@ -64,7 +64,7 @@ const ViewLayout = () => {
     try {
       const respose = await axios.delete(
         `${apiUrl}/api/layout/deleteLayout/${layoutId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (respose.status === 200) {
@@ -108,6 +108,8 @@ const ViewLayout = () => {
   const offset = currentPage * itemsPerPage;
   const currentItems =
     filteredLayouts?.slice(offset, offset + itemsPerPage) || [];
+
+  console.log("current items: ", currentItems);
 
   const handlePageClick = ({ selected }) => {
     setCurrentPage(selected);
@@ -234,7 +236,7 @@ const ViewLayout = () => {
                         setActiveMenu(
                           activeMenu === layout.layout_id
                             ? null
-                            : layout.layout_id
+                            : layout.layout_id,
                         );
                       }}
                       className="p-1 rounded-full hover:bg-gray-100 transition-colors"
@@ -313,7 +315,7 @@ const ViewLayout = () => {
                           {layout.style.operations.reduce(
                             (total, op) =>
                               total + (op.subOperations?.length || 0),
-                            0
+                            0,
                           )}
                         </p>
                       </div>
@@ -323,7 +325,9 @@ const ViewLayout = () => {
                           Workstations count
                         </p>
                         <p className="text-gray-700 font-medium">
-                          {layout.workstation_count}
+                          {layout.workstation_count < 0
+                            ? "4"
+                            : layout.workstation_count}
                         </p>
                       </div>
                     </div>
@@ -339,7 +343,7 @@ const ViewLayout = () => {
                               year: "numeric",
                               month: "short",
                               day: "numeric",
-                            }
+                            },
                           )}
                         </span>
                       </p>

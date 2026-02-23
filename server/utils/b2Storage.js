@@ -104,7 +104,7 @@ class B2Storage {
     }
   }
 
-  // DELETE FILE
+  // NOTE DELETE FILE
   async deleteFile(fileId, fileName) {
     try {
       console.log(`🗑️ Deleting: ${fileName}`);

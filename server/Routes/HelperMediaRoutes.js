@@ -2,7 +2,7 @@ const express = require("express");
 const routes = express.Router();
 const multer = require("multer");
 const path = require("path");
-const controller = require("../controllers/SubOpMediaController");
+const controller = require("../controllers/HelperMediaController");
 const authMiddleware = require("../middlewares/AuthUser");
 
 // Use memory storage for all uploads (CORRECT for B2)
@@ -220,22 +220,20 @@ const handleMulterError = (error, req, res, next) => {
   next();
 };
 
-// ==================== MEDIA ROUTES ====================
-
-// !=============================== VIDEO ROUTES ===============================
-routes.get("/getVideos/:subOpId", controller.getVideos);
+// NOTE to handle helper videos
+routes.get("/getVideos/:hOpId", controller.getVideos);
 routes.post(
   "/uploadVideos",
   authMiddleware,
   videoUpload.single("video"),
   handleMulterError,
   generateFilenames, // Add filename generation
-  controller.uploadVideo,
+  controller.uploadVideos,
 );
-routes.delete("/deleteVideo/:so_media_id", controller.deleteVideo);
+routes.delete("/deleteVideo/:ho_media_id", controller.deleteVideo);
 
-// !=============================== IMAGE ROUTES ===============================
-routes.get("/getImages/:subOpId", controller.getImages);
+// NOTE to handle helper images
+routes.get("/getImages/:hOpId", controller.getImages);
 routes.post(
   "/uploadImages",
   imageUpload.single("image"),
@@ -243,38 +241,5 @@ routes.post(
   generateFilenames, // Add filename generation
   controller.uploadImage,
 );
-routes.delete("/deleteImage/:so_img_id", controller.deleteImage);
-
-// !=============================== TECH PACK ROUTES ===============================
-routes.get("/getStyleTechPacks/:subOpId", controller.getStyleTechPacks);
-routes.post(
-  "/uploadTechPack",
-  folderUpload.single("techPack"),
-  handleMulterError,
-  generateFilenames, // Add filename generation
-  controller.uploadTechPack,
-);
-routes.delete("/deleteTechPack/:so_tech_id", controller.deleteTechPack);
-
-// !=============================== FOLDER/DOCUMENTS ROUTES ===============================
-routes.get("/getFolderDocuments/:styleId", controller.getFolderDocuments);
-routes.post(
-  "/uploadFolder",
-  folderUpload.array("documents", 10), // max 10 files
-  handleMulterError,
-  generateFilenames, // Add filename generation
-  controller.uploadFolder,
-);
-routes.delete(
-  "/deleteFolderDocument/:so_folder_id",
-  controller.deleteFolderDocument,
-);
-routes.delete(
-  "/deleteMultipleFolderDocuments",
-  controller.deleteMultipleFolderDocuments,
-);
-
-// !=============================== BULK MEDIA ROUTES ===============================
-// routes.get("/getAllMedia/:subOpId", controller.getAllMedia);
 
 module.exports = routes;

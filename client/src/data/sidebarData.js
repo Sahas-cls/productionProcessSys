@@ -75,12 +75,12 @@ export const adminSidebarData = [
       },
     ],
   },
-  {
+  /*{
     id: 8,
     title: "Technical Data",
     icon: TbToolsOff,
     navigateTo: "/technical-data",
-  },
+  },*/
   {
     id: 9,
     title: "Layout",

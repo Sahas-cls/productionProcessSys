@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import axios from "axios";
 import { ClipLoader } from "react-spinners";
 import { BsArrowsMove } from "react-icons/bs";
@@ -26,7 +26,7 @@ import FolderDocumentsUploader from "./FolderDocumentsUploader";
 import { FaPlay, FaImage, FaFileExcel, FaFolder } from "react-icons/fa";
 import { FaUpload, FaFolderOpen } from "react-icons/fa";
 import { MdOutlineSaveAlt } from "react-icons/md";
-
+import { MdOutlinePersonAddAlt } from "react-icons/md";
 // Import DnD Kit components
 import {
   DndContext,
@@ -45,6 +45,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import AddHelperOperations from "./AddHelperOperations";
 
 // Dragging overlay component
 const DraggingOverlay = ({ activeWorkstation }) => {
@@ -65,7 +66,7 @@ const DraggingOverlay = ({ activeWorkstation }) => {
   );
 };
 
-const ViewWorkstations = () => {
+const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const { user, loading } = useAuth();
   const userRole = user?.userRole;
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -74,26 +75,40 @@ const ViewWorkstations = () => {
   const excelUploadRef = useRef();
   const fileUploadRef = useRef();
   const { state } = location;
+  const { layoutId, styleId, styleNo: pStyleNo } = useParams();
+
+  useEffect(() => {
+    if (state?.layout) {
+      console.log("setting up parent values using useLocation");
+      setLayoutId(state.layout); //|| useParams.layoutId;
+      setStyleNo(state.style.style.style_no); //|| useParams.styleId;
+    }
+  }, [state]);
 
   console.log("state:-- ", state);
 
   const [workstationList, setWorkstationList] = useState([]);
-  const [originalWorkstationList, setOriginalWorkstationList] = useState([]); // Store original order
+  const [originalWorkstationList, setOriginalWorkstationList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddingSubM, setIsAddingSubM] = useState(false);
   const [selectedWorkstation, setSelectedWorkstation] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-
+  const [isAddingHM, setIsAddingHM] = useState(false);
   // DnD State
   const [activeWorkstation, setActiveWorkstation] = useState(null);
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Updated: Remove sopId, sopName, moId since we're doing style-level uploads
+  // FIXED: Proper uploading data structure - RESTORED from working code
   const [uploadingData, setUploadingData] = useState({
-    styleId: "",
+    style_id: "",
     styleNo: "",
+    moId: "",
+    sopId: "",
+    sopName: "",
+    subOpId: "",
+    operationType: "",
   });
 
   const [showEUploadOrView, setShowEUploadOrView] = useState(false);
@@ -109,7 +124,7 @@ const ViewWorkstations = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // Reduced from 8px to 5px for easier dragging
+        distance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -123,10 +138,12 @@ const ViewWorkstations = () => {
     }
   }, [editingWorkstationId]);
 
+  // FIXED: Click outside handler for upload modal
   useEffect(() => {
     function handleClickOutside(event) {
       if (isUploadRef.current && !isUploadRef.current.contains(event.target)) {
         setIsUploading(false);
+        setUploadingMaterial(null);
       }
     }
 
@@ -148,7 +165,6 @@ const ViewWorkstations = () => {
     };
 
     document.addEventListener("mousedown", isOutsideClick);
-
     return () => {
       document.removeEventListener("mousedown", isOutsideClick);
     };
@@ -162,18 +178,21 @@ const ViewWorkstations = () => {
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
-
     return () => {
       document.removeEventListener("mousedown", handleOutsideClick);
     };
   }, [fileUploadRef]);
 
-  // Initialize uploading data with style info
+  // FIXED: Initialize uploading data with style info - RESTORED from working code
   useEffect(() => {
     if (state?.style?.style) {
       setUploadingData({
-        styleId: state.style.style.style_id,
-        styleNo: state.style.style.style_no,
+        style_id: state.style.style.style_id || styleId,
+        styleNo: state.style.style.style_no || pStyleNo,
+        moId: "",
+        sopId: "",
+        sopName: "",
+        subOpId: "",
       });
     }
   }, [state]);
@@ -208,18 +227,17 @@ const ViewWorkstations = () => {
     try {
       setIsLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/workstations/getWorkstations/${state.layout}`,
+        `${apiUrl}/api/workstations/getWorkstations/${layoutId || state.layout}`,
       );
       console.log("workstation list----: ", response);
-      // Sort by sequence_number if available
       const sortedWorkstations = response.data.data.sort((a, b) => {
         const seqA = a.sequence_number !== null ? a.sequence_number : 9999;
         const seqB = b.sequence_number !== null ? b.sequence_number : 9999;
         return seqA - seqB;
       });
       setWorkstationList(sortedWorkstations);
-      setOriginalWorkstationList([...sortedWorkstations]); // Store original order
-      setHasUnsavedChanges(false); // Reset changes flag
+      setOriginalWorkstationList([...sortedWorkstations]);
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.error(error);
       setError("Failed to load workstation data");
@@ -242,14 +260,12 @@ const ViewWorkstations = () => {
     }
   }, [isLoading, workstationList]);
 
-  // Check if order has changed
   const checkForChanges = (newList) => {
     if (originalWorkstationList.length !== newList.length) {
       setHasUnsavedChanges(true);
       return;
     }
 
-    // Check if the order is different
     const hasChanged = newList.some((ws, index) => {
       const originalWs = originalWorkstationList[index];
       return originalWs && ws.workstation_id !== originalWs.workstation_id;
@@ -258,9 +274,8 @@ const ViewWorkstations = () => {
     setHasUnsavedChanges(hasChanged);
   };
 
-  // Updated: Simplified for style-level uploads
   const handleStyleUpload = () => {
-    if (!uploadingData.styleId || !uploadingData.styleNo) {
+    if (!uploadingData.style_id || !uploadingData.styleNo) {
       Swal.fire({
         title: "Error",
         text: "Style information not available",
@@ -269,6 +284,29 @@ const ViewWorkstations = () => {
       return;
     }
     console.log(`Style upload data:`, uploadingData);
+  };
+
+  const helperOpDelete = async (subOpId, workstation_id) => {
+    const isDelete = await Swal.fire({
+      title: `Are you sure want to delete #${subOpId} helper operation`,
+      icon: "warning",
+      showCancelButton: true,
+    });
+
+    if (!isDelete.isConfirmed) {
+      return;
+    }
+
+    try {
+      const response = await axios.delete(
+        `${apiUrl}/api/workstations/deleteHOperation/${subOpId}/${workstation_id}`,
+      );
+      if (response.status === 200) {
+        getWorkstations();
+      }
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const handleGoBack = () => {
@@ -365,24 +403,26 @@ const ViewWorkstations = () => {
     setIsAddingSubM(true);
   };
 
+  const openAddHelperOperationModal = (workstation) => {
+    setSelectedWorkstation(workstation);
+    setIsAddingHM(true);
+  };
+
   const closeAddSubOperationModal = () => {
     setIsAddingSubM(false);
     setSelectedWorkstation(null);
   };
 
-  // Function to start editing workstation number
   const startEditingWorkstation = (workstation) => {
     setEditingWorkstationId(workstation.workstation_id);
     setNewWorkstationNo(workstation.workstation_no || "");
   };
 
-  // Function to cancel editing
   const cancelEditing = () => {
     setEditingWorkstationId(null);
     setNewWorkstationNo("");
   };
 
-  // Function to save workstation number
   const saveWorkstationNo = async (workstationId) => {
     if (!newWorkstationNo.trim()) {
       Swal.fire({
@@ -431,7 +471,7 @@ const ViewWorkstations = () => {
 
   useEffect(() => {
     getWorkstations();
-  }, [state.layout]);
+  }, [state?.layout, layoutId]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -443,7 +483,6 @@ const ViewWorkstations = () => {
     });
   };
 
-  // Updated: View style tech packs
   const handleViewStyleTechPacks = () => {
     sessionStorage.setItem("listScroll", window.scrollY);
     navigate("/style/tech-packs", {
@@ -455,7 +494,6 @@ const ViewWorkstations = () => {
     });
   };
 
-  // Updated: View style documents
   const handleViewStyleDocuments = () => {
     sessionStorage.setItem("listScroll", window.scrollY);
     navigate("/style/documents", {
@@ -467,14 +505,42 @@ const ViewWorkstations = () => {
     });
   };
 
+  // ============= FIXED: CRITICAL FIX - RESTORED FROM WORKING CODE =============
+  const handleUploadData = (moId, sopId, soName, subOpId) => {
+    setUploadingData((prev) => ({
+      ...prev,
+      style_id: state?.style?.style?.style_id || styleId,
+      styleNo: state?.style?.style?.style_no || pStyleNo,
+      moId: moId,
+      sopId: sopId,
+      sopName: soName,
+      subOpId: subOpId,
+      operationType: "MainOperation",
+    }));
+    console.log(
+      `moid: ${moId} sopId: ${sopId} soName: ${soName} subOpId: ${subOpId}`,
+    );
+  };
+
+  const handleHWUploadData = (moId, sopId, soName, subOpId) => {
+    setUploadingData((prev) => ({
+      ...prev,
+      style_id: state?.style?.style?.style_id || styleId,
+      styleNo: state?.style?.style?.style_no || pStyleNo,
+      hoId: moId || "",
+      hOpName: soName || "",
+      operationType: "HelperOperation",
+    }));
+    console.log("uploading data: ", uploadingData);
+  };
+  // ============================================================================
+
   const showExcelUpload = () => {
     return (
       <div
         ref={excelUploadRef}
         className="relative bg-green-600 rounded-bl-lg rounded-br-lg shadow-xl border border-gray-200"
       >
-        {/* <div className="absolute -top-2 left-4 w-4 h-4 bg-white border-t border-l border-gray-200 rotate-45"></div> */}
-
         <div className="py-2">
           <button
             className="flex items-center gap-3 w-full px-2 py-2 justify-center text-left text-sm hover:bg-green-500/80 transition-colors"
@@ -513,8 +579,6 @@ const ViewWorkstations = () => {
         ref={fileUploadRef}
         className="relative bg-blue-500 rounded-bl-md rounded-br-md shadow-xl border border-gray-200"
       >
-        {/* <div className="absolute -top-2 right-4 w-4 h-4 bg-white border-t border-l border-gray-200 rotate-45"></div> */}
-
         <div className="py-2">
           <button
             className="flex items-center gap-3 w-full px-2 justify-center py-2 text-left text-sm hover:bg-blue-400 transition-colors"
@@ -526,7 +590,6 @@ const ViewWorkstations = () => {
           >
             <FaUpload className="text-white text-lg" />
             <span className="hidden md:block text-white">Upload</span>
-            {/*<span className="hidden md:block">Documents</span>*/}
           </button>
           <div className="h-1 bg-gray-100 mx-2 my-2"></div>
           <button
@@ -544,13 +607,6 @@ const ViewWorkstations = () => {
     );
   };
 
-  // Handler for sub-operation media upload (kept as is)
-  const handleSubOpMediaUpload = (moId, sopId, soName, subOpId) => {
-    setIsUploading(true);
-    // This is for media (videos/images) which is still sub-operation specific
-  };
-
-  // Handle drag start
   const handleDragStart = (event) => {
     const { active } = event;
     const draggedWorkstation = workstationList.find(
@@ -559,7 +615,6 @@ const ViewWorkstations = () => {
     setActiveWorkstation(draggedWorkstation);
   };
 
-  // Handle drag end - Update local state only
   const handleDragEnd = (event) => {
     const { active, over } = event;
 
@@ -578,7 +633,6 @@ const ViewWorkstations = () => {
       return;
     }
 
-    // Find indices
     const oldIndex = workstationList.findIndex(
       (ws) => ws.workstation_id.toString() === active.id.toString(),
     );
@@ -587,17 +641,13 @@ const ViewWorkstations = () => {
     );
 
     if (oldIndex !== newIndex) {
-      // Update local state immediately for responsive UI
       const reorderedList = arrayMove(workstationList, oldIndex, newIndex);
       setWorkstationList(reorderedList);
-
-      // Check for changes
       checkForChanges(reorderedList);
 
-      // Show temporary message
       Swal.fire({
         toast: true,
-        position: "bottom-end", // bottom-right
+        position: "bottom-end",
         icon: "info",
         title: "Order Changed",
         text: "Workstation order updated locally. Click 'Save Layout' to save permanently.",
@@ -610,12 +660,10 @@ const ViewWorkstations = () => {
     setActiveWorkstation(null);
   };
 
-  // Handle drag cancel
   const handleDragCancel = () => {
     setActiveWorkstation(null);
   };
 
-  // Function to save layout order to backend
   const saveLayoutOrder = async () => {
     if (!hasUnsavedChanges) {
       Swal.fire({
@@ -637,7 +685,6 @@ const ViewWorkstations = () => {
       return;
     }
 
-    // Show confirmation dialog
     const result = await Swal.fire({
       title: "Save Layout Order?",
       text: "This will update the sequence numbers for all workstations.",
@@ -656,7 +703,6 @@ const ViewWorkstations = () => {
     try {
       setIsSavingOrder(true);
 
-      // Prepare order data in the format you specified
       const orderData = workstationList.map((ws, index) => ({
         workstation_id: ws.workstation_id,
         sequence_number: index,
@@ -664,19 +710,16 @@ const ViewWorkstations = () => {
 
       console.log("Saving order data:", orderData);
 
-      // Make API call to save order
       const response = await axios.put(
         `${apiUrl}/api/workstations/sequence-update`,
-        orderData, // Direct array as you requested
+        orderData,
         { withCredentials: true },
       );
 
       if (response.status === 200 || response.status === 201) {
-        // Update original list to match current order
         setOriginalWorkstationList([...workstationList]);
         setHasUnsavedChanges(false);
 
-        // Show success message
         Swal.fire({
           title: "Success!",
           text: "Workstation order saved successfully.",
@@ -684,14 +727,10 @@ const ViewWorkstations = () => {
           timer: 2000,
           showConfirmButton: false,
         });
-
-        // Optional: Refresh to get updated data from server
-        // getWorkstations();
       }
     } catch (error) {
       console.error("Failed to save order:", error);
 
-      // Show error message
       Swal.fire({
         title: "Error!",
         text:
@@ -705,7 +744,6 @@ const ViewWorkstations = () => {
     }
   };
 
-  // Function to reset to original order
   const resetToOriginalOrder = async () => {
     if (!hasUnsavedChanges) {
       return;
@@ -736,7 +774,6 @@ const ViewWorkstations = () => {
     }
   };
 
-  // Individual Sortable Workstation Card Component
   const SortableWorkstationCard = ({ workstation }) => {
     const {
       attributes,
@@ -760,19 +797,16 @@ const ViewWorkstations = () => {
         style={style}
         className="bg-white shadow overflow-hidden rounded-lg divide-y divide-gray-200"
       >
-        {/* Workstation Header */}
         <div className="px-4 py-1 md:py-4 sm:px-6 bg-gray-50">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between md:gap-4">
-            {/* Left Side with Drag Handle */}
             <div className="flex items-center gap-2">
-              {/* Drag Handle - Only visible to Admin/SuperAdmin */}
               {(userRole === "Admin" || userRole === "SuperAdmin") && (
                 <button
                   className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 p-1"
                   {...attributes}
                   {...listeners}
                   title="Drag to reorder"
-                  style={{ touchAction: "none" }} // Important for mobile
+                  style={{ touchAction: "none" }}
                 >
                   <BsArrowsMove className="text-xl" />
                 </button>
@@ -780,55 +814,65 @@ const ViewWorkstations = () => {
 
               <div>
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  <h5 className="mt-2 text-sm md:text-lg flex flex-wrap items-center gap-x-2 text-blue-900 ">
-                    Workstation No #
-                    {editingWorkstationId === workstation.workstation_id ? (
-                      <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                        <input
-                          ref={inputRef}
-                          type="text"
-                          value={newWorkstationNo}
-                          onChange={(e) => setNewWorkstationNo(e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
-                          placeholder="Enter workstation no"
-                        />
-                        <button
-                          onClick={() =>
-                            saveWorkstationNo(workstation.workstation_id)
-                          }
-                          className="hover:bg-green-300/40 p-1 rounded-md duration-150"
-                        >
-                          <FaCheck className="text-lg text-green-600" />
-                        </button>
-                        <button
-                          onClick={cancelEditing}
-                          className="hover:bg-red-300/40 p-1 rounded-md duration-150"
-                        >
-                          <RxCross2 className="text-lg text-red-600" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                        {workstation.workstation_no
-                          ? workstation.workstation_no
-                          : "Not assigned yet"}
-                        {(userRole === "Admin" ||
-                          userRole === "SuperAdmin") && (
+                  <div className="">
+                    <h5 className="mt-2 text-sm md:text-lg flex flex-wrap items-center gap-x-2 text-blue-900 ">
+                      Workstation No #
+                      {editingWorkstationId === workstation.workstation_id ? (
+                        <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                          <input
+                            ref={inputRef}
+                            type="text"
+                            value={newWorkstationNo}
+                            onChange={(e) =>
+                              setNewWorkstationNo(e.target.value)
+                            }
+                            className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
+                            placeholder="Enter workstation no"
+                          />
                           <button
-                            onClick={() => startEditingWorkstation(workstation)}
-                            className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                            onClick={() =>
+                              saveWorkstationNo(workstation.workstation_id)
+                            }
+                            className="hover:bg-green-300/40 p-1 rounded-md duration-150"
                           >
-                            <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                            <FaCheck className="text-lg text-green-600" />
                           </button>
-                        )}
-                      </div>
-                    )}
-                  </h5>
+                          <button
+                            onClick={cancelEditing}
+                            className="hover:bg-red-300/40 p-1 rounded-md duration-150"
+                          >
+                            <RxCross2 className="text-lg text-red-600" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-2 sm:mt-0">
+                          {workstation.workstation_no
+                            ? workstation.workstation_no
+                            : "Not assigned yet"}
+                          {(userRole === "Admin" ||
+                            userRole === "SuperAdmin") && (
+                            <button
+                              onClick={() =>
+                                startEditingWorkstation(workstation)
+                              }
+                              className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
+                            >
+                              <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </h5>
+                    <div className="">
+                      <h4 className="text-xs text-gray-100">
+                        {workstation?.workstation_id}
+                      </h4>
+                    </div>
+                  </div>
                 </h3>
               </div>
             </div>
 
-            {/* Right Side */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 gap-2">
               <span className="text-xs text-gray-500">
                 Created: {formatDate(workstation.createdAt)}
@@ -840,6 +884,13 @@ const ViewWorkstations = () => {
                     onClick={() => openAddSubOperationModal(workstation)}
                   >
                     <BiPlus className="text-2xl hover:scale-150" />
+                  </button>
+
+                  <button
+                    className="bg-green-300/40 p-1 text-green-700 rounded"
+                    onClick={() => openAddHelperOperationModal(workstation)}
+                  >
+                    <MdOutlinePersonAddAlt className="text-2xl hover:scale-150" />
                   </button>
 
                   <button
@@ -856,7 +907,6 @@ const ViewWorkstations = () => {
           </div>
         </div>
 
-        {/* Sub-operations Table */}
         <div className="px-4 py-5 sm:p-6">
           <h4 className="text-xs md:text-base font-medium text-gray-900 mb-3">
             Sub-op Count - {workstation.subOperations.length}
@@ -889,64 +939,99 @@ const ViewWorkstations = () => {
                 <tbody className="bg-white divide-y text-xs md:text-base divide-gray-200">
                   {workstation.subOperations.map((subOp) => (
                     <tr
-                      key={`${workstation.workstation_id}-${subOp.sub_operation_id}`}
+                      key={`${workstation.workstation_id}-${subOp?.sub_operation_id || subOp?.helper_id}`}
                     >
                       <td className="px-4 py-3 font-medium text-gray-900 w-16">
-                        {subOp.sub_operation_id}
+                        {subOp?.sub_operation_id ||
+                          subOp?.helper?.operation_code}
                       </td>
                       <td className="px-4 py-3 text-gray-900 font-medium w-64 truncate">
-                        {subOp.suboperatoin?.sub_operation_name || "N/A"}
+                        {subOp.suboperatoin?.sub_operation_name ||
+                          subOp.sub_operation_name ||
+                          subOp?.helper?.operation_name ||
+                          "N/A"}
                       </td>
                       <td className="px-4 py-3 text-gray-500 w-24">
-                        {subOp.suboperatoin?.smv || "0.00"}
+                        {subOp.suboperatoin?.smv ||
+                          subOp?.helper?.mc_smv ||
+                          "0.00"}
                       </td>
                       <td className="px-4 py-3 text-gray-500 w-24 whitespace-nowrap">
-                        {subOp.suboperatoin?.machine_type || "0.00"}
+                        {subOp.suboperatoin?.machine_type || "N/A"}
                       </td>
                       <td className="px-4 py-3 text-gray-500 w-24">
                         {userRole === "Admin" || userRole === "SuperAdmin" ? (
                           <div className="space-x-2 flex">
-                            {/* Delete Sub-operation Button */}
                             <button
                               className="bg-red-300/40 p-1 text-red-700 rounded"
                               title="Delete"
-                              onClick={() =>
-                                handleDeleteSubOP(
-                                  subOp.sub_operation_id,
-                                  workstation.workstation_id,
-                                )
-                              }
+                              onClick={() => {
+                                {
+                                  subOp.sub_operation_id === null
+                                    ? helperOpDelete(
+                                        subOp.helper_id,
+                                        workstation.workstation_id,
+                                      )
+                                    : handleDeleteSubOP(
+                                        subOp.sub_operation_id,
+                                        workstation.workstation_id,
+                                      );
+                                }
+                              }}
                             >
                               <MdOutlineDeleteForever className="text-xl hover:scale-150" />
                             </button>
 
-                            {/* Upload Media Button (sub-op specific) */}
+                            {/* ============= FIXED: UPLOAD BUTTON USING WORKING CODE ============= */}
                             <button
                               type="button"
                               title="Upload media"
                               className="bg-blue-300/40 p-1 text-blue-700 rounded"
                               onClick={() => {
-                                handleSubOpMediaUpload(
-                                  subOp.suboperatoin.main_operation_id,
-                                  subOp.sub_operation_id,
-                                  subOp.suboperatoin.sub_operation_name,
-                                  subOp.sub_operation_id,
-                                );
+                                subOp.sub_operation_id !== null
+                                  ? handleUploadData(
+                                      subOp.suboperatoin?.main_operation_id ||
+                                        subOp.main_operation_id,
+                                      subOp.sub_operation_id,
+                                      subOp.suboperatoin?.sub_operation_name ||
+                                        subOp.sub_operation_name ||
+                                        "Untitled Operation",
+                                      subOp.sub_operation_id,
+                                    )
+                                  : handleHWUploadData(
+                                      subOp.helper_id,
+                                      subOp.helper_sub_op_id,
+                                      subOp?.helper?.operation_name ||
+                                        "Untitled Operation",
+                                      subOp.helper_sub_op_id,
+                                    );
+                                setUploadingMaterial(null);
+                                setIsUploading(true);
                               }}
                             >
                               <BsFillCloudUploadFill className="text-xl hover:scale-125" />
                             </button>
+                            {/* ================================================================== */}
 
-                            {/* Videos */}
                             <div className="relative">
                               <div className="w-6 h-6 rounded-full bg-red-500/75 border absolute left-2 bottom-3 flex justify-center items-center">
-                                <p className="text-white font-bold text-sm">
-                                  {!subOp.suboperatoin.media_count
-                                    ? "0"
-                                    : subOp.suboperatoin.media_count > 100
-                                      ? "+99"
-                                      : subOp.suboperatoin.media_count}
-                                </p>
+                                {subOp.sub_operation_id === null ? (
+                                  <p className="text-white font-bold text-xs">
+                                    {!subOp?.helper?.videos?.length
+                                      ? "0"
+                                      : subOp.helper?.videos.length > 99
+                                        ? "+99"
+                                        : subOp.helper?.videos.length}
+                                  </p>
+                                ) : (
+                                  <p className="text-white font-bold text-sm">
+                                    {!subOp.suboperatoin?.media_count
+                                      ? "0"
+                                      : subOp.suboperatoin.media_count > 100
+                                        ? "+99"
+                                        : subOp.suboperatoin.media_count}
+                                  </p>
+                                )}
                               </div>
                               <button
                                 type="button"
@@ -957,27 +1042,48 @@ const ViewWorkstations = () => {
                                     "listScroll",
                                     window.scrollY,
                                   );
-                                  navigate("/sub-operation/videos", {
-                                    state: {
-                                      subOpId: subOp.sub_operation_id,
-                                    },
-                                  });
+                                  if (subOp.sub_operation_id === null) {
+                                    navigate(
+                                      `/helper/videos/${subOp?.helper?.helper_id}`,
+                                      {
+                                        state: {
+                                          subOpId: subOp?.helper?.helper_id,
+                                          isHelper: true,
+                                        },
+                                      },
+                                    );
+                                  } else {
+                                    navigate("/sub-operation/videos", {
+                                      state: {
+                                        subOpId: subOp.sub_operation_id,
+                                      },
+                                    });
+                                  }
                                 }}
                               >
                                 <FaPlay className="text-xl hover:scale-125" />
                               </button>
                             </div>
 
-                            {/* Images */}
                             <div className="relative">
                               <div className="w-6 h-6 rounded-full bg-red-500/75 border absolute left-2 bottom-3 flex justify-center items-center">
-                                <p className="text-white font-bold text-sm">
-                                  {!subOp.suboperatoin.image_count
-                                    ? "0"
-                                    : subOp.suboperatoin.image_count > 100
-                                      ? "+99"
-                                      : subOp.suboperatoin.image_count}
-                                </p>
+                                {subOp.sub_operation_id === null ? (
+                                  <p className="text-white font-bold text-xs">
+                                    {!subOp?.helper?.images?.length
+                                      ? "0"
+                                      : subOp.helper?.images.length > 99
+                                        ? "+99"
+                                        : subOp.helper?.images.length}
+                                  </p>
+                                ) : (
+                                  <p className="text-white font-bold text-sm">
+                                    {!subOp.suboperatoin?.image_count
+                                      ? "0"
+                                      : subOp.suboperatoin.image_count > 100
+                                        ? "+99"
+                                        : subOp.suboperatoin.image_count}
+                                  </p>
+                                )}
                               </div>
                               <button
                                 type="button"
@@ -988,11 +1094,17 @@ const ViewWorkstations = () => {
                                     "listScroll",
                                     window.scrollY,
                                   );
-                                  navigate("/sub-operation/images", {
-                                    state: {
-                                      subOpId: subOp.sub_operation_id,
-                                    },
-                                  });
+                                  if (subOp.sub_operation_id === null) {
+                                    navigate(
+                                      `/helper/images/${subOp?.helper?.helper_id}`,
+                                    );
+                                  } else {
+                                    navigate("/sub-operation/images", {
+                                      state: {
+                                        subOpId: subOp.sub_operation_id,
+                                      },
+                                    });
+                                  }
                                 }}
                               >
                                 <FaImage className="text-xl hover:scale-125" />
@@ -1001,7 +1113,6 @@ const ViewWorkstations = () => {
                           </div>
                         ) : (
                           <div className="space-x-2 flex">
-                            {/* User buttons */}
                             <button
                               type="button"
                               title="Watch videos"
@@ -1087,11 +1198,9 @@ const ViewWorkstations = () => {
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8 relative">
-      {/* Floating Save Button */}
       {(userRole === "Admin" || userRole === "SuperAdmin") &&
         hasUnsavedChanges && (
           <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
-            {/* Reset Button */}
             <button
               onClick={resetToOriginalOrder}
               className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all duration-200"
@@ -1101,7 +1210,6 @@ const ViewWorkstations = () => {
               <span className="hidden sm:inline">Reset</span>
             </button>
 
-            {/* Save Button */}
             <button
               onClick={saveLayoutOrder}
               disabled={isSavingOrder}
@@ -1125,15 +1233,10 @@ const ViewWorkstations = () => {
                 </>
               )}
             </button>
-
-            {/* Unsaved Changes Indicator */}
-            {/* <div className="bg-yellow-500 text-white text-xs px-2 py-1 rounded animate-pulse">
-              Unsaved Changes
-            </div> */}
           </div>
         )}
 
-      {/* Upload Modal */}
+      {/* ============= FIXED: UPLOAD MODAL - EXACTLY LIKE WORKING CODE ============= */}
       <AnimatePresence>
         {!isAddingSubM && isUploading && (
           <motion.div
@@ -1164,6 +1267,7 @@ const ViewWorkstations = () => {
                   setUploadingMaterial={setUploadingMaterial}
                   setIsUploading={setIsUploading}
                   uploadingData={uploadingData}
+                  operationType={uploadingData.operationType}
                 />
               )}
 
@@ -1173,36 +1277,35 @@ const ViewWorkstations = () => {
                   setUploadingMaterial={setUploadingMaterial}
                   setIsUploading={setIsUploading}
                   uploadingData={uploadingData}
+                  operationType={uploadingData.operationType}
                 />
               )}
 
-              {/* Updated: Tech Pack Uploader for style-level */}
               {uploadingMaterial === "techpack" && (
                 <TechPackUploader
                   uploadingMaterial={uploadingMaterial}
                   setUploadingMaterial={setUploadingMaterial}
                   setIsUploading={setIsUploading}
                   uploadingData={uploadingData}
-                  isStyleLevel={true} // New prop
+                  isStyleLevel={true}
                 />
               )}
 
-              {/* Updated: Folder Uploader for style-level */}
               {uploadingMaterial === "folder" && (
                 <FolderDocumentsUploader
                   uploadingMaterial={uploadingMaterial}
                   setUploadingMaterial={setUploadingMaterial}
                   setIsUploading={setIsUploading}
                   uploadingData={uploadingData}
-                  isStyleLevel={true} // New prop
+                  isStyleLevel={true}
                 />
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ======================================================================== */}
 
-      {/* Add Sub-operation Modal */}
       {isAddingSubM && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-2/4 ">
@@ -1220,7 +1323,7 @@ const ViewWorkstations = () => {
             </div>
             <div className="p-4">
               <AddSubOperation
-                style_id={state.layout}
+                style_id={state?.layout || layoutId}
                 workstation_id={selectedWorkstation?.workstation_id}
                 onSuccess={() => {
                   closeAddSubOperationModal();
@@ -1233,7 +1336,47 @@ const ViewWorkstations = () => {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto">
+      {isAddingHM && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-2/4 ">
+            <div className="flex justify-between items-center border-b p-4">
+              <h3 className="text-lg font-semibold">
+                Add Sub-Operation to Workstation #
+                {selectedWorkstation?.workstation_id}
+              </h3>
+              <button
+                onClick={closeAddSubOperationModal}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <IoClose className="text-2xl" />
+              </button>
+            </div>
+            {/* 
+                onClose,
+                layoutId,
+                workstationId,
+                onOperationAdded,
+                styleId,
+            */}
+            <div className="p-4">
+              <AddHelperOperations
+                styleId={state?.layout || styleId}
+                layoutId={state?.layout || layoutId}
+                workstationId={selectedWorkstation?.workstation_id}
+                onClose={() => setIsAddingHM(false)}
+                onRefresh={() => getWorkstations()}
+                onSuccess={() => {
+                  closeAddSubOperationModal();
+                  getWorkstations();
+                }}
+                onCancel={closeAddSubOperationModal}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mx-auto">
         <div className="flex items-start justify-between">
           <div className="mb-8">
             <h1 className="font-bold text-gray-800 text-lg md:text-3xl">
@@ -1241,17 +1384,16 @@ const ViewWorkstations = () => {
             </h1>
             <p className="mt-0 md:mt-2 text-gray-600">
               <span className="hidden md:inline">Viewing workstation</span>{" "}
-              information for layout #{state.layout}
-              {state.style?.style?.style_no && (
+              information for layout #{state?.layout || layoutId}
+              {/* {state.style?.style?.style_no && (
                 <span className="ml-2 text-blue-600">
                   Style: {state.style.style.style_no}
                 </span>
-              )}
+              )} */}
             </p>
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Add Workstation Button */}
             <div className="">
               {userRole === "Admin" || userRole === "SuperAdmin" ? (
                 <button
@@ -1269,7 +1411,6 @@ const ViewWorkstations = () => {
               )}
             </div>
 
-            {/* Style Tech Packs Button */}
             <div className="relative">
               <button
                 type="button"
@@ -1278,14 +1419,13 @@ const ViewWorkstations = () => {
                 onClick={() => setShowEUploadOrView(!showEUploadOrView)}
               >
                 <FaFileExcel className="text-2xl" />
-                <p className="hidden md:block">Upload excel</p>
+                <p className="hidden md:block">Upload Layout</p>
               </button>
               <div className="absolute inset-x-0">
                 {showEUploadOrView && showExcelUpload()}
               </div>
             </div>
 
-            {/* Style Documents Button */}
             <div className="relative">
               <button
                 type="button"
@@ -1294,7 +1434,7 @@ const ViewWorkstations = () => {
                 onClick={() => setShowFUploadOrView(!showFUploadOrView)}
               >
                 <FaFolder className="text-2xl hover:scale-125" />
-                <p className="hidden md:block">Upload excel</p>
+                <p className="hidden md:block">Upload Document</p>
               </button>
               <div className="absolute inset-x-0">
                 {showFUploadOrView && showFileUpload()}
@@ -1303,7 +1443,6 @@ const ViewWorkstations = () => {
           </div>
         </div>
 
-        {/* Go Back Button */}
         <div className="text-blue-600 hover:underline duration-150">
           <button
             type="button"
@@ -1314,30 +1453,6 @@ const ViewWorkstations = () => {
           </button>
         </div>
 
-        {/* Drag & Drop Info Banner */}
-        {/* {(userRole === "Admin" || userRole === "SuperAdmin") && (
-          <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-4">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <BsArrowsMove className="h-5 w-5 text-blue-500" />
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-blue-700">
-                  <strong>Drag & Drop Feature:</strong> Click and hold the arrow
-                  icon to reorder workstations. Changes are saved locally until
-                  you click "Save Layout Order".
-                  {hasUnsavedChanges && (
-                    <span className="font-semibold text-yellow-600 ml-1">
-                      (Unsaved changes detected)
-                    </span>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-        )} */}
-
-        {/* Workstations List */}
         {Array.isArray(workstationList) && workstationList.length === 0 ? (
           <div className="bg-gray-50 rounded-lg p-8 text-center border border-gray-200">
             <svg

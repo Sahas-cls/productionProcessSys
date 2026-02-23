@@ -63,7 +63,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "users",
       timestamps: true,
-    }
+    },
   );
 
   User.associate = (models) => {
@@ -99,6 +99,15 @@ module.exports = (sequelize, DataTypes) => {
       onUpdate: "CASCADE",
     });
 
+    User.hasMany(models.HelperVideo, {
+      foreignKey: "user_id",
+      as: "helper_videos",
+    });
+
+    User.hasMany(models.HelperImage, {
+      foreignKey: "user_id",
+      as: "helper_images",
+    });
     // Has created factories
     // User.hasMany(models.Factory, {
     //   foreignKey: "created_by",

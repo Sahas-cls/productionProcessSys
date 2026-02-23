@@ -46,7 +46,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "helper",
       timestamps: true,
-    }
+    },
   );
 
   Helper.associate = (models) => {
@@ -62,6 +62,16 @@ module.exports = (sequelize, DataTypes) => {
       as: "operation",
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
+    });
+
+    Helper.hasMany(models.HelperVideo, {
+      foreignKey: "helper_id",
+      as: "videos",
+    });
+
+    Helper.hasMany(models.HelperImage, {
+      foreignKey: "helper_id",
+      as: "images",
     });
   };
 

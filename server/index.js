@@ -282,6 +282,14 @@ app.use("/api/media", mediaRoutes);
 const subOperationRoutes = require("./Routes/SubOperationMediaRoutes.js");
 app.use("/api/subOperationMedia", subOperationRoutes);
 
+// helper operation routes
+const helperOp = require("./Routes/HelperOperationRoutes.js");
+app.use("/api/helperOp", helperOp);
+
+// helper operation media
+const helperOpMediaRoutes = require("./Routes/HelperMediaRoutes.js");
+app.use("/api/helperOpMedia", helperOpMediaRoutes);
+
 // Dashboard
 const dashboardRoutes = require("../server/Routes/DashboardRoutes.js");
 app.use("/api/dashboard", dashboardRoutes);
@@ -706,10 +714,29 @@ app.use((err, req, res, next) => {
 
 // ==================== START SERVER ====================
 
-db.sequelize.sync({}).then(() => {
-  const PORT = process.env.PORT || 4000;
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
-    console.log("📁 Static file paths configured:");
-  });
+// db.sequelize.sync({ alter: false }).then(() => {
+//   const PORT = process.env.PORT || 4000;
+//   app.listen(PORT, () => {
+//     console.log(`🚀 Server running on http://localhost:${PORT}`);
+//     console.log("📁 Static file paths configured:");
+//     // console.log("  - /videos → Sub Operation Videos (UNC)");
+//     // console.log("  - /subop-images → Sub Operation Images (UNC)");
+//     // console.log("  - /techpacks → Tech Packs (UNC)");
+//     // console.log("  - /documents → Folder Documents (UNC)");
+//     // console.log("📤 B2 Proxy routes:");
+//     // console.log(`  - /api/b2-files/* → Backblaze B2 Style Images`);
+//     // console.log(`  - /api/b2-test → B2 connectivity test`);
+//     // console.log("\n🔍 First, test B2 connection:");
+//     // console.log(`   http://localhost:${PORT}/api/b2-test`);
+//     // console.log("\n📸 Then test an image:");
+//     // console.log(
+//     //   `   http://localhost:${PORT}/api/b2-files/StyleImages/Test-Style-004_front_1764654222622.jpg`
+//     // );
+//   });
+// });
+
+const PORT = process.env.PORT || 4000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

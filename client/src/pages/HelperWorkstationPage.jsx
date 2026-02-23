@@ -4,23 +4,15 @@ import AddFactory from "../components/admin/AddFactory";
 import Sidebar from "../components/Sidebar";
 import { motion, AnimatePresence } from "framer-motion";
 import ViewWorkstations from "../components/ViewWorkstations";
+import HelperWorkstations from "../components/HelperWorkstations";
 import { useNavigate, useParams } from "react-router-dom";
+import { LuConstruction } from "react-icons/lu";
 
-const ViewWorkstationPage = () => {
-  // alert("author role: ", userRole);
-  const {
-    layoutId: pLayoutId,
-    layoutId: upLayoutId,
-    styleId,
-    styleNo: pStyleNo,
-  } = useParams();
+const HelperWorkstationPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const navigator = useNavigate();
-  const [layoutId, setLayoutId] = useState(upLayoutId || null);
-  const [styleNo, setStyleNo] = useState(styleId || null);
-  // const [currentPage, setCurrentPage] = useState("SO");
-  // alert(currentPage);
-  console.log(`layout id: ${layoutId} && style no: ${styleNo}`);
+  const { styId, layoutId } = useParams();
+
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
       <Sidebar
@@ -44,27 +36,26 @@ const ViewWorkstationPage = () => {
               <div className="flex gap-x-2 text-blue-600 pt-2 px-8">
                 <button
                   className="hover:underline font-semibold disabled:cursor-not-allowed"
-                  disabled={true}
+                  onClick={() => {
+                    navigator(-1);
+                  }}
                 >
                   Main operations
                 </button>
                 <div className="w-0.5 bg-black"></div>
                 <button
-                  className="hover:underline font-semibold"
-                  onClick={() =>
-                    layoutId != ""
-                      ? navigator(`/helper-workstation/${styleNo}/${layoutId}`)
-                      : ""
-                  }
+                  disabled={true}
+                  className="hover:underline font-semibold disabled:cursor-not-allowed"
+                  onClick={() => {
+                    setCurrentPage("HO");
+                    navigator(`/helper-workstation/style/:sty-001`);
+                  }}
                 >
                   Helper operations
                 </button>
               </div>
             </div>
-            <ViewWorkstations
-              setLayoutId={setLayoutId}
-              setStyleNo={setStyleNo}
-            />
+            <HelperWorkstations styleId={styId} />
           </motion.div>
         </AnimatePresence>
       </div>
@@ -72,4 +63,4 @@ const ViewWorkstationPage = () => {
   );
 };
 
-export default ViewWorkstationPage;
+export default HelperWorkstationPage;

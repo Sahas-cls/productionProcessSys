@@ -7,6 +7,7 @@ const {
   Style,
   Machine,
   Season,
+  Helper,
 } = require("../models");
 
 // to retrive data from layout tbl
@@ -34,7 +35,7 @@ exports.getLayouts = async (req, res, next) => {
   }
 };
 
-// to retrive all sub operations belongs to one layout
+// to retrieve all sub operations belongs to one layout
 exports.getSubOperations = async (req, res, next) => {
   //
   const { id } = req.params;
@@ -59,10 +60,46 @@ exports.getSubOperations = async (req, res, next) => {
     });
 
     const allSubOperations = subOps.style.operations.flatMap(
-      (op) => op.subOperations
+      (op) => op.subOperations,
     );
 
     res.status(200).json({ status: "success", data: allSubOperations });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// to retrieve all helper operations according to a layout
+exports.getHelperSubOperations = async (req, res, next) => {
+  //
+  const { id } = req.params;
+  console.log(req.params);
+  console.log("id ============== ", id);
+  console.log("request recived");
+  try {
+    const subOps = await Layout.findByPk(id, {
+      include: [
+        {
+          model: Style,
+          as: "style",
+          include: [
+            {
+              model: Helper,
+              as: "helpers",
+              // include: [{ model: SubOperation, as: "subOperations" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    // console.log("sub Operations ===== ", subOps);
+    // return;
+    // const allSubOperations = subOps.style.operations.flatMap(
+    //   (op) => op.subOperations,
+    // );
+
+    res.status(200).json({ status: "success", data: subOps });
   } catch (error) {
     return next(error);
   }
@@ -157,7 +194,7 @@ exports.createLayout = async (req, res, next) => {
 
   if (!styleNo || !season || !workstationCount) {
     const error = new Error(
-      "Missing required fields: styleNo, season, and workstationCount are required"
+      "Missing required fields: styleNo, season, and workstationCount are required",
     );
     error.status = 400;
     return next(error);
@@ -192,7 +229,7 @@ exports.createLayout = async (req, res, next) => {
             season_id: season,
             workstation_count: workstationCountInt,
           },
-          { transaction: t }
+          { transaction: t },
         );
 
         // 6. Create workstations with workstation_no
@@ -209,7 +246,7 @@ exports.createLayout = async (req, res, next) => {
           {
             transaction: t,
             returning: true,
-          }
+          },
         );
 
         // 7. Fetch sub operations related to the style via MainOperation
@@ -227,7 +264,7 @@ exports.createLayout = async (req, res, next) => {
 
         // 8. Flatten the sub operations
         const subOperations = mainOperations.flatMap(
-          (mo) => mo.subOperations || []
+          (mo) => mo.subOperations || [],
         );
 
         return { createL, createWorkStation, subOperations };
@@ -286,5 +323,37 @@ exports.deleteLayout = async (req, res, next) => {
       .json({ status: "success", message: "Layout delete success" });
   } catch (error) {
     return next(error);
+  }
+};
+
+// get layout data according to specific style id
+exports.getLayoutDetails = async (req, res, next) => {
+  const { styleId } = req.params;
+  try {
+    console.log("finding layout the style id is: ", styleId);
+    if (!styleId) {
+      const error = new Error("Style id doesn't provided");
+      error.status = 400;
+      throw error;
+    }
+    const layoutData = await Layout.findOne({
+      where: { style_id: styleId },
+      attributes: ["layout_id", "style_id", "workstation_count"],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!layoutData) {
+      return res
+        .status(200)
+        .json({ status: "ok", message: "No Layout found", data: {} });
+    }
+
+    return res.status(200).json({ status: "ok", data: layoutData });
+  } catch (error) {
+    console.error(error);
+    next(error);
+    return res
+      .status(error?.status || 500)
+      .json({ status: "error", message: error?.message });
   }
 };

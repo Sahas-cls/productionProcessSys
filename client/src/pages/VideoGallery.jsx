@@ -1,4 +1,3 @@
-// Frontend: VideoGallery.jsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -7,13 +6,14 @@ import {
   FaArrowLeft,
   FaExclamationTriangle,
   FaDownload,
+  FaPause,
+  FaExpand,
+  FaCompress,
 } from "react-icons/fa";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
-import Plyr from "plyr";
-import "plyr/dist/plyr.css";
 
 const VideoGallery = () => {
   const location = useLocation();
@@ -24,29 +24,21 @@ const VideoGallery = () => {
 
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeVideo, setActiveVideo] = useState(null);
+  const [activeVideoId, setActiveVideoId] = useState(null);
   const [videoErrors, setVideoErrors] = useState({});
+
   const videoRefs = useRef({});
-  const plyrInstances = useRef({});
 
   useEffect(() => {
     if (location.state?.subOpId) {
       fetchVideos();
     }
-
-    // Cleanup Plyr instances on unmount
-    return () => {
-      Object.values(plyrInstances.current).forEach(instance => {
-        if (instance && typeof instance.destroy === 'function') {
-          instance.destroy();
-        }
-      });
-    };
   }, [location.state?.subOpId]);
 
   const fetchVideos = async () => {
     const subOpId = location.state.subOpId;
     setLoading(true);
+
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getVideos/${subOpId}`,
@@ -60,114 +52,62 @@ const VideoGallery = () => {
     }
   };
 
-  const getVideoUrl = useCallback((item) => {
+  const getVideoUrl = (item) => {
     if (item.media_url) {
+      // Clean the URL path
       const cleanPath = item.media_url.replace(/^\//, "");
       return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}`;
     }
     return "";
+  };
+
+  const handlePlayVideo = useCallback(
+    (id) => {
+      // Pause the currently active video if different
+      if (
+        activeVideoId &&
+        activeVideoId !== id &&
+        videoRefs.current[activeVideoId]
+      ) {
+        videoRefs.current[activeVideoId].pause();
+      }
+
+      // Set new active video
+      setActiveVideoId(id);
+      setVideoErrors((prev) => ({ ...prev, [id]: null }));
+    },
+    [activeVideoId],
+  );
+
+  const handleStopVideo = useCallback((id) => {
+    const video = videoRefs.current[id];
+    if (video) {
+      video.pause();
+      video.currentTime = 0;
+    }
+    setActiveVideoId(null);
   }, []);
 
-  const handlePlayVideo = useCallback((id) => {
-    // Stop any currently playing video
-    if (activeVideo && plyrInstances.current[activeVideo]) {
-      plyrInstances.current[activeVideo].pause();
+  // CORRECT FULLSCREEN IMPLEMENTATION
+  const toggleFullscreen = useCallback(async (id) => {
+    const video = videoRefs.current[id];
+    if (!video) return;
+
+    try {
+      if (!document.fullscreenElement) {
+        await video.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error("Fullscreen error:", err);
     }
-
-    // Set new active video
-    setActiveVideo(id);
-    setVideoErrors((prev) => ({ ...prev, [id]: null }));
-  }, [activeVideo]);
-
-  // Initialize Plyr for active video
-  useEffect(() => {
-    const initializePlyrForActiveVideo = async () => {
-      if (!activeVideo) return;
-
-      const videoElement = videoRefs.current[activeVideo];
-      if (!videoElement) return;
-
-      // Clean up existing Plyr instance for this video
-      if (plyrInstances.current[activeVideo]) {
-        plyrInstances.current[activeVideo].destroy();
-        delete plyrInstances.current[activeVideo];
-      }
-
-      try {
-        const player = new Plyr(videoElement, {
-          controls: [
-            'play-large',
-            'play',
-            'progress',
-            'current-time',
-            'mute',
-            'volume',
-            'settings',
-            'pip',
-            'fullscreen'
-          ],
-          settings: ['quality', 'speed'],
-          invertTime: false,
-          toggleInvert: false,
-          fullscreen: {
-            enabled: true,
-            fallback: true,
-            iosNative: true
-          },
-          storage: {
-            enabled: false
-          },
-          keyboard: {
-            focused: true,
-            global: false
-          },
-          tooltips: {
-            controls: true
-          },
-          ratio: '16:9'
-        });
-
-        // Store instance
-        plyrInstances.current[activeVideo] = player;
-
-        // Auto-play
-        player.play().catch(e => {
-          console.log("Auto-play prevented:", e);
-        });
-
-        // Handle errors
-        player.on('error', (event) => {
-          console.error('Plyr error:', event.detail);
-          setVideoErrors((prev) => ({
-            ...prev,
-            [activeVideo]: "Failed to play video"
-          }));
-          setActiveVideo(null);
-        });
-
-      } catch (error) {
-        console.error('Error initializing Plyr:', error);
-        setVideoErrors((prev) => ({
-          ...prev,
-          [activeVideo]: "Failed to initialize player"
-        }));
-        setActiveVideo(null);
-      }
-    };
-
-    initializePlyrForActiveVideo();
-
-    // Cleanup function
-    return () => {
-      if (activeVideo && plyrInstances.current[activeVideo]) {
-        plyrInstances.current[activeVideo].destroy();
-        delete plyrInstances.current[activeVideo];
-      }
-    };
-  }, [activeVideo]);
+  }, []);
 
   const getFileName = useCallback((item) => {
-    return item.original_filename || item.media_url?.split("/").pop() || "video";
+    return (
+      item.original_filename || item.media_url?.split("/").pop() || "video"
+    );
   }, []);
 
   const formatFileSize = useCallback((bytes) => {
@@ -186,26 +126,29 @@ const VideoGallery = () => {
     });
   }, []);
 
-  const handleDownloadVideo = useCallback((item) => {
-    const videoUrl = getVideoUrl(item);
-    const fileName = getFileName(item);
+  const handleDownloadVideo = useCallback(
+    (item) => {
+      const videoUrl = getVideoUrl(item);
+      const fileName = getFileName(item);
 
-    if (videoUrl) {
-      const link = document.createElement("a");
-      link.href = videoUrl;
-      link.download = fileName;
-      link.target = "_blank";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      Swal.fire({
-        title: "Error",
-        text: "Cannot download video - URL not available",
-        icon: "error",
-      });
-    }
-  }, [getVideoUrl, getFileName]);
+      if (videoUrl) {
+        const link = document.createElement("a");
+        link.href = videoUrl;
+        link.download = fileName;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        Swal.fire({
+          title: "Error",
+          text: "Cannot download video - URL not available",
+          icon: "error",
+        });
+      }
+    },
+    [getVideoUrl, getFileName],
+  );
 
   return (
     <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6">
@@ -244,7 +187,7 @@ const VideoGallery = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {videos.map((item) => {
             const fileName = getFileName(item);
-            const isActive = activeVideo === item.so_media_id;
+            const isActive = activeVideoId === item.so_media_id;
             const error = videoErrors[item.so_media_id];
             const videoUrl = getVideoUrl(item);
 
@@ -257,26 +200,50 @@ const VideoGallery = () => {
               >
                 {/* Video Container */}
                 <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
-                  {isActive ? (
-                    <div className="relative w-full h-full bg-black">
-                      <video
-                        ref={(el) => {
-                          // Simple ref assignment - NO state updates here
-                          if (el) {
-                            videoRefs.current[item.so_media_id] = el;
-                            // Minimal styling
-                            el.style.objectFit = 'contain';
-                          } else {
-                            delete videoRefs.current[item.so_media_id];
-                          }
-                        }}
-                        src={videoUrl}
-                        className="w-full h-full"
-                        playsInline
-                        preload="metadata"
-                        crossOrigin="anonymous"
-                        controls={false} // Plyr will handle controls
-                      />
+                  {/* ALWAYS MOUNT THE VIDEO ELEMENT */}
+                  <video
+                    ref={(el) => {
+                      videoRefs.current[item.so_media_id] = el;
+                    }}
+                    src={isActive ? videoUrl : ""} // Only set src when active
+                    className={`w-full h-full object-contain ${isActive ? "block" : "hidden"}`}
+                    playsInline
+                    preload="metadata"
+                    crossOrigin="anonymous"
+                    controls={false}
+                    onError={(e) => {
+                      console.error("Video error:", e);
+                      setVideoErrors((prev) => ({
+                        ...prev,
+                        [item.so_media_id]: "Failed to load video",
+                      }));
+                    }}
+                    onPlay={() => {
+                      // Browser is playing, just update UI state if needed
+                    }}
+                    onPause={() => {
+                      // Browser paused, just update UI state if needed
+                    }}
+                    onEnded={() => {
+                      // Video ended naturally, no state changes needed
+                    }}
+                  />
+
+                  {/* Overlay UI */}
+                  {!isActive ? (
+                    <div
+                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/50 to-gray-100/50 hover:from-blue-100/50 hover:to-gray-200/50"
+                      onClick={() => handlePlayVideo(item.so_media_id)}
+                    >
+                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors">
+                        <FaPlay className="text-blue-600 text-3xl" />
+                      </div>
+                      <p className="text-blue-700 text-sm mt-3 font-medium">
+                        Click to load & play
+                      </p>
+                      <p className="text-gray-600 text-xs mt-1">
+                        {formatFileSize(item.file_size)}
+                      </p>
                     </div>
                   ) : error ? (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
@@ -293,19 +260,36 @@ const VideoGallery = () => {
                       </button>
                     </div>
                   ) : (
-                    <div
-                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/50 to-gray-100/50 hover:from-blue-100/50 hover:to-gray-200/50"
-                      onClick={() => handlePlayVideo(item.so_media_id)}
-                    >
-                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors">
-                        <FaPlay className="text-blue-600 text-3xl" />
+                    <div className="absolute inset-0 bg-transparent pointer-events-none">
+                      {/* Control buttons - positioned but not covering video */}
+                      <div className="absolute top-2 right-2 pointer-events-auto">
+                        <button
+                          onClick={() => toggleFullscreen(item.so_media_id)}
+                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                          title="Fullscreen"
+                        >
+                          <FaExpand size={16} />
+                        </button>
                       </div>
-                      <p className="text-blue-700 text-sm mt-3 font-medium">
-                        Click to load & play
-                      </p>
-                      <p className="text-gray-600 text-xs mt-1">
-                        {formatFileSize(item.file_size)}
-                      </p>
+
+                      <div className="absolute top-2 left-2 pointer-events-auto">
+                        <button
+                          onClick={() => {
+                            const video = videoRefs.current[item.so_media_id];
+                            if (video) {
+                              if (video.paused) {
+                                video.play();
+                              } else {
+                                video.pause();
+                              }
+                            }
+                          }}
+                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                          title="Play/Pause"
+                        >
+                          <FaPause size={16} />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -344,7 +328,7 @@ const VideoGallery = () => {
                       <button
                         onClick={() => {
                           if (isActive) {
-                            setActiveVideo(null);
+                            handleStopVideo(item.so_media_id);
                           } else {
                             handlePlayVideo(item.so_media_id);
                           }
@@ -357,7 +341,7 @@ const VideoGallery = () => {
                       >
                         {isActive ? (
                           <>
-                            <FaPlay size={12} />
+                            <FaPause size={12} />
                             Stop
                           </>
                         ) : (
@@ -391,13 +375,8 @@ const VideoGallery = () => {
 
                           if (result.isConfirmed) {
                             try {
-                              // Clean up Plyr instance if active
                               if (isActive) {
-                                if (plyrInstances.current[item.so_media_id]) {
-                                  plyrInstances.current[item.so_media_id].destroy();
-                                  delete plyrInstances.current[item.so_media_id];
-                                }
-                                setActiveVideo(null);
+                                handleStopVideo(item.so_media_id);
                               }
 
                               const response = await axios.delete(
@@ -416,7 +395,9 @@ const VideoGallery = () => {
                               console.error("Delete error:", error);
                               Swal.fire({
                                 title: "Video delete failed",
-                                text: error.response?.data?.message || "Please try again",
+                                text:
+                                  error.response?.data?.message ||
+                                  "Please try again",
                                 icon: "error",
                               });
                             }

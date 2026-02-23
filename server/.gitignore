@@ -7,3 +7,6 @@
 # Node modules
 node_modules/
 ./server/node_modules
+
+# remove temp - videos 
+server/temp/

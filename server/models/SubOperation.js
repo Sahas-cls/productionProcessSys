@@ -12,7 +12,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         references: {
           model: "main_operation",
-          key: "main_operation_id",
+          key: "operation_id",
         },
       },
       thread_id: {

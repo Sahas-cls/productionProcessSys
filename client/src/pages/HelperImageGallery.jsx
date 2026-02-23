@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   FaImage,
   FaTrash,
@@ -14,64 +14,62 @@ import { useAuth } from "../hooks/useAuth";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
 
-const ImageGallery = () => {
-  const location = useLocation();
+const HelperImageGallery = () => {
+  const { hOpId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const userRole = user?.userRole;
-  const params = useParams();
 
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-  const [subOpId, setSubOpId] = useState(null);
+  const [helperOpName, setHelperOpName] = useState("");
 
   useEffect(() => {
-    // Get subOpId from params, location state, or URL query
-    const id =
-      params.subOpId ||
-      location.state?.subOpId ||
-      new URLSearchParams(location.search).get("subOpId");
-
-    if (id) {
-      setSubOpId(id);
-      fetchImages(id);
+    if (hOpId) {
+      fetchImages(hOpId);
     } else {
       Swal.fire({
         title: "Missing Parameter",
-        text: "Sub-operation ID is required to view images",
+        text: "Helper Operation ID is required to view images",
         icon: "error",
         confirmButtonText: "Go Back",
       }).then(() => navigate(-1));
     }
-  }, [location, params]);
+  }, [hOpId, navigate]);
 
   const fetchImages = async (id) => {
     setLoading(true);
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}/api/subOperationMedia/getImages/${id}`,
+        `${import.meta.env.VITE_API_URL}/api/helperOpMedia/getImages/${id}`,
         { withCredentials: true },
       );
 
-      if (response.data.success) {
+      if (response.data.status === "success") {
         setImages(response.data.data || []);
+
+        // Set helper operation name from first image if available
+        if (response.data.data?.length > 0) {
+          setHelperOpName(
+            response.data.data[0].helper_operation?.operation_name || "",
+          );
+        }
+
         console.log(
-          `✅ Loaded ${
-            response.data.data?.length || 0
-          } images from Backblaze B2`,
+          `✅ Loaded ${response.data.data?.length || 0} helper images from Backblaze B2`,
         );
       } else {
         throw new Error(response.data.message || "Failed to load images");
       }
     } catch (error) {
-      console.error("❌ Error fetching images:", error);
+      console.error("❌ Error fetching helper images:", error);
 
       let errorMessage = "Failed to load images";
       if (error.response?.status === 404) {
-        errorMessage = "No images found for this sub-operation";
+        errorMessage = "No images found for this helper operation";
       } else if (error.response?.status === 400) {
-        errorMessage = "Invalid sub-operation ID";
+        errorMessage = "Invalid helper operation ID";
       }
 
       Swal.fire({
@@ -90,93 +88,39 @@ const ImageGallery = () => {
     const baseUrl = import.meta.env.VITE_API_URL;
     const apiUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
 
-    console.log(`🔍 Getting URL for image ${item.so_img_id}:`, {
-      proxy_url: item.proxy_url,
-      preview_url: item.preview_url,
-      public_url: item.public_url,
-      direct_url: item.direct_url,
+    console.log(`🔍 Getting URL for helper image ${item.helper_image_id}:`, {
       image_url: item.image_url,
+      image_url_proxy: item.image_url_proxy,
     });
 
-    // Try all possible URL sources
-    const possibleUrls = [];
-
-    // Priority 1: Proxy URL (local API endpoint)
-    if (item.proxy_url) {
-      const proxyUrl = item.proxy_url.startsWith("/")
-        ? `${apiUrl}${item.proxy_url}`
-        : `${apiUrl}/${item.proxy_url}`;
-      possibleUrls.push({ url: proxyUrl, type: "proxy" });
+    // Priority 1: Proxy URL from the API response
+    if (item.image_url_proxy) {
+      const proxyUrl = item.image_url_proxy.startsWith("/")
+        ? `${apiUrl}${item.image_url_proxy}`
+        : `${apiUrl}/${item.image_url_proxy}`;
+      console.log(`✅ Using proxy URL: ${proxyUrl}`);
+      return proxyUrl;
     }
 
-    // Priority 2: Preview URL
-    if (item.preview_url) {
-      const previewUrl = item.preview_url.startsWith("/")
-        ? `${apiUrl}${item.preview_url}`
-        : `${apiUrl}/${item.preview_url}`;
-      possibleUrls.push({ url: previewUrl, type: "preview" });
-    }
-
-    // Priority 3: Public URL (direct B2 link)
-    if (item.public_url) {
-      possibleUrls.push({ url: item.public_url, type: "public" });
-    }
-
-    // Priority 4: Direct URL
-    if (item.direct_url) {
-      possibleUrls.push({ url: item.direct_url, type: "direct" });
-    }
-
-    // Priority 5: Legacy image_url
+    // Priority 2: Construct proxy URL from image_url
     if (item.image_url) {
-      // Check if it's already a full URL
-      if (item.image_url.startsWith("http")) {
-        possibleUrls.push({ url: item.image_url, type: "image_url_full" });
-      } else {
-        // Use B2 proxy endpoint
-        const proxyImageUrl = `${apiUrl}/api/b2-files/${item.image_url}`;
-        possibleUrls.push({ url: proxyImageUrl, type: "image_url_proxy" });
-      }
+      const proxyImageUrl = `${apiUrl}/api/b2-files/${item.image_url}`;
+      console.log(`✅ Using constructed proxy URL: ${proxyImageUrl}`);
+      return proxyImageUrl;
     }
 
-    // Log all available URLs for debugging
-    if (possibleUrls.length > 0) {
-      console.log(
-        `📋 Available URLs for image ${item.so_img_id}:`,
-        possibleUrls,
-      );
-
-      // Try to return the first proxy URL if available
-      const proxyUrl = possibleUrls.find((u) => u.type.includes("proxy"));
-      if (proxyUrl) {
-        console.log(`✅ Using ${proxyUrl.type} URL:`, proxyUrl.url);
-        return proxyUrl.url;
-      }
-
-      // Otherwise return the first available URL
-      const selectedUrl = possibleUrls[0];
-      console.log(`✅ Using ${selectedUrl.type} URL:`, selectedUrl.url);
-      return selectedUrl.url;
-    }
-
-    console.warn(`⚠️ No valid URL found for image ${item.so_img_id}`);
+    console.warn(`⚠️ No valid URL found for image ${item.helper_image_id}`);
     return "";
   };
 
-  // Get URL for download (direct B2 link)
+  // Get URL for download
   const getDownloadUrl = (item) => {
-    if (item.public_url) {
-      return item.public_url;
-    }
-    if (item.direct_url) {
-      return item.direct_url;
-    }
     return getImageUrl(item);
   };
 
   const getFileName = (item) => {
     return (
-      item.original_filename || item.image_url?.split("/").pop() || "image.jpg"
+      item.original_file_name || item.image_url?.split("/").pop() || "image.jpg"
     );
   };
 
@@ -199,7 +143,6 @@ const ImageGallery = () => {
     const fileName = getFileName(item);
 
     if (downloadUrl) {
-      // Create a temporary link for download
       const link = document.createElement("a");
       link.href = downloadUrl;
       link.download = fileName;
@@ -234,14 +177,12 @@ const ImageGallery = () => {
 
     try {
       const response = await axios.delete(
-        `${
-          import.meta.env.VITE_API_URL
-        }/api/subOperationMedia/deleteImage/${id}`,
+        `${import.meta.env.VITE_API_URL}/api/helperOpMedia/deleteImage/${id}`,
         { withCredentials: true },
       );
 
       if (response.data.success) {
-        await fetchImages(subOpId);
+        await fetchImages(hOpId);
         Swal.fire({
           title: "Deleted!",
           text: "Image has been deleted from cloud storage.",
@@ -258,6 +199,8 @@ const ImageGallery = () => {
       let errorMessage = "Failed to delete image. Please try again.";
       if (error.response?.data?.warning) {
         errorMessage = error.response.data.warning;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
       }
 
       Swal.fire({
@@ -291,8 +234,8 @@ const ImageGallery = () => {
   };
 
   const handleRefresh = () => {
-    if (subOpId) {
-      fetchImages(subOpId);
+    if (hOpId) {
+      fetchImages(hOpId);
     }
   };
 
@@ -338,12 +281,21 @@ const ImageGallery = () => {
         <div className="w-full flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <FaImage className="text-blue-500 text-2xl" />
-            <h1 className="text-2xl font-bold">Image Gallery</h1>
+            <h1 className="text-2xl font-bold">
+              Helper Operation Image Gallery
+            </h1>
             <span className="bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full">
               {images.length} {images.length === 1 ? "image" : "images"}
             </span>
-            <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-              SubOp ID: {subOpId}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+              <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                Helper Op ID: {hOpId}
+              </div>
+              {helperOpName && (
+                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded max-w-[200px] truncate">
+                  {helperOpName}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -353,7 +305,7 @@ const ImageGallery = () => {
             <div className="text-center">
               <BeatLoader color="#3b82f6" size={15} />
               <p className="mt-4 text-gray-600">
-                Loading images from cloud storage...
+                Loading helper operation images from cloud storage...
               </p>
             </div>
           </div>
@@ -366,7 +318,7 @@ const ImageGallery = () => {
               No images found
             </h3>
             <p className="text-gray-500 max-w-md mb-4">
-              There are no images uploaded for sub-operation {subOpId} yet.
+              There are no images uploaded for helper operation {hOpId} yet.
             </p>
             <button
               onClick={handleRefresh}
@@ -380,10 +332,13 @@ const ImageGallery = () => {
             {images.map((item) => {
               const imageUrl = getImageUrl(item);
               const fileName = getFileName(item);
+              const operationName =
+                item.helper_operation?.operation_name || "Helper Operation";
+              const styleName = item.style?.style_name || "";
 
               return (
                 <motion.div
-                  key={item.so_img_id}
+                  key={item.helper_image_id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300"
@@ -394,70 +349,43 @@ const ImageGallery = () => {
                       className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all"
                     >
                       {imageUrl ? (
-                        // In your ImageGallery component, update the img tag:
                         <img
                           src={imageUrl}
-                          alt={item.sub_operation_name || fileName}
+                          alt={operationName || fileName}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           loading="lazy"
-                          crossOrigin="anonymous" // Add this attribute
+                          crossOrigin="anonymous"
                           onError={(e) => {
                             console.error(
-                              `❌ Failed to load image: ${imageUrl}`,
+                              `❌ Failed to load helper image: ${imageUrl}`,
                               e,
                             );
-                            console.error(`❌ Error type:`, e.type);
-                            console.error(
-                              `❌ CORS issue?`,
-                              e.target.crossOrigin,
-                            );
 
-                            // Try to load with a different approach if CORS fails
+                            // Try alternative loading method
                             if (imageUrl.includes("/api/b2-files/")) {
-                              console.log(
-                                "🔄 Attempting alternative loading method...",
-                              );
-
-                              // Create a new image element with different CORS settings
                               const testImg = new Image();
                               testImg.crossOrigin = "anonymous";
                               testImg.onload = () => {
                                 console.log("✅ Alternative load succeeded");
-                                e.target.src = imageUrl; // Set the original img src to the loaded URL
-                                e.target.style.display = "block";
+                                e.target.src = imageUrl + "?t=" + Date.now();
                               };
                               testImg.onerror = (err) => {
                                 console.error(
-                                  "❌ Alternative load also failed:",
+                                  "❌ Alternative load failed:",
                                   err,
                                 );
                                 e.target.style.display = "none";
-                                // Show fallback
                                 const fallback =
                                   e.target.parentElement.querySelector(
                                     ".image-fallback",
                                   );
                                 if (fallback) {
                                   fallback.classList.remove("hidden");
-                                  fallback.innerHTML = `
-            <div class="text-center p-2">
-              <FaImage className="text-2xl text-blue-500 mb-2 mx-auto" />
-              <div class="text-xs text-gray-600">Image failed to load</div>
-              <div class="text-xs text-red-400 mt-1 truncate max-w-full">URL: ${imageUrl}</div>
-              <button 
-                onclick="window.open('${imageUrl}', '_blank')"
-                class="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
-              >
-                Open in new tab
-              </button>
-            </div>
-          `;
                                 }
                               };
-                              testImg.src = imageUrl + "?t=" + Date.now(); // Add timestamp to bypass cache
+                              testImg.src = imageUrl + "?t=" + Date.now();
                             } else {
                               e.target.style.display = "none";
-                              // Show fallback
                               const fallback =
                                 e.target.parentElement.querySelector(
                                   ".image-fallback",
@@ -466,11 +394,6 @@ const ImageGallery = () => {
                                 fallback.classList.remove("hidden");
                               }
                             }
-                          }}
-                          onLoad={(e) => {
-                            console.log(
-                              `✅ Successfully loaded image: ${imageUrl}`,
-                            );
                           }}
                         />
                       ) : null}
@@ -487,9 +410,16 @@ const ImageGallery = () => {
                         <FaCloud className="text-xs" />
                         <span>B2</span>
                       </div>
+
+                      {/* Style indicator */}
+                      {styleName && (
+                        <div className="absolute top-2 left-2 bg-blue-600 bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                          <span>Style: {styleName}</span>
+                        </div>
+                      )}
                     </button>
 
-                    {deletingId === item.so_img_id && (
+                    {deletingId === item.helper_image_id && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70 z-10">
                         <BeatLoader color="#ffffff" size={10} />
                         <span className="ml-2 text-white text-sm">
@@ -501,7 +431,7 @@ const ImageGallery = () => {
 
                   <div className="p-4">
                     <h3 className="font-semibold text-lg mb-2 line-clamp-1">
-                      {item.sub_operation_name || "Untitled Image"}
+                      {operationName}
                     </h3>
 
                     <div className="text-sm text-gray-600 space-y-2">
@@ -528,6 +458,16 @@ const ImageGallery = () => {
                           </span>
                         </div>
                       )}
+                      {item.user && (
+                        <div className="flex justify-between">
+                          <span className="font-medium">Uploaded by:</span>
+                          <span className="text-xs truncate max-w-[120px]">
+                            {item.user.name ||
+                              item.user.email ||
+                              `User ${item.user.user_id}`}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-4 flex justify-between items-center">
@@ -536,13 +476,13 @@ const ImageGallery = () => {
                       </div>
 
                       <div className="flex gap-2">
-                        {/* <button
+                        <button
                           onClick={() => handleDownload(item)}
                           className="flex items-center gap-1 text-green-600 hover:text-green-800 transition-colors text-sm px-2 py-1 rounded hover:bg-green-50"
                           title="Download"
                         >
                           <FaDownload className="text-sm" />
-                        </button> */}
+                        </button>
 
                         <button
                           onClick={() => handleViewImage(item)}
@@ -552,12 +492,13 @@ const ImageGallery = () => {
                           <FaExternalLinkAlt className="text-sm" />
                         </button>
 
-                        {userRole === "Admin" && (
+                        {(userRole === "Admin" ||
+                          userRole === "SuperAdmin") && (
                           <button
                             onClick={() =>
-                              handleDelete(item.so_img_id, fileName)
+                              handleDelete(item.helper_image_id, fileName)
                             }
-                            disabled={deletingId === item.so_img_id}
+                            disabled={deletingId === item.helper_image_id}
                             className="flex items-center gap-1 text-red-600 hover:text-red-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm px-2 py-1 rounded hover:bg-red-50"
                             title="Delete"
                           >
@@ -577,4 +518,4 @@ const ImageGallery = () => {
   );
 };
 
-export default ImageGallery;
+export default HelperImageGallery;

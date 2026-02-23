@@ -11,6 +11,7 @@ import {
   FaDownload,
   FaExternalLinkAlt,
   FaCloud,
+  FaRedoAlt,
 } from "react-icons/fa";
 import { BeatLoader } from "react-spinners";
 import axios from "axios";
@@ -27,6 +28,10 @@ const MediaGallery = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
+
+  // Add rotation tracking state
+  const [videoRotations, setVideoRotations] = useState({});
+  const [rotationDetectionLoading, setRotationDetectionLoading] = useState({});
 
   // Get media type from URL or params
   const getMediaTypeFromPath = () => {
@@ -118,7 +123,6 @@ const MediaGallery = () => {
   };
 
   // Fetch specific media type
-  // Fetch specific media type
   const fetchSpecificMedia = async (id, type) => {
     try {
       let endpoint = "";
@@ -143,7 +147,7 @@ const MediaGallery = () => {
 
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}/api/subOperationMedia/${endpoint}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       console.log(`📋 ${type} response structure:`, {
@@ -161,10 +165,22 @@ const MediaGallery = () => {
             ...prev,
             [type]: response.data.data || [],
           }));
+
+          // Auto-detect rotation for videos older than your fix date
+          // You can set this date to when you implemented the server-side fix
+          const FIX_IMPLEMENTATION_DATE = new Date("2026-02-14"); // Adjust this date
+
+          response.data.data?.forEach((video) => {
+            const uploadDate = new Date(video.createdAt);
+            if (uploadDate < FIX_IMPLEMENTATION_DATE) {
+              detectVideoRotation(video, type);
+            }
+          });
+
           console.log(
             `✅ Loaded ${
               response.data.data?.length || 0
-            } ${type} from Backblaze B2`
+            } ${type} from Backblaze B2`,
           );
         } else {
           throw new Error(response.data.message || `Failed to load ${type}`);
@@ -180,7 +196,7 @@ const MediaGallery = () => {
           console.log(
             `✅ Loaded ${
               response.data.data?.length || 0
-            } ${type} from Backblaze B2`
+            } ${type} from Backblaze B2`,
           );
         } else {
           throw new Error(response.data.message || `Failed to load ${type}`);
@@ -218,6 +234,103 @@ const MediaGallery = () => {
     }
   };
 
+  // NEW FUNCTION: Detect video rotation using video element
+  const detectVideoRotation = (video, type) => {
+    const videoId = video[`so_${type === "videos" ? "media" : ""}_id`];
+
+    setRotationDetectionLoading((prev) => ({
+      ...prev,
+      [videoId]: true,
+    }));
+
+    // Create a hidden video element to detect orientation
+    const videoElement = document.createElement("video");
+    videoElement.src = getFileUrl(video, type);
+    videoElement.preload = "metadata";
+
+    // Set timeout to prevent hanging
+    const timeout = setTimeout(() => {
+      videoElement.remove();
+      setRotationDetectionLoading((prev) => ({
+        ...prev,
+        [videoId]: false,
+      }));
+    }, 5000);
+
+    videoElement.onloadedmetadata = () => {
+      clearTimeout(timeout);
+
+      // Check video dimensions to determine orientation
+      const width = videoElement.videoWidth;
+      const height = videoElement.videoHeight;
+
+      // Determine rotation needed
+      let rotation = 0;
+      if (width > height) {
+        // Video is landscape, but might be a portrait video that needs rotation
+        // We'll check if it's a known problematic video (uploaded before fix)
+        // For now, default to 90 for portrait videos
+        rotation = 90;
+      }
+
+      setVideoRotations((prev) => ({
+        ...prev,
+        [videoId]: rotation,
+      }));
+
+      setRotationDetectionLoading((prev) => ({
+        ...prev,
+        [videoId]: false,
+      }));
+
+      videoElement.remove();
+    };
+
+    videoElement.onerror = () => {
+      clearTimeout(timeout);
+      setRotationDetectionLoading((prev) => ({
+        ...prev,
+        [videoId]: false,
+      }));
+      videoElement.remove();
+    };
+  };
+
+  // NEW FUNCTION: Get rotation class for video
+  const getRotationClass = (item, type) => {
+    if (type !== "videos") return "";
+
+    const videoId = item.so_media_id;
+    const rotation = videoRotations[videoId];
+
+    // If rotation detected, return appropriate class
+    if (rotation === 90) return "video-rotate-90";
+    if (rotation === 270) return "video-rotate-270";
+    if (rotation === 180) return "video-rotate-180";
+
+    return "";
+  };
+
+  // NEW FUNCTION: Manually toggle rotation for a video
+  const toggleRotation = (item, type) => {
+    if (type !== "videos") return;
+
+    const videoId = item.so_media_id;
+    const currentRotation = videoRotations[videoId] || 0;
+
+    // Cycle through rotations: 0 -> 90 -> 270 -> 180 -> 0
+    let newRotation = 0;
+    if (currentRotation === 0) newRotation = 90;
+    else if (currentRotation === 90) newRotation = 270;
+    else if (currentRotation === 270) newRotation = 180;
+    else if (currentRotation === 180) newRotation = 0;
+
+    setVideoRotations((prev) => ({
+      ...prev,
+      [videoId]: newRotation,
+    }));
+  };
+
   // Toggle section visibility (only for "all" view)
   const toggleSection = (section) => {
     setOpenSections((prev) => ({
@@ -226,7 +339,6 @@ const MediaGallery = () => {
     }));
   };
 
-  // Get file URL based on type (updated for B2)
   // Get file URL based on type (updated for B2)
   const getFileUrl = (item, type) => {
     // For videos, use video_url_proxy if available
@@ -356,7 +468,7 @@ const MediaGallery = () => {
 
       const response = await axios.delete(
         `${import.meta.env.VITE_API_URL}/api/subOperationMedia/${endpoint}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -549,12 +661,15 @@ const MediaGallery = () => {
                 type === "videos"
                   ? "media"
                   : type === "images"
-                  ? "img"
-                  : type === "techPacks"
-                  ? "tech"
-                  : "folder"
+                    ? "img"
+                    : type === "techPacks"
+                      ? "tech"
+                      : "folder"
               }_id`
             ];
+
+          const rotationClass = getRotationClass(item, type);
+          const isRotating = rotationDetectionLoading[itemId];
 
           return (
             <motion.div
@@ -566,7 +681,7 @@ const MediaGallery = () => {
               {/* Media Preview */}
               <div className="relative w-full aspect-video bg-gradient-to-br from-gray-50 to-gray-100 group">
                 {type === "videos" ? (
-                  <div className="w-full h-full">
+                  <div className={`w-full h-full ${rotationClass}`}>
                     <Plyr
                       source={{
                         type: "video",
@@ -580,101 +695,29 @@ const MediaGallery = () => {
                       }}
                       options={{
                         controls: [
-                          "play-large", // Large play button in center
-                          //"rewind", // rewind button
-                          //"play",
-                          //"fast-forward", // fast forward button
-                          "progress", // Progress bar - made more prominent
+                          "play-large",
+                          "progress",
                           "current-time",
                           "duration",
                           "mute",
-                          // "volume",
-                          //"settings", // Quality, speed, etc.
-                          "pip", // Picture-in-picture
-                          //"airplay", // AirPlay support if available
+                          "pip",
                           "fullscreen",
                         ],
-
-                        // Better progress/seeking settings
-                        seekTime: 5, // Reduce seek time to 5 seconds for finer control
+                        seekTime: 5,
                         keyboard: {
                           focused: true,
                           global: true,
-                          seekStep: 5, // Keyboard arrow keys will seek 5 seconds
+                          seekStep: 5,
                         },
-
-                        // Display settings
                         ratio: "16:9",
                         clickToPlay: true,
-                        hideControls: false, // Keep controls visible
-                        resetOnEnd: false, // Don't reset when video ends
-
-                        // Tooltip improvements
+                        hideControls: false,
+                        resetOnEnd: false,
                         tooltips: {
                           controls: true,
                           seek: true,
                         },
-
-                        // Captions settings (if you have captions)
-                        captions: {
-                          active: false,
-                          language: "auto",
-                          update: false,
-                        },
-
-                        // Quality settings (if you have multiple qualities)
-                        quality: {
-                          default: 0, // Auto
-                          options: [0], // Only auto for now
-                          forced: false,
-                          onChange: null,
-                        },
-
-                        // Storage for user preferences
-                        storage: { enabled: true, key: "plyr" },
-
-                        // Speed control options
-                        speed: {
-                          selected: 1,
-                          options: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-                        },
-
-                        // Vimeo/YouTube settings (if applicable)
-                        vimeo: {
-                          byline: false,
-                          portrait: false,
-                          title: false,
-                          speed: true,
-                          transparent: false,
-                        },
-
-                        // YouTube settings (if applicable)
-                        youtube: {
-                          noCookie: true,
-                          rel: 0,
-                          showinfo: 0,
-                          iv_load_policy: 3,
-                          modestbranding: 1,
-                        },
-
-                        // Prevent context menu
                         disableContextMenu: true,
-
-                        // Custom listeners for better UX
-                        listeners: {
-                          seek: (event) => {
-                            console.log(
-                              "Seeking to:",
-                              event.detail.plyr.currentTime
-                            );
-                          },
-                          playing: () => {
-                            console.log("Video playing");
-                          },
-                          pause: () => {
-                            console.log("Video paused");
-                          },
-                        },
                       }}
                     />
                   </div>
@@ -694,7 +737,7 @@ const MediaGallery = () => {
                         // Show fallback icon
                         const fallback =
                           e.target.parentElement.querySelector(
-                            ".image-fallback"
+                            ".image-fallback",
                           );
                         if (fallback) fallback.classList.remove("hidden");
                       }}
@@ -720,6 +763,24 @@ const MediaGallery = () => {
                       <FaCloud className="text-xs" />
                       <span>B2</span>
                     </div>
+                  </button>
+                )}
+
+                {/* Rotation toggle button for videos */}
+                {type === "videos" && (
+                  <button
+                    onClick={() => toggleRotation(item, type)}
+                    disabled={isRotating}
+                    className="absolute top-2 right-2 bg-black bg-opacity-70 text-white p-2 rounded-full hover:bg-opacity-90 transition-all z-10 disabled:opacity-50"
+                    title="Toggle rotation"
+                  >
+                    {isRotating ? (
+                      <BeatLoader size={5} color="#ffffff" />
+                    ) : (
+                      <FaRedoAlt
+                        className={`text-sm ${rotationClass ? "text-green-400" : ""}`}
+                      />
+                    )}
                   </button>
                 )}
 
@@ -762,6 +823,16 @@ const MediaGallery = () => {
                       <span className="font-medium">Type:</span>
                       <span className="text-xs uppercase">
                         {item.file_type.split("/")[1] || item.file_type}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Rotation indicator for videos */}
+                  {type === "videos" && videoRotations[itemId] && (
+                    <div className="flex justify-between">
+                      <span className="font-medium">Rotation:</span>
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                        {videoRotations[itemId]}° fixed
                       </span>
                     </div>
                   )}
@@ -915,8 +986,8 @@ const MediaGallery = () => {
                   {formatFileSize(
                     mediaData[config.type].reduce(
                       (sum, item) => sum + (item.file_size || 0),
-                      0
-                    )
+                      0,
+                    ),
                   )}
                   )
                 </span>
@@ -958,7 +1029,7 @@ const MediaGallery = () => {
           {renderMediaGrid(
             mediaData[config.type],
             config.type,
-            loadingStates[config.type]
+            loadingStates[config.type],
           )}
         </div>
       </div>
@@ -1012,8 +1083,33 @@ const MediaGallery = () => {
         icon={<FaFolder className="text-orange-500" />}
         count={mediaData.folders.length}
       />
+
+      {/* Add CSS for rotation */}
+      <style jsx>{`
+        .video-rotate-90 {
+          transform: rotate(90deg);
+          transform-origin: center center;
+          width: 100%;
+          height: 100%;
+        }
+
+        .video-rotate-180 {
+          transform: rotate(180deg);
+          transform-origin: center center;
+          width: 100%;
+          height: 100%;
+        }
+
+        .video-rotate-270 {
+          transform: rotate(270deg);
+          transform-origin: center center;
+          width: 100%;
+          height: 100%;
+        }
+      `}</style>
     </div>
   );
 };
 
 export default MediaGallery;
+  

@@ -40,6 +40,9 @@ import NeedleThreatsPage from "./pages/NeedleThreatsPage";
 import NotificationPage from "./pages/NotificationPage";
 import ManageUsersPage from "./pages/admin/ManageUsersPage";
 import AddTechnicalDataPage from "./pages/AddTechnicalDataPage";
+import HelperWorkstationPage from "./pages/HelperWorkstationPage";
+import HelperVideoGallery from "./pages/HelperVideoGallery";
+import HelperImageGallery from "./pages/HelperImageGallery";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -98,7 +101,7 @@ const App = () => {
 
           {/* to create new layout */}
           <Route
-            path="/layout/create-new-layout"
+            path="/layout/create-new-layout/:styleId?"
             element={<AddLayoutPage userRole={user?.userRole} />}
           />
 
@@ -107,8 +110,18 @@ const App = () => {
 
           {/* to display workstations */}
           <Route
+            path="/workstation/list-view/:layoutId/:styleId/:styleNo"
+            element={<ViewWorkstationPage userRole={user?.userRole} />}
+          />
+          <Route
             path="/workstation/list-view"
             element={<ViewWorkstationPage userRole={user?.userRole} />}
+          />
+
+          {/* helper workstation list */}
+          <Route
+            path="/helper-workstation/:styId/:layoutId"
+            element={<HelperWorkstationPage />}
           />
 
           {/* to edit workstation */}
@@ -131,6 +144,15 @@ const App = () => {
           <Route
             path="/sub-operation/tech_packs"
             element={<TechPackGallery />}
+          />
+          {/* to watch helper operation videos and images */}
+          <Route
+            path="/helper/videos/:hOpId"
+            element={<HelperVideoGallery />}
+          />
+          <Route
+            path="/helper/images/:hOpId"
+            element={<HelperImageGallery />}
           />
           <Route path="/style/documents" element={<DocumentGallery />} />
 

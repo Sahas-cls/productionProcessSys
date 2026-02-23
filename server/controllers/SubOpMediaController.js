@@ -9,261 +9,38 @@ const {
 } = require("../models");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
+const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
-const B2SubOpStorage = require("../utils/b2SubOpStorage");
 const axios = require("axios");
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-// to upload video
 const b2SubOpStorage = require("../utils/b2SubOpStorage");
 require("dotenv").config();
 
-// exports.uploadVideo = async (req, res, next) => {
-//   console.log("📤 [B2] Video upload request received");
-//   console.log("📋 Request body:", req.body);
-//   console.log(
-//     "📁 File details:",
-//     req.file
-//       ? {
-//           originalname: req.file.originalname,
-//           mimetype: req.file.mimetype,
-//           size: req.file.size,
-//           bufferSize: req.file.buffer?.length || 0,
-//         }
-//       : "No file"
-//   );
-
-//   let uploadResult = null;
-//   let dbRecord = null;
-
-//   try {
-//     // Check if file uploaded
-//     if (!req.file) {
-//       console.log("❌ No file uploaded");
-//       return res.status(400).json({
-//         message: "No file uploaded",
-//         success: false,
-//       });
-//     }
-
-//     const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
-
-//     // Validate required fields
-//     if (!styleNo || !moId || !sopId || !subOpId) {
-//       console.log("❌ Missing required fields:", {
-//         styleNo,
-//         moId,
-//         sopId,
-//         subOpId,
-//       });
-//       return res.status(400).json({
-//         message:
-//           "Missing required fields: styleNo, moId, sopId, and subOpId are required",
-//         success: false,
-//       });
-//     }
-
-//     // Generate filename with timestamp
-//     const ext = path.extname(req.file.originalname).toLowerCase();
-//     const now = new Date();
-//     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-//       2,
-//       "0"
-//     )}${String(now.getDate()).padStart(2, "0")}_${String(
-//       now.getHours()
-//     ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-//       now.getSeconds()
-//     ).padStart(2, "0")}`;
-
-//     const sanitizedSopName = (sopName || "unknown")
-//       .replace(/[/\\?%*:|"<>]/g, "_")
-//       .replace(/\s+/g, "_");
-
-//     // Generate filename - use generatedName from middleware if available
-//     const filename =
-//       req.file.generatedName ||
-//       `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
-
-//     console.log("📁 Generated filename:", filename);
-//     console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
-
-//     // Validate file buffer
-//     if (!req.file.buffer || req.file.buffer.length === 0) {
-//       console.log("❌ File buffer is empty");
-//       return res.status(400).json({
-//         message: "Uploaded file is empty or corrupted",
-//         success: false,
-//       });
-//     }
-
-//     // ==================== UPLOAD TO BACKBLAZE B2 ====================
-//     console.log("☁️  Uploading to Backblaze B2...");
-
-//     try {
-//       // Upload file to B2
-//       uploadResult = await b2SubOpStorage.uploadSubOpFile(
-//         req.file.buffer,
-//         filename,
-//         "video", // media type for folder organization
-//         subOpId // subOpId for folder organization
-//       );
-
-//       console.log("✅ B2 Upload Successful:", {
-//         filePath: uploadResult.filePath,
-//         fileId: uploadResult.fileId,
-//         fileName: uploadResult.fileName,
-//       });
-//     } catch (b2Error) {
-//       console.error("❌ B2 Upload Failed:", {
-//         error: b2Error.message,
-//         code: b2Error.code,
-//         stack: b2Error.stack?.split("\n")[0],
-//       });
-
-//       let errorMessage = "Failed to upload video to cloud storage";
-//       let statusCode = 500;
-
-//       if (
-//         b2Error.code === "AccessDenied" ||
-//         b2Error.code === "InvalidAccessKeyId"
-//       ) {
-//         errorMessage = "Cloud storage authentication failed";
-//         statusCode = 503;
-//       } else if (b2Error.code === "NoSuchBucket") {
-//         errorMessage = "Cloud storage bucket not found";
-//         statusCode = 503;
-//       } else if (
-//         b2Error.message.includes("ENOTFOUND") ||
-//         b2Error.message.includes("ECONNREFUSED")
-//       ) {
-//         errorMessage = "Cannot connect to cloud storage";
-//         statusCode = 503;
-//       }
-
-//       return res.status(statusCode).json({
-//         message: errorMessage,
-//         error:
-//           process.env.NODE_ENV === "development" ? b2Error.message : undefined,
-//         success: false,
-//         storage: "backblaze_b2",
-//       });
-//     }
-
-//     // ==================== SAVE TO DATABASE ====================
-//     console.log("💾 Saving to database...");
-
-//     try {
-//       dbRecord = await SubOperationMedia.create({
-//         style_id: styleId,
-//         operation_id: moId,
-//         sub_operation_id: sopId,
-//         sub_operation_name: sopName || null,
-//         media_url: uploadResult.filePath, // Store B2 file path
-//         video_url: uploadResult.filePath, // Store B2 file path
-//         // NEW FIELDS:
-//         b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
-//         file_size: req.file.size,
-//         original_filename: req.file.originalname,
-//         uploaded_by: req.user?.userId || null,
-//         file_type: req.file.mimetype,
-//       });
-
-//       console.log("✅ Database record created:", {
-//         so_media_id: dbRecord.so_media_id,
-//         media_url: dbRecord.media_url,
-//         b2_file_id: dbRecord.b2_file_id,
-//       });
-//     } catch (dbError) {
-//       console.error("❌ Database save failed:", dbError);
-
-//       // Attempt to delete from B2 since DB save failed
-//       if (uploadResult && uploadResult.fileId) {
-//         try {
-//           console.log("🧹 Cleaning up B2 file after DB failure...");
-//           await b2SubOpStorage.deleteFile(
-//             uploadResult.fileId,
-//             uploadResult.filePath
-//           );
-//           console.log("✅ B2 file cleaned up");
-//         } catch (cleanupError) {
-//           console.error("❌ Failed to clean up B2 file:", cleanupError);
-//         }
-//       }
-
-//       return res.status(500).json({
-//         message: "Failed to save video record to database",
-//         error:
-//           process.env.NODE_ENV === "development" ? dbError.message : undefined,
-//         success: false,
-//       });
-//     }
-
-//     // ==================== SUCCESS RESPONSE ====================
-//     console.log("🎉 Video upload completed successfully!");
-
-//     res.status(201).json({
-//       message: "Video uploaded to cloud storage successfully",
-//       success: true,
-//       data: {
-//         so_media_id: dbRecord.so_media_id,
-//         media_url: uploadResult.filePath,
-//         video_url: uploadResult.filePath,
-//         video_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
-//         file_name: uploadResult.fileName,
-//         original_filename: req.file.originalname,
-//         file_size: req.file.size,
-//         file_type: req.file.mimetype,
-//         sub_operation_name: dbRecord.sub_operation_name,
-//         uploaded_at: dbRecord.createdAt,
-//         b2_file_id: uploadResult.fileId,
-//       },
-//       storage: {
-//         type: "backblaze_b2",
-//         bucket: process.env.B2_BUCKET_NAME,
-//         region: "eu-central-003",
-//       },
-//     });
-//   } catch (error) {
-//     console.error("❌ Unhandled error in video upload:", {
-//       message: error.message,
-//       stack: error.stack,
-//     });
-
-//     // Final cleanup if anything went wrong
-//     if (uploadResult && uploadResult.fileId) {
-//       try {
-//         console.log("🧹 Final cleanup of B2 file...");
-//         await b2SubOpStorage.deleteFile(
-//           uploadResult.fileId,
-//           uploadResult.filePath
-//         );
-//       } catch (cleanupError) {
-//         console.error("❌ Final cleanup failed:", cleanupError);
-//       }
-//     }
-
-//     // Clean up DB record if it was created
-//     if (dbRecord && dbRecord.so_media_id) {
-//       try {
-//         console.log("🧹 Final cleanup of database record...");
-//         await SubOperationMedia.destroy({
-//           where: { so_media_id: dbRecord.so_media_id },
-//         });
-//       } catch (dbCleanupError) {
-//         console.error("❌ Database cleanup failed:", dbCleanupError);
-//       }
-//     }
-
-//     res.status(500).json({
-//       message: "Failed to upload video",
-//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
-//       success: false,
-//     });
-//   }
-// };
+// Set the ffmpeg path
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 // Helper function to check network path accessibility
-
 exports.uploadVideo = async (req, res, next) => {
+  const {
+    SubOperationMedia,
+    SubOperationImages,
+    SubOperationTechPack,
+    SubOperationFolder,
+    SubOperation,
+    Style,
+    MainOperation,
+  } = require("../models");
+  const path = require("path");
+  const ffmpeg = require("fluent-ffmpeg");
+  const ffmpegPath = require("ffmpeg-static");
+  const fs = require("fs");
+  const axios = require("axios");
+  const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+  const b2SubOpStorage = require("../utils/b2SubOpStorage");
+  require("dotenv").config();
+
+  // Set the ffmpeg path - THIS IS THE KEY LINE
+  ffmpeg.setFfmpegPath(ffmpegPath);
   console.log("📤 [B2] Video upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
@@ -286,263 +63,404 @@ exports.uploadVideo = async (req, res, next) => {
   try {
     // Check if file uploaded
     if (!req.file) {
-      console.log("❌ No file uploaded");
       return res.status(400).json({
         message: "No file uploaded",
         success: false,
       });
     }
 
-    const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
+    const { styleNo, moId, sopId, sopName, subOpId } = req.body;
 
     // Validate required fields
     if (!styleNo || !moId || !sopId || !subOpId) {
-      console.log("❌ Missing required fields:", {
-        styleNo,
-        moId,
-        sopId,
-        subOpId,
-      });
       return res.status(400).json({
-        message:
-          "Missing required fields: styleNo, moId, sopId, and subOpId are required",
+        message: "Missing required fields: styleNo, moId, sopId, subOpId",
+        success: false,
+        received: { styleNo, moId, sopId, subOpId },
+      });
+    }
+
+    // ==================== VALIDATE FOREIGN KEYS ====================
+    // Lookup style_id from styleNo
+    const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
+    if (!styleRecord) {
+      return res.status(400).json({
+        message: `Style with styleNo "${styleNo}" not found`,
+        success: false,
+      });
+    }
+    const styleIdDb = styleRecord.style_id;
+
+    // Optionally: validate moId exists in Operations table
+    const operationExists = await MainOperation.findByPk(moId);
+    if (!operationExists) {
+      return res.status(400).json({
+        message: `Operation with id "${moId}" not found`,
         success: false,
       });
     }
 
-    // Check if it's a video file
-    const isVideo = req.file.mimetype.startsWith("video/");
-    const ext = path.extname(req.file.originalname).toLowerCase();
+    // Optionally: validate subOpId exists in SubOperations table
+    const subOperationExists = await SubOperation.findByPk(subOpId);
+    if (!subOperationExists) {
+      return res.status(400).json({
+        message: `Sub-operation with id "${subOpId}" not found`,
+        success: false,
+      });
+    }
 
     // ==================== VIDEO PROCESSING ====================
+    const isVideo = req.file.mimetype.startsWith("video/");
+    const ext = path.extname(req.file.originalname).toLowerCase();
     let processedBuffer = req.file.buffer;
     let finalFilename = "";
+    let wasNormalized = false;
+    let rotationApplied = null;
 
     if (isVideo) {
-      console.log("🎬 Video file detected, normalizing orientation...");
-
       try {
-        // Create temp directory if it doesn't exist
         const tempDir = path.join(__dirname, "../temp");
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-        // Save original buffer to temp file
         tempInputPath = path.join(tempDir, `input_${Date.now()}${ext}`);
         tempOutputPath = path.join(tempDir, `output_${Date.now()}${ext}`);
-
         await fs.promises.writeFile(tempInputPath, req.file.buffer);
 
-        console.log("🔄 Processing video with FFmpeg...");
+        // Detect rotation metadata and get rotation value
+        const rotationInfo = await new Promise((resolve) => {
+          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
+            if (err) return resolve({ hasRotation: false, rotation: 0 });
 
-        // Run FFmpeg to normalize orientation
-        await new Promise((resolve, reject) => {
-          ffmpeg(tempInputPath)
-            .outputOptions("-metadata:s:v rotate=0") // CRITICAL: Remove rotation metadata
-            .videoFilters("scale=iw:ih,format=yuv420p") // Ensure proper pixel format
-            .on("progress", (progress) => {
-              console.log(
-                `🔄 Processing: ${progress.percent?.toFixed(2) || 0}%`,
+            const videoStream = metadata.streams?.find(
+              (s) => s.codec_type === "video",
+            );
+
+            // Check various places where rotation might be stored
+            let rotation = 0;
+            if (videoStream?.tags?.rotate) {
+              rotation = parseInt(videoStream.tags.rotate);
+            } else if (videoStream?.side_data_list) {
+              const rotateData = videoStream.side_data_list.find(
+                (sd) => sd.rotation !== undefined,
               );
-            })
-            .on("end", () => {
-              console.log("✅ Video processing completed successfully");
-              resolve();
-            })
-            .on("error", (err) => {
-              console.error("❌ FFmpeg processing failed:", err.message);
-              reject(new Error(`Video processing failed: ${err.message}`));
-            })
-            .save(tempOutputPath);
+              if (rotateData) rotation = rotateData.rotation;
+            }
+
+            // Also check display matrix side data
+            if (videoStream?.side_data_list) {
+              const displayMatrix = videoStream.side_data_list.find(
+                (sd) => sd.displaymatrix,
+              );
+              // Parse display matrix if needed for complex rotations
+            }
+
+            resolve({
+              hasRotation: rotation !== 0,
+              rotation: rotation,
+            });
+          });
         });
 
-        // Read processed video
-        processedBuffer = await fs.promises.readFile(tempOutputPath);
+        // ALWAYS physically rotate for web compatibility if rotation detected
+        if (rotationInfo.hasRotation) {
+          console.log(
+            `🔄 Detected rotation: ${rotationInfo.rotation}°, applying physical rotation for web compatibility`,
+          );
 
-        // Update file size for processed video
-        req.file.size = processedBuffer.length;
-        console.log(`📊 Processed video size: ${req.file.size} bytes`);
-      } catch (ffmpegError) {
-        console.error(
-          "❌ Video processing error, uploading original:",
-          ffmpegError.message,
-        );
-        // Continue with original file if processing fails
-        // IMPORTANT: Log warning about potential portrait issues
+          try {
+            // Determine correct transpose filter based on rotation
+            // transpose=1 : 90° clockwise
+            // transpose=2 : 90° counter-clockwise
+            // transpose=0 : 90° counter-clockwise + vertical flip (rare)
+            // transpose=3 : 90° clockwise + vertical flip (rare)
+
+            let transposeFilter = "transpose=1"; // default 90° clockwise
+
+            if (rotationInfo.rotation === 90) {
+              transposeFilter = "transpose=1"; // 90° clockwise
+            } else if (
+              rotationInfo.rotation === 270 ||
+              rotationInfo.rotation === -90
+            ) {
+              transposeFilter = "transpose=2"; // 90° counter-clockwise (for 270°)
+            } else if (rotationInfo.rotation === 180) {
+              // For 180° rotation, use hflip + vflip or transpose twice
+              transposeFilter = "transpose=1,transpose=1"; // 90° twice = 180°
+            }
+
+            // ALWAYS use physical rotation with transcoding for web compatibility
+            await new Promise((resolve, reject) => {
+              ffmpeg(tempInputPath)
+                .videoFilters(transposeFilter)
+                .audioCodec("aac") // Ensure audio compatibility
+                .videoCodec("libx264") // Ensure web-compatible video codec
+                .outputOptions([
+                  "-preset fast", // Balance speed and quality
+                  "-crf 23", // Good quality, reasonable size
+                  "-movflags +faststart", // Optimize for web streaming
+                  "-map_metadata 0", // Preserve other metadata
+                  "-metadata:s:v:0 rotate=0", // Explicitly remove rotation metadata
+                ])
+                .on("start", (commandLine) => {
+                  console.log("FFmpeg command:", commandLine);
+                })
+                .on("end", () => {
+                  console.log("✅ Video rotated successfully");
+                  resolve();
+                })
+                .on("error", (err) => {
+                  console.error("FFmpeg rotation error:", err);
+                  reject(err);
+                })
+                .save(tempOutputPath);
+            });
+
+            // Read the processed file
+            processedBuffer = await fs.promises.readFile(tempOutputPath);
+            req.file.size = processedBuffer.length;
+            wasNormalized = true;
+            rotationApplied = rotationInfo.rotation;
+
+            console.log(`✅ Video successfully rotated and optimized for web`);
+          } catch (rotationError) {
+            console.error(
+              "❌ Rotation failed, falling back to metadata removal only:",
+              rotationError.message,
+            );
+
+            // Fallback: at least try to remove rotation metadata
+            try {
+              await new Promise((resolve, reject) => {
+                ffmpeg(tempInputPath)
+                  .outputOptions([
+                    "-c copy",
+                    "-map_metadata 0",
+                    "-metadata:s:v:0 rotate=0",
+                  ])
+                  .on("end", resolve)
+                  .on("error", reject)
+                  .save(tempOutputPath);
+              });
+
+              processedBuffer = await fs.promises.readFile(tempOutputPath);
+              req.file.size = processedBuffer.length;
+              wasNormalized = true;
+              rotationApplied = "metadata_only";
+              console.log(
+                "⚠️ Removed rotation metadata only (video may still appear rotated in some players)",
+              );
+            } catch (fallbackError) {
+              console.error(
+                "❌ Even metadata removal failed:",
+                fallbackError.message,
+              );
+              // Keep original buffer
+            }
+          }
+        } else {
+          console.log(
+            "✅ No rotation detected, video orientation is web-compatible",
+          );
+
+          // Even if no rotation, ensure web optimization for consistent experience
+          try {
+            await new Promise((resolve, reject) => {
+              ffmpeg(tempInputPath)
+                .videoCodec("libx264")
+                .audioCodec("aac")
+                .outputOptions([
+                  "-preset fast",
+                  "-crf 23",
+                  "-movflags +faststart",
+                ])
+                .on("end", resolve)
+                .on("error", reject)
+                .save(tempOutputPath);
+            });
+
+            processedBuffer = await fs.promises.readFile(tempOutputPath);
+            req.file.size = processedBuffer.length;
+            wasNormalized = true; // Still marked as processed for consistency
+            console.log("✅ Video optimized for web playback");
+          } catch (optimizeError) {
+            console.log(
+              "⚠️ Web optimization skipped, using original:",
+              optimizeError.message,
+            );
+          }
+        }
+      } catch (err) {
         console.warn(
-          "⚠️  Portrait videos may appear stretched/rotated without FFmpeg normalization",
+          "⚠️ Video processing failed, using original buffer:",
+          err.message,
         );
       }
     }
 
     // ==================== GENERATE FILENAME ====================
     const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds(),
-    ).padStart(2, "0")}`;
-
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    // Generate filename - use generatedName from middleware if available
+    // Add web-optimized indicator to filename if processed
+    const webOptimizedSuffix = wasNormalized ? "_web_optimized" : "";
     finalFilename =
       req.file.generatedName ||
-      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}${webOptimizedSuffix}_${dateTime}${ext}`;
 
-    console.log("📁 Generated filename:", finalFilename);
-    console.log("📊 Final buffer size:", processedBuffer.length, "bytes");
-
-    // Validate buffer
     if (!processedBuffer || processedBuffer.length === 0) {
-      console.log("❌ File buffer is empty after processing");
-      return res.status(400).json({
-        message: "Processed file is empty or corrupted",
-        success: false,
-      });
+      return res
+        .status(400)
+        .json({ message: "Processed file is empty", success: false });
     }
 
     // ==================== UPLOAD TO BACKBLAZE B2 ====================
-    console.log("☁️  Uploading to Backblaze B2...");
+    uploadResult = await b2SubOpStorage.uploadSubOpFile(
+      processedBuffer,
+      finalFilename,
+      "video",
+      subOpId,
+    );
 
-    try {
-      // Upload file to B2
-      uploadResult = await b2SubOpStorage.uploadSubOpFile(
-        processedBuffer, // Use processed buffer instead of original
-        finalFilename,
-        "video", // media type for folder organization
-        subOpId, // subOpId for folder organization
+    //NOTE ==================== FORCE SIZE UNDER 100MB ====================
+    const MAX_SIZE_MB = 95;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+    if (processedBuffer.length > MAX_SIZE_BYTES) {
+      console.log("🎯 Applying size control compression...");
+
+      const getVideoDuration = () =>
+        new Promise((resolve) => {
+          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
+            if (err) return resolve(60); // fallback duration
+            const duration = metadata.format?.duration || 60;
+            resolve(duration);
+          });
+        });
+
+      const duration = await getVideoDuration();
+      const audioBitrate = 128000; // 128k
+      const targetSizeBits = MAX_SIZE_BYTES * 8;
+
+      let videoBitrate = Math.floor(targetSizeBits / duration) - audioBitrate;
+
+      // Clamp bitrate between 800k and 2500k
+      videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000));
+
+      const bitrateK = Math.floor(videoBitrate / 1000) + "k";
+
+      console.log(`📉 Calculated video bitrate: ${bitrateK}`);
+
+      const sizeControlledPath = path.join(
+        path.dirname(tempOutputPath),
+        `size_control_${Date.now()}.mp4`,
       );
 
-      console.log("✅ B2 Upload Successful:", {
-        filePath: uploadResult.filePath,
-        fileId: uploadResult.fileId,
-        fileName: uploadResult.fileName,
-        processed: isVideo ? "yes" : "n/a",
-      });
-    } catch (b2Error) {
-      console.error("❌ B2 Upload Failed:", {
-        error: b2Error.message,
-        code: b2Error.code,
-        stack: b2Error.stack?.split("\n")[0],
+      await new Promise((resolve, reject) => {
+        ffmpeg(tempInputPath)
+          .videoCodec("libx264")
+          .audioCodec("aac")
+          .outputOptions([
+            "-preset veryfast",
+            "-movflags +faststart",
+            "-vf scale='min(1280,iw)':-2",
+            "-b:v " + bitrateK,
+            "-maxrate " + bitrateK,
+            "-bufsize 2M",
+            "-b:a 128k",
+          ])
+          .on("end", resolve)
+          .on("error", reject)
+          .save(sizeControlledPath);
       });
 
-      let errorMessage = "Failed to upload video to cloud storage";
-      let statusCode = 500;
+      let finalBuffer = await fs.promises.readFile(sizeControlledPath);
 
-      if (
-        b2Error.code === "AccessDenied" ||
-        b2Error.code === "InvalidAccessKeyId"
-      ) {
-        errorMessage = "Cloud storage authentication failed";
-        statusCode = 503;
-      } else if (b2Error.code === "NoSuchBucket") {
-        errorMessage = "Cloud storage bucket not found";
-        statusCode = 503;
-      } else if (
-        b2Error.message.includes("ENOTFOUND") ||
-        b2Error.message.includes("ECONNREFUSED")
-      ) {
-        errorMessage = "Cannot connect to cloud storage";
-        statusCode = 503;
+      // SECOND PASS IF STILL TOO BIG
+      if (finalBuffer.length > MAX_SIZE_BYTES) {
+        console.log("🔁 Second compression pass...");
+
+        const reducedBitrate = Math.floor(videoBitrate * 0.8);
+        const reducedBitrateK = Math.floor(reducedBitrate / 1000) + "k";
+
+        const secondPassPath = path.join(
+          path.dirname(tempOutputPath),
+          `second_pass_${Date.now()}.mp4`,
+        );
+
+        await new Promise((resolve, reject) => {
+          ffmpeg(tempInputPath)
+            .videoCodec("libx264")
+            .audioCodec("aac")
+            .outputOptions([
+              "-preset veryfast",
+              "-movflags +faststart",
+              "-vf scale='min(1280,iw)':-2",
+              "-b:v " + reducedBitrateK,
+              "-maxrate " + reducedBitrateK,
+              "-bufsize 2M",
+              "-b:a 128k",
+            ])
+            .on("end", resolve)
+            .on("error", reject)
+            .save(secondPassPath);
+        });
+
+        finalBuffer = await fs.promises.readFile(secondPassPath);
+        await fs.promises.unlink(secondPassPath);
       }
 
-      return res.status(statusCode).json({
-        message: errorMessage,
-        error:
-          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
-        success: false,
-        storage: "backblaze_b2",
-      });
+      processedBuffer = finalBuffer;
+      req.file.size = finalBuffer.length;
+
+      await fs.promises.unlink(sizeControlledPath);
+
+      console.log(
+        `✅ Final compressed size: ${(processedBuffer.length / (1024 * 1024)).toFixed(2)} MB`,
+      );
     }
 
     // ==================== SAVE TO DATABASE ====================
-    console.log("💾 Saving to database...");
-
-    try {
-      dbRecord = await SubOperationMedia.create({
-        style_id: styleId,
-        operation_id: moId,
-        sub_operation_id: sopId,
-        sub_operation_name: sopName || null,
-        media_url: uploadResult.filePath, // Store B2 file path
-        video_url: uploadResult.filePath, // Store B2 file path
-        // NEW FIELDS:
-        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
-        file_size: req.file.size, // Updated size after processing
-        original_filename: req.file.originalname,
-        uploaded_by: req.user?.userId || null,
-        file_type: req.file.mimetype,
-        processed_with_ffmpeg: isVideo, // Track if video was processed
-      });
-
-      console.log("✅ Database record created:", {
-        so_media_id: dbRecord.so_media_id,
-        media_url: dbRecord.media_url,
-        b2_file_id: dbRecord.b2_file_id,
-        processed: dbRecord.processed_with_ffmpeg ? "yes" : "no",
-      });
-    } catch (dbError) {
-      console.error("❌ Database save failed:", dbError);
-
-      // Attempt to delete from B2 since DB save failed
-      if (uploadResult && uploadResult.fileId) {
-        try {
-          console.log("🧹 Cleaning up B2 file after DB failure...");
-          await b2SubOpStorage.deleteFile(
-            uploadResult.fileId,
-            uploadResult.filePath,
-          );
-          console.log("✅ B2 file cleaned up");
-        } catch (cleanupError) {
-          console.error("❌ Failed to clean up B2 file:", cleanupError);
-        }
-      }
-
-      return res.status(500).json({
-        message: "Failed to save video record to database",
-        error:
-          process.env.NODE_ENV === "development" ? dbError.message : undefined,
-        success: false,
-      });
-    }
+    dbRecord = await SubOperationMedia.create({
+      style_id: styleIdDb,
+      operation_id: moId,
+      sub_operation_id: subOpId,
+      sub_operation_name: sopName || null,
+      media_url: uploadResult.filePath,
+      video_url: uploadResult.filePath,
+      b2_file_id: uploadResult.fileId,
+      file_size: req.file.size,
+      original_filename: req.file.originalname,
+      uploaded_by: req.user?.userId || null,
+      file_type: req.file.mimetype,
+      processed_with_ffmpeg: wasNormalized,
+      rotation_fixed: rotationApplied !== null,
+      original_rotation: rotationApplied,
+    });
 
     // ==================== CLEANUP TEMP FILES ====================
-    if (tempInputPath && fs.existsSync(tempInputPath)) {
-      try {
-        await fs.promises.unlink(tempInputPath);
-        console.log("🧹 Cleaned up temp input file");
-      } catch (cleanupError) {
-        console.error("❌ Failed to clean temp input:", cleanupError);
-      }
-    }
-
-    if (tempOutputPath && fs.existsSync(tempOutputPath)) {
-      try {
-        await fs.promises.unlink(tempOutputPath);
-        console.log("🧹 Cleaned up temp output file");
-      } catch (cleanupError) {
-        console.error("❌ Failed to clean temp output:", cleanupError);
-      }
+    try {
+      [tempInputPath, tempOutputPath].forEach(async (p) => {
+        if (p && fs.existsSync(p)) {
+          await fs.promises.unlink(p);
+          console.log(`🧹 Cleaned up temp file: ${p}`);
+        }
+      });
+    } catch (cleanupError) {
+      console.warn("⚠️ Temp file cleanup warning:", cleanupError.message);
     }
 
     // ==================== SUCCESS RESPONSE ====================
-    console.log("🎉 Video upload completed successfully!");
-
     res.status(201).json({
-      message: "Video uploaded to cloud storage successfully",
+      message: "Video uploaded successfully",
       success: true,
       data: {
         so_media_id: dbRecord.so_media_id,
         media_url: uploadResult.filePath,
         video_url: uploadResult.filePath,
-        video_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+        video_url_proxy: `/api/b2-files/${uploadResult.filePath}`,
         file_name: uploadResult.fileName,
         original_filename: req.file.originalname,
         file_size: req.file.size,
@@ -550,7 +468,9 @@ exports.uploadVideo = async (req, res, next) => {
         sub_operation_name: dbRecord.sub_operation_name,
         uploaded_at: dbRecord.createdAt,
         b2_file_id: uploadResult.fileId,
-        orientation_normalized: isVideo, // Frontend can check this
+        orientation_normalized: wasNormalized,
+        rotation_fixed: rotationApplied !== null,
+        web_optimized: true,
       },
       storage: {
         type: "backblaze_b2",
@@ -559,46 +479,43 @@ exports.uploadVideo = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("❌ Unhandled error in video upload:", {
-      message: error.message,
-      stack: error.stack,
-    });
+    console.error("❌ Unhandled error:", error);
 
-    // Cleanup temp files on error
-    [tempInputPath, tempOutputPath].forEach(async (tempPath) => {
-      if (tempPath && fs.existsSync(tempPath)) {
-        try {
-          await fs.promises.unlink(tempPath);
-          console.log("🧹 Cleaned up temp file on error:", tempPath);
-        } catch (cleanupError) {
-          console.error("❌ Failed to clean temp file:", cleanupError);
-        }
-      }
-    });
-
-    // Final cleanup if anything went wrong
-    if (uploadResult && uploadResult.fileId) {
+    // Cleanup B2 file if uploaded
+    if (uploadResult?.fileId) {
       try {
-        console.log("🧹 Final cleanup of B2 file...");
         await b2SubOpStorage.deleteFile(
           uploadResult.fileId,
           uploadResult.filePath,
         );
-      } catch (cleanupError) {
-        console.error("❌ Final cleanup failed:", cleanupError);
+        console.log("🧹 Cleaned up B2 file after error");
+      } catch (b2Error) {
+        console.error("❌ Failed to cleanup B2 file:", b2Error.message);
       }
     }
 
-    // Clean up DB record if it was created
-    if (dbRecord && dbRecord.so_media_id) {
+    // Cleanup database record if created
+    if (dbRecord?.so_media_id) {
       try {
-        console.log("🧹 Final cleanup of database record...");
         await SubOperationMedia.destroy({
           where: { so_media_id: dbRecord.so_media_id },
         });
-      } catch (dbCleanupError) {
-        console.error("❌ Database cleanup failed:", dbCleanupError);
+        console.log("🧹 Cleaned up database record after error");
+      } catch (dbError) {
+        console.error("❌ Failed to cleanup database:", dbError.message);
       }
+    }
+
+    // Cleanup temp files
+    try {
+      [tempInputPath, tempOutputPath].forEach(async (p) => {
+        if (p && fs.existsSync(p)) {
+          await fs.promises.unlink(p);
+          console.log(`🧹 Cleaned up temp file after error: ${p}`);
+        }
+      });
+    } catch (cleanupError) {
+      console.warn("⚠️ Temp file cleanup warning:", cleanupError.message);
     }
 
     res.status(500).json({

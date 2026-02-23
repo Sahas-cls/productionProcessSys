@@ -6,6 +6,9 @@ const authMiddleware = require("../middlewares/AuthUser");
 // to collect sub operations that have assigned to one given layout
 routes.get("/getLaSubOperations/:id", controllers.getSubOperations);
 
+// to get helper operations
+routes.get("/getLaHelperSubOperations/:id", controllers.getHelperSubOperations);
+
 // to get layout data
 routes.get("/getLayouts", controllers.getLayouts);
 
@@ -18,7 +21,10 @@ routes.post("/create-layout", authMiddleware, controllers.createLayout);
 routes.delete(
   "/deleteLayout/:layoutId",
   authMiddleware,
-  controllers.deleteLayout
+  controllers.deleteLayout,
 );
+
+// to get 1 workstation data according to provided 
+routes.get("/get-layout-data/:styleId", authMiddleware, controllers.getLayoutDetails)
 
 module.exports = routes;

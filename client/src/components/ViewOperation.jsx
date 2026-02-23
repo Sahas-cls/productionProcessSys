@@ -8,13 +8,27 @@ import { IoCloseOutline } from "react-icons/io5";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../hooks/useAuth";
 import { MdDeleteForever, MdPersonOff } from "react-icons/md";
-import { FaArrowDown, FaDropbox, FaReact } from "react-icons/fa";
+import {
+  FaArrowDown,
+  FaChevronRight,
+  FaDropbox,
+  FaPlus,
+  FaReact,
+  FaSearch,
+} from "react-icons/fa";
 import { IoIosArrowDropdown, IoIosArrowDropdownCircle } from "react-icons/io";
 import { FaDeleteLeft } from "react-icons/fa6";
+import { TbTool } from "react-icons/tb";
+import AddTechnicalData from "./technicalDataPage/AddTechnicalData";
+import { ArrowLeftCircleIcon } from "@heroicons/react/24/outline";
+import { MdOutlinePersonAddAlt } from "react-icons/md";
 
 const ViewStyleDetails = () => {
   const navigate = useNavigate();
   const { style_id } = useParams();
+  // const [styleId, setStyleId] = useState(
+  //   useParams.style_id || useParams.styleId,
+  // );
   const apiUrl = import.meta.env.VITE_API_URL;
   const location = useLocation(); //holds the style id
   // console.log("location: ", location);
@@ -26,6 +40,7 @@ const ViewStyleDetails = () => {
     const saved = sessionStorage.getItem("expandedOperations");
     return saved ? JSON.parse(saved) : {};
   });
+  const [layoutData, setLayoutData] = useState({});
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
   const [mainOperationId, setMainOperationId] = useState("");
@@ -35,7 +50,21 @@ const ViewStyleDetails = () => {
   const [lastActiveOp, setLastActiveOp] = useState(
     sessionStorage.getItem("lastActiveOp") || "",
   );
-  console.log("last active op id; ", lastActiveOp);
+  const [isTechnicalDataModalOpen, setIsTechnicalDataModalOpen] =
+    useState(false);
+  const [selectedOperation, setSelectedOperation] = useState(null);
+  const [selectedSubOperation, setSelectedSubOperation] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const searchInputRef = useRef(null);
+  const searchResultsRef = useRef(null);
+
+  console.log("last active op id; ", location.state);
+
   const fetchStyleData = async () => {
     try {
       setLoading(true);
@@ -65,8 +94,45 @@ const ViewStyleDetails = () => {
         text: "Failed to load style data",
         icon: "error",
       });
+      if (error.status === 401) {
+        Swal.fire({
+          title: "You'r session has been expired please login again",
+          icon: "warning",
+        });
+        navigate("/");
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  // NOTE sending request to check is layout exist
+  const fetchLayout = async () => {
+    console.log("sending request to check is layout exist");
+    try {
+      setIsLoading(true);
+      const response = await axios.get(
+        `${apiUrl}/api/layout/get-layout-data/${location.state}`,
+        {
+          withCredentials: true,
+        },
+      );
+      console.log("layout response: ", layoutData);
+      if ((response.status = 200)) {
+        setLayoutData(response?.data?.data || {});
+      }
+      console.log("layout response: ", response);
+    } catch (error) {
+      console.error;
+      if (error.status === 401) {
+        Swal.fire({
+          title: "You'r session has been expired please login again",
+          icon: "warning",
+        });
+        navigate("/");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -74,7 +140,125 @@ const ViewStyleDetails = () => {
 
   useEffect(() => {
     fetchStyleData();
+    fetchLayout();
   }, [style_id]);
+
+  // useEffect(() => {
+  //   if (style_id) {
+  //   }
+  // }, []);
+
+  // Search functionality
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    const performSearch = () => {
+      setIsSearching(true);
+
+      if (!style?.operations) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      const results = [];
+      const query = searchQuery.toLowerCase().trim();
+
+      style.operations.forEach((operation) => {
+        if (operation.subOperations && operation.subOperations.length > 0) {
+          operation.subOperations.forEach((subOp) => {
+            if (
+              subOp.sub_operation_name &&
+              subOp.sub_operation_name.toLowerCase().includes(query)
+            ) {
+              results.push({
+                ...subOp,
+                parentOperation: operation,
+                matchType: "sub-operation",
+                matchField: "name",
+              });
+            }
+
+            // Also search by sub-operation number if needed
+            if (
+              subOp.sub_operation_number &&
+              subOp.sub_operation_number.toLowerCase().includes(query)
+            ) {
+              results.push({
+                ...subOp,
+                parentOperation: operation,
+                matchType: "sub-operation",
+                matchField: "number",
+              });
+            }
+          });
+        }
+      });
+
+      setSearchResults(results);
+      setShowSearchResults(true);
+      setIsSearching(false);
+    };
+
+    // Debounce search to avoid too many searches while typing
+    const debounceTimer = setTimeout(performSearch, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery, style]);
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        searchResultsRef.current &&
+        !searchResultsRef.current.contains(event.target) &&
+        searchInputRef.current &&
+        !searchInputRef.current.contains(event.target)
+      ) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleSearchResultClick = (result) => {
+    // Expand the parent operation
+    setExpandedOperations((prev) => ({
+      ...prev,
+      [result.parentOperation.operation_id]: true,
+    }));
+
+    // Scroll to the sub-operation
+    setTimeout(() => {
+      const element = document.getElementById(
+        `subop-${result.sub_operation_id}`,
+      );
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Highlight temporarily
+        element.classList.add(
+          "bg-yellow-100",
+          "transition-colors",
+          "duration-1000",
+        );
+        setTimeout(() => {
+          element.classList.remove("bg-yellow-100");
+        }, 2000);
+      }
+    }, 400);
+
+    setShowSearchResults(false);
+    setSearchQuery("");
+  };
 
   const handleBack = () => navigate(-1);
 
@@ -89,6 +273,7 @@ const ViewStyleDetails = () => {
     if (!choice.isConfirmed) return;
 
     try {
+      setIsLoading(true);
       setIsDeleting(true);
       const response = await axios.delete(
         `${apiUrl}/api/operationBulleting/deleteBO/${operationId}`,
@@ -111,6 +296,7 @@ const ViewStyleDetails = () => {
       });
     } finally {
       setIsDeleting(false);
+      setIsLoading(false);
     }
   };
 
@@ -145,6 +331,7 @@ const ViewStyleDetails = () => {
     if (!confirmation.isConfirmed) return;
 
     try {
+      setIsLoading(true);
       const response = await axios.delete(
         `${apiUrl}/api/operationBulleting/delete-sub-operation/${subOperationId}`,
         { withCredentials: true },
@@ -165,6 +352,8 @@ const ViewStyleDetails = () => {
         text: "Failed to delete sub-operation",
         icon: "error",
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -183,6 +372,7 @@ const ViewStyleDetails = () => {
 
     // send delete request
     try {
+      setIsLoading(true);
       const response = await axios.delete(
         `${apiUrl}/api/operationBulleting/delete-mo/${operation.operation_id}`,
         { withCredentials: true },
@@ -201,6 +391,8 @@ const ViewStyleDetails = () => {
       window.location.reload();
     } catch (error) {
       console.error("Error while delete main operation: ", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -256,8 +448,24 @@ const ViewStyleDetails = () => {
 
   const userRole = user?.userRole || null;
 
+  const handleAddTechnicalData = (operation, subOperation) => {
+    console.log(`operation ${operation} || subOperation ${subOperation}`);
+    setSelectedOperation(operation);
+    setSelectedSubOperation(subOperation);
+    setIsTechnicalDataModalOpen(true);
+  };
+
   return (
     <div className="container mx-auto p-3 sm:p-4 md:p-6 max-w-7xl">
+      <AddTechnicalData
+        isOpen={isTechnicalDataModalOpen}
+        onClose={() => setIsTechnicalDataModalOpen(false)}
+        styleId={location.state} // Using the style_id from location.state
+        mainOperation={selectedOperation}
+        subOperation={selectedSubOperation}
+        userRole={user}
+      />
+
       {/* Modal for Adding Main Operation */}
       <AnimatePresence>
         {isAddingMO && (
@@ -360,7 +568,7 @@ const ViewStyleDetails = () => {
             Style Details
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 text-sm sm:text-base">
-            <div className="space-y-2 sm:space-y-3">
+            <div className="space-y-2 sm:space-y-3 justify-self-start">
               <p className="text-gray-600">
                 <span className="font-medium text-gray-700">Name:</span>{" "}
                 {style.style_name}
@@ -371,7 +579,7 @@ const ViewStyleDetails = () => {
               </p>
             </div>
 
-            <div className="space-y-2 sm:space-y-3">
+            {/* <div className="space-y-2 sm:space-y-3">
               <p className="text-gray-600">
                 <span className="font-medium text-gray-700">Created:</span>{" "}
                 {formatDate(style.createdAt)}
@@ -380,14 +588,146 @@ const ViewStyleDetails = () => {
                 <span className="font-medium text-gray-700">Updated:</span>{" "}
                 {formatDate(style.updatedAt)}
               </p>
-            </div>
+            </div> */}
+
+            {!isLoading && (
+              <div className="">
+                <div className="">
+                  {!layoutData?.layout_id ? (
+                    <div className="justify-self-end">
+                      <button
+                        type="button "
+                        className="py-2 px-2 bg-blue-400 text-white rounded-md flex gap-x-2 items-center group shadow-md"
+                        onClick={() =>
+                          navigate(
+                            `/layout/create-new-layout/${location?.state}`,
+                          )
+                        }
+                      >
+                        <FaPlus className="group-hover:scale-125 duration-200" />
+                        <p className="font-semibold">Create new Layout</p>
+                      </button>
+                      {/* No layout created yet */}
+                    </div>
+                  ) : (
+                    <div
+                      className="justify-self-end py-2 relative bg-gradient-to-b from-blue-200 to-blue-200 w-48 border-l-2 border-l-blue-600 flex justify-center items-center rounded-md shadow-md border group cursor-pointer"
+                      onClick={() => {
+                        navigate(
+                          `/workstation/list-view/${layoutData?.layout_id}/${layoutData?.style_id}/${style?.style_no}`,
+                        );
+                      }}
+                    >
+                      <div className="absolute w-8 left-0 group-hover:translate-x-52 opacity-0 group-hover:opacity-100 duration-700 [animation-speed:20]">
+                        <FaChevronRight className="group-hover:text-5xl text-white" />
+                      </div>
+                      <div className="">
+                        <h1 className="font-semibold text-black text-center">
+                          Layout
+                        </h1>
+                        <hr className="border-1 border-black/20 my-1" />
+                        <p className="text-sm text-black">
+                          Workstation Count:{" "}
+                          <span className="font-semibold text-red-400">
+                            {layoutData?.workstation_count}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="mt-4 sm:mt-6 pt-4 border-t border-gray-100">
+          <div className="mt-4 sm:mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <p className="text-gray-600 text-sm sm:text-base">
               <span className="font-medium text-gray-700">Description:</span>{" "}
               {style.style_description || "No description provided"}
             </p>
+            <div className="w-full sm:w-96 relative">
+              <div className="flex items-center">
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() =>
+                    searchQuery.trim() !== "" && setShowSearchResults(true)
+                  }
+                  className="flex-1 py-2.5 px-4 border border-gray-300 max-h-12 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  placeholder="Search by sub-operation name"
+                  aria-label="Search by sub-operation name"
+                />
+                <button className="bg-blue-600 outline-none border-none hover:bg-blue-700 w-12 min-h-12 max-h-12 flex justify-center items-center rounded-r-lg transition-colors duration-200 focus:outline-none focus:ring-blue-500 focus:ring-offset-2">
+                  <FaSearch className="text-white" />
+                </button>
+              </div>
+
+              {/* Search Results Dropdown */}
+              {showSearchResults && (
+                <div
+                  ref={searchResultsRef}
+                  className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-96 overflow-y-auto"
+                >
+                  {isSearching ? (
+                    <div className="p-4 text-center text-gray-500">
+                      <div className="animate-spin inline-block w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+                      Searching...
+                    </div>
+                  ) : searchResults.length > 0 ? (
+                    <div>
+                      <div className="p-2 bg-gray-50 border-b border-gray-200">
+                        <p className="text-xs font-semibold text-gray-500">
+                          Found {searchResults.length} result
+                          {searchResults.length !== 1 ? "s" : ""}
+                        </p>
+                      </div>
+                      {searchResults.map((result, index) => (
+                        <button
+                          key={`${result.sub_operation_id}-${index}`}
+                          onClick={() => handleSearchResultClick(result)}
+                          className="w-full text-left p-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors duration-150"
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-800">
+                                {result.sub_operation_name}
+                                <span className="ml-2 text-xs text-gray-500">
+                                  #{result.sub_operation_number}
+                                </span>
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
+                                  {result.parentOperation?.operation_name}
+                                </span>
+                                {result.matchField === "number" && (
+                                  <span className="ml-2 bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                                    Matched by number
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                            <span className="text-xs text-gray-400">
+                              ID: {result.sub_operation_id}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-8 text-center">
+                      <p className="text-gray-500 mb-1">
+                        No sub-operations found
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        Try searching with a different keyword
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
@@ -427,7 +767,10 @@ const ViewStyleDetails = () => {
                         <div className="">
                           <button
                             type="button"
-                            onClick={() => handleDeleteMainOP(operation)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMainOP(operation);
+                            }}
                           >
                             <MdDeleteForever className="text-2xl hover:scale-125 duration-300 text-red-600" />
                           </button>
@@ -486,7 +829,8 @@ const ViewStyleDetails = () => {
                         {(userRole === "Admin" ||
                           userRole === "SuperAdmin") && (
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setMainOperationId(operation);
                               setIsAddingSubOP(true);
                             }}
@@ -501,6 +845,7 @@ const ViewStyleDetails = () => {
                         <div className="space-y-3">
                           {operation.subOperations.map((subOp) => (
                             <div
+                              id={`subop-${subOp.sub_operation_id}`}
                               key={subOp.sub_operation_id}
                               className={`border border-gray-200 rounded-lg p-3 sm:p-4 ${lastActiveOp == subOp.sub_operation_id ? "bg-blue-100/80" : ""} hover:bg-gray-50 transition-colors duration-200`}
                             >
@@ -535,25 +880,27 @@ const ViewStyleDetails = () => {
                                       </span>{" "}
                                       {formatDate(subOp.createdAt)}
                                     </p>
-                                    {/* {lastActiveOp == subOp.sub_operation_id && (
-                                      <div className="flex items-center gap-x-2 absolute">
-                                        <div className="w-3 h-3 rounded-full bg-green-700 animate-pulse"></div>
-                                        <div className="right-0">Active</div>
-                                      </div>
-                                    )} */}
-                                    {/* <p className="text-gray-600">
-                                      <span className="font-medium">
-                                        Machines:
-                                      </span>{" "}
-                                      {subOp.machines?.length || 0}
-                                    </p> */}
                                   </div>
                                 </div>
                                 {(userRole === "Admin" ||
                                   userRole === "SuperAdmin") && (
                                   <div className="flex gap-2 self-end lg:self-auto relative">
                                     <button
-                                      onClick={() => {
+                                      className="bg-orange-400 px-4 rounded-md text-white hover:bg-orange-500/90 hover:text-black"
+                                      title="Add Technical Data"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAddTechnicalData(
+                                          operation,
+                                          subOp,
+                                        );
+                                      }}
+                                    >
+                                      <TbTool />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         sessionStorage.setItem(
                                           "lastActiveOp",
                                           subOp.sub_operation_id,
@@ -579,7 +926,8 @@ const ViewStyleDetails = () => {
                                     </button>
 
                                     <button
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         sessionStorage.setItem(
                                           "bulletinPosition",
                                           window.scrollY,
@@ -593,14 +941,6 @@ const ViewStyleDetails = () => {
                                     >
                                       Delete
                                     </button>
-                                    {/* <div className="text-black flex items-center w-6 h-6">
-                                      {lastActiveOp ==
-                                        subOp.sub_operation_id && (
-                                        <div className="w-6 bg-green-500 h-6 rounded-full border animate-pulse [animation-duration:1s] flex items-center justify-center">
-                                          <FaReact className="text-white animate-spin [animation-duration:8s] text-xl m-1" />
-                                        </div>
-                                      )}
-                                    </div> */}
                                   </div>
                                 )}
                               </div>
@@ -738,43 +1078,6 @@ const ViewStyleDetails = () => {
                                       </div>
                                     ))}
                                   </div>
-                                  {/* <div className="bg-green-50 border-l-2 border-green-600/30 w-full mt-2 p-3 grid grid-cols-1 md:grid-cols-3 space-y-2">
-                                    <div className="">
-                                      <p className="text-gray-700">
-                                        <span className="font-medium text-sm">
-                                          Needle Size:
-                                        </span>{" "}
-                                        {subOp.needle_count}
-                                      </p>
-                                    </div>
-
-                                    <div className="">
-                                      <p className="text-gray-700">
-                                        <span className="font-medium text-sm">
-                                          Needle Type:
-                                        </span>{" "}
-                                        {subOp?.needle_type?.needle_type}
-                                      </p>
-                                    </div>
-
-                                    <div className="">
-                                      <p className="text-gray-700">
-                                        <span className="font-medium text-sm">
-                                          Thread Type:
-                                        </span>{" "}
-                                        {subOp?.thread?.thread_category}
-                                      </p>
-                                    </div>
-
-                                    <div className="">
-                                      <p className="text-gray-700">
-                                        <span className="font-medium text-sm">
-                                          Looper Type:
-                                        </span>{" "}
-                                        {subOp?.looper?.thread_category}
-                                      </p>
-                                    </div>
-                                  </div> */}
                                 </div>
                               )}
 

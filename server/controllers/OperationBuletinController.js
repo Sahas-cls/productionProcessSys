@@ -340,7 +340,7 @@ exports.createOperation = async (req, res, next) => {
   }
 };
 
-// to create one main operation based on style
+// NOTE to create one main operation based on style
 exports.createMainOperation = async (req, res, next) => {
   //
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
@@ -1556,6 +1556,8 @@ exports.saveOperations = async (req, res, next) => {
 };
 
 exports.addTechnicalData = async (req, res, next) => {
+  // console.log(req.body);
+  // return;
   try {
     // Accept both naming conventions
     const subOperationId = req.body.sub_operation_id || req.body.subOperationId;
@@ -1565,7 +1567,7 @@ exports.addTechnicalData = async (req, res, next) => {
     const folderType = req.body.folder_type || req.body.folderType;
     const finishWidth = req.body.finish_width || req.body.finishWidth;
     const needleGauge = req.body.needle_gauge || req.body.needleGauge;
-    const createdBy = req.body.created_by || req.body.created_by;
+    // const createdBy = req.body.created_by || req.body.created_by;
 
     if (!subOperationId) {
       return res.status(400).json({
@@ -1590,9 +1592,9 @@ exports.addTechnicalData = async (req, res, next) => {
       needle_gauge: needleGauge !== undefined ? needleGauge : null,
     };
 
-    if (createdBy) {
-      updateData.created_by = createdBy;
-    }
+    // if (createdBy) {
+    //   updateData.created_by = createdBy;
+    // }
 
     await subOperation.update(updateData);
 
@@ -1614,6 +1616,7 @@ exports.addTechnicalData = async (req, res, next) => {
 // to get technical data
 exports.getTechnicalData = async (req, res, next) => {
   const { subOperationId } = req.params;
+  console.log("getting technical data: ", req.params);
   try {
     if (!subOperationId) {
       const error = new Error("Sub operation id is empty");
@@ -1638,7 +1641,7 @@ exports.getTechnicalData = async (req, res, next) => {
       error.status = 404;
       throw error;
     }
-
+    // console.log("sub operation data", subOperation);
     res.status(200).json({ data: subOperation });
   } catch (error) {
     console.error(error);

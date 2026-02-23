@@ -21,6 +21,13 @@ module.exports = (sequelize, DataTypes) => {
           key: "sub_operation_id",
         },
       },
+      helper_id: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "helper",
+          key: "helper_id",
+        },
+      },
     },
     {
       tableName: "workstation_submenu",
@@ -41,6 +48,11 @@ module.exports = (sequelize, DataTypes) => {
       as: "suboperatoin",
       onDelete: "CASCADE",
       onUpdate: "CASCADE",
+    });
+
+    WorkstationSubmenu.belongsTo(models.Helper, {
+      foreignKey: "helper_id",
+      as: "helper",
     });
   };
 

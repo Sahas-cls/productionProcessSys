@@ -24,8 +24,9 @@ const CameraOrBrowse = ({
   setIsUploading,
   uploadingData,
   setUploadingMaterial,
+  operationType,
 }) => {
-  // FFmpeg instance
+  // FFmpeg instance (keep but don't rely on it)
   const ffmpegRef = useRef(null);
 
   // States
@@ -48,6 +49,8 @@ const CameraOrBrowse = ({
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [ffmpegLoaded, setFfmpegLoaded] = useState(false);
+  const [ffmpegLoading, setFfmpegLoading] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef(null);
@@ -57,8 +60,9 @@ const CameraOrBrowse = ({
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
   const qualityMenuRef = useRef(null);
+  const progressHandlerRef = useRef(null);
 
-  // Quality presets for compression
+  // Quality presets for compression (keep for UI only)
   const qualityPresets = {
     low: {
       name: "Low",
@@ -90,19 +94,28 @@ const CameraOrBrowse = ({
   useEffect(() => {
     setIsMobile(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
 
-    // Initialize FFmpeg
+    // Try to initialize FFmpeg but don't block uploads
     const loadFFmpeg = async () => {
-      const ffmpeg = new FFmpeg();
-      ffmpegRef.current = ffmpeg;
+      if (ffmpegRef.current || ffmpegLoading) return;
 
+      setFfmpegLoading(true);
       try {
-        await ffmpeg.load({
-          coreURL: "https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.js",
-          wasmURL:
-            "https://unpkg.com/@ffmpeg/core@0.12.6/dist/ffmpeg-core.wasm",
+        const ffmpeg = new FFmpeg();
+        ffmpegRef.current = ffmpeg;
+
+        ffmpeg.on("log", ({ message }) => {
+          console.log("FFmpeg log:", message);
         });
+
+        await ffmpeg.load();
+        setFfmpegLoaded(true);
+        console.log("FFmpeg loaded successfully");
       } catch (error) {
         console.error("FFmpeg load error:", error);
+        setFfmpegLoaded(false);
+        ffmpegRef.current = null;
+      } finally {
+        setFfmpegLoading(false);
       }
     };
     loadFFmpeg();
@@ -126,6 +139,9 @@ const CameraOrBrowse = ({
       document.removeEventListener("mousedown", handleClickOutside);
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (ffmpegRef.current && progressHandlerRef.current) {
+        ffmpegRef.current.off("progress", progressHandlerRef.current);
+      }
     };
   }, []);
 
@@ -178,7 +194,9 @@ const CameraOrBrowse = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch((e) => console.error("Play error:", e));
+        await videoRef.current
+          .play()
+          .catch((e) => console.error("Play error:", e));
       }
 
       setStatus("ready");
@@ -187,7 +205,7 @@ const CameraOrBrowse = ({
       setStatus("error");
       Swal.fire({
         title: "Camera Error",
-        text: error.message,
+        text: error.message || "Unable to access camera",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -197,26 +215,43 @@ const CameraOrBrowse = ({
   // Stop camera
   const stopCamera = () => {
     if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream.getTracks().forEach((track) => {
+        track.stop();
+        track.enabled = false;
+      });
       setMediaStream(null);
     }
   };
 
   // Start recording
   const startRecording = () => {
-    if (!mediaStream) return;
+    if (!mediaStream) {
+      Swal.fire({
+        title: "Camera Not Ready",
+        text: "Please wait for camera to initialize",
+        icon: "warning",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      return;
+    }
 
     recordedChunks.current = [];
     setRecordingTime(0);
     setVideoError(false);
 
+    // Determine best MIME type
+    let mimeType = "video/webm";
+    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
+      mimeType = "video/webm;codecs=vp9,opus";
+    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=h264,opus")) {
+      mimeType = "video/webm;codecs=h264,opus";
+    }
+
     const options = {
-      mimeType: MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-        ? "video/webm;codecs=vp9,opus"
-        : MediaRecorder.isTypeSupported("video/webm;codecs=h264,opus")
-          ? "video/webm;codecs=h264,opus"
-          : "video/webm",
-      videoBitsPerSecond: qualityPresets[videoQuality].bitrate * 1000,
+      mimeType: mimeType,
+      videoBitsPerSecond:
+        qualityPresets[videoQuality]?.bitrate * 1000 || 5000000,
       audioBitsPerSecond: 128000,
     };
 
@@ -224,13 +259,17 @@ const CameraOrBrowse = ({
       const recorder = new MediaRecorder(mediaStream, options);
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           recordedChunks.current.push(event.data);
         }
       };
 
       recorder.onstop = () => {
         try {
+          if (recordedChunks.current.length === 0) {
+            throw new Error("No data recorded");
+          }
+
           const blob = new Blob(recordedChunks.current, {
             type: recorder.mimeType || "video/webm",
           });
@@ -242,6 +281,7 @@ const CameraOrBrowse = ({
           setRecordedBlob(blob);
           setStatus("preview");
           setVideoError(false);
+          setRecordingTime((prev) => prev || Math.floor(prev));
 
           // Force video reload with new source
           if (previewVideoRef.current) {
@@ -250,18 +290,26 @@ const CameraOrBrowse = ({
           }
         } catch (error) {
           console.error("Error in recorder.onstop:", error);
-          // Fallback
-          const blob = new Blob(recordedChunks.current, {
-            type: "video/webm",
+          Swal.fire({
+            title: "Recording Error",
+            text: "Failed to process recording",
+            icon: "error",
+            confirmButtonText: "OK",
           });
-          const videoUrl = URL.createObjectURL(blob);
-
-          setOriginalSize(blob.size);
-          setRecordedVideo(videoUrl);
-          setRecordedBlob(blob);
-          setStatus("preview");
-          setVideoError(false);
+          setStatus("ready");
         }
+      };
+
+      recorder.onerror = (event) => {
+        console.error("MediaRecorder error:", event.error);
+        Swal.fire({
+          title: "Recording Error",
+          text: event.error?.message || "Failed to record video",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        setStatus("ready");
+        setRecording(false);
       };
 
       // Start timer
@@ -278,7 +326,7 @@ const CameraOrBrowse = ({
       setStatus("error");
       Swal.fire({
         title: "Recording Error",
-        text: error.message,
+        text: error.message || "Failed to start recording",
         icon: "error",
         confirmButtonText: "OK",
       });
@@ -288,7 +336,11 @@ const CameraOrBrowse = ({
   // Stop recording
   const stopRecording = () => {
     if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (error) {
+        console.error("Error stopping recording:", error);
+      }
       if (timerRef.current) clearInterval(timerRef.current);
       setRecording(false);
 
@@ -365,7 +417,10 @@ const CameraOrBrowse = ({
         playPromise.catch((error) => {
           console.log("Auto-play prevented:", error.message);
           // Don't treat autoplay prevention as an error
-          if (!error.message.includes("user gesture")) {
+          if (
+            error.name !== "NotAllowedError" &&
+            !error.message.includes("user gesture")
+          ) {
             setVideoError(true);
           }
         });
@@ -373,95 +428,7 @@ const CameraOrBrowse = ({
     }
   }, [status, recordedVideo]);
 
-  // Video compression using FFmpeg
-  const compressVideo = async (inputBlob) => {
-    if (!ffmpegRef.current) {
-      throw new Error("FFmpeg not loaded");
-    }
-
-    const ffmpeg = ffmpegRef.current;
-
-    setCompressProgress(30);
-
-    // Write input file to FFmpeg
-    const inputName = "input.webm";
-    await ffmpeg.writeFile(inputName, await fetchFile(inputBlob));
-
-    setCompressProgress(50);
-
-    // Get video duration for bitrate calculation
-    const tempVideo = document.createElement("video");
-    tempVideo.src = URL.createObjectURL(inputBlob);
-
-    await new Promise((resolve) => {
-      tempVideo.onloadedmetadata = () => {
-        URL.revokeObjectURL(tempVideo.src);
-        resolve();
-      };
-    });
-
-    const duration = tempVideo.duration || 90;
-    const targetSize = 90 * 1024 * 1024;
-    const targetBitrate = Math.floor((targetSize * 8) / duration / 1000) - 100;
-
-    const preset = qualityPresets[videoQuality];
-    const bitrate = Math.min(preset.bitrate, targetBitrate) + "k";
-
-    console.log(
-      `Compressing: ${duration}s, target: ${targetSize} bytes, bitrate: ${bitrate}`,
-    );
-
-    try {
-      // Run FFmpeg command
-      await ffmpeg.exec([
-        "-i",
-        inputName,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "medium",
-        "-b:v",
-        bitrate,
-        "-maxrate",
-        preset.maxrate,
-        "-bufsize",
-        preset.bufsize,
-        "-vf",
-        `scale=${preset.resolution},fps=${preset.fps}`,
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        "-movflags",
-        "+faststart",
-        "output.mp4",
-      ]);
-
-      setCompressProgress(90);
-
-      // Read output file
-      const data = await ffmpeg.readFile("output.mp4");
-      const compressedBlob = new Blob([data], { type: "video/mp4" });
-
-      // Clean up
-      await ffmpeg.deleteFile(inputName);
-      await ffmpeg.deleteFile("output.mp4");
-
-      setCompressedSize(compressedBlob.size);
-      setCompressProgress(100);
-
-      console.log(
-        `Compression complete: ${(compressedBlob.size / (1024 * 1024)).toFixed(2)}MB`,
-      );
-
-      return compressedBlob;
-    } catch (error) {
-      console.error("FFmpeg error:", error);
-      throw new Error("Compression failed: " + error.message);
-    }
-  };
-
-  // Handle file upload
+  // Handle file upload - NO FRONTEND COMPRESSION, let backend handle it
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -478,41 +445,60 @@ const CameraOrBrowse = ({
 
     setOriginalSize(file.size);
 
-    if (file.size > 95 * 1024 * 1024) {
-      // Need compression
-      setStatus("compressing");
-      setCompressing(true);
-      setCompressProgress(0);
+    // Bypass frontend compression completely
+    // Just create video URL and set state, no compression check
+    const videoUrl = URL.createObjectURL(file);
+    setRecordedVideo(videoUrl);
+    setRecordedBlob(file);
 
-      try {
-        const compressedBlob = await compressVideo(file);
-        const videoUrl = URL.createObjectURL(compressedBlob);
+    // Get duration from video
+    const tempVideo = document.createElement("video");
+    tempVideo.src = videoUrl;
+    tempVideo.onloadedmetadata = () => {
+      setRecordingTime(Math.floor(tempVideo.duration));
+    };
 
-        setRecordedVideo(videoUrl);
-        setRecordedBlob(compressedBlob);
-        setStatus("preview");
-        setVideoError(false);
-      } catch (error) {
-        console.error("Compression error:", error);
+    setStatus("preview");
+    setVideoError(false);
+
+    // Clear file input
+    event.target.value = null;
+  };
+
+  // Validate upload data
+  const validateUploadData = () => {
+    if (!uploadingData) {
+      Swal.fire({
+        title: "Missing Data",
+        text: "Operation data is missing",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return false;
+    }
+
+    if (operationType === "HelperOperation") {
+      if (!uploadingData.hoId || !uploadingData.hOpName) {
         Swal.fire({
-          title: "Compression Failed",
-          text: "Unable to compress video. Please try a smaller file.",
+          title: "Missing Data",
+          text: "Helper operation data is incomplete",
           icon: "error",
           confirmButtonText: "OK",
         });
-        setStatus("idle");
-      } finally {
-        setCompressing(false);
-        setCompressProgress(0);
+        return false;
       }
     } else {
-      // No compression needed
-      const videoUrl = URL.createObjectURL(file);
-      setRecordedVideo(videoUrl);
-      setRecordedBlob(file);
-      setStatus("preview");
-      setVideoError(false);
+      if (!uploadingData.sopId || !uploadingData.moId) {
+        Swal.fire({
+          title: "Missing Data",
+          text: "Sub operation data is incomplete",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+        return false;
+      }
     }
+    return true;
   };
 
   // Main upload handler
@@ -528,33 +514,61 @@ const CameraOrBrowse = ({
       return;
     }
 
-    // Final size check
-    if (recordedBlob.size > 100 * 1024 * 1024) {
-      Swal.fire({
-        title: "File Too Large",
-        text: `Video is ${(recordedBlob.size / (1024 * 1024)).toFixed(1)}MB. Maximum is 100MB.`,
-        icon: "error",
-        confirmButtonText: "OK",
-      });
+    // Validate upload data
+    if (!validateUploadData()) {
+      setUploading(false);
       return;
     }
+
+    // REMOVED size check - let backend handle any size
+    // Just show warning but still upload
+    // if (recordedBlob.size > 100 * 1024 * 1024) {
+    //   const confirmUpload = await Swal.fire({
+    //     title: "Large File",
+    //     text: `Video is ${(recordedBlob.size / (1024 * 1024)).toFixed(1)}MB. Large files may take longer to upload and process. Continue?`,
+    //     icon: "warning",
+    //     showCancelButton: true,
+    //     confirmButtonText: "Yes, upload",
+    //     cancelButtonText: "Cancel",
+    //   });
+
+    //   if (!confirmUpload.isConfirmed) {
+    //     return;
+    //   }
+    // }
 
     setUploading(true);
     setUploadProgress(0);
 
     try {
+      console.log("Uploading data:", uploadingData);
+
       const formData = new FormData();
-      formData.append("styleId", uploadingData.style_id || 1);
-      formData.append("styleNo", uploadingData.styleNo);
-      formData.append("moId", uploadingData.moId);
-      formData.append("sopId", uploadingData.sopId);
-      formData.append("sopName", uploadingData.sopName);
-      formData.append("subOpId", uploadingData.sopId);
+
+      // Append operation-specific data
+      if (operationType === "HelperOperation") {
+        formData.append("hOpName", uploadingData.hOpName || "");
+        formData.append("hoId", uploadingData.hoId || "");
+        formData.append("styleNo", uploadingData.styleNo || "");
+      } else {
+        formData.append(
+          "styleId",
+          uploadingData.style_id || uploadingData.styleId || 1,
+        );
+        formData.append("styleNo", uploadingData.styleNo || "");
+        formData.append("moId", uploadingData.moId || "");
+        formData.append("sopId", uploadingData.sopId || "");
+        formData.append("sopName", uploadingData.sopName || "");
+        formData.append(
+          "subOpId",
+          uploadingData.subOpId || uploadingData.sopId || "",
+        );
+      }
 
       // Add recording metadata
-      formData.append("recordingDuration", recordingTime);
+      formData.append("recordingDuration", recordingTime || 0);
       formData.append("videoQuality", videoQuality);
-      formData.append("originalSize", originalSize);
+      formData.append("originalSize", originalSize || recordedBlob.size);
       formData.append("compressedSize", compressedSize || recordedBlob.size);
 
       const timestamp = new Date().getTime();
@@ -570,30 +584,24 @@ const CameraOrBrowse = ({
         fileName = recordedBlob.name;
         mimeType = recordedBlob.type;
       } else {
-        // Create a File object from the Blob
+        // Determine MIME type and filename
         let rawMimeType = recordedBlob.type || "video/webm";
 
-        // Clean up MIME type string (remove codecs part if present)
-        if (rawMimeType.includes(";")) {
-          mimeType = rawMimeType.split(";")[0].trim();
-        } else {
-          mimeType = rawMimeType;
-        }
+        // Clean up MIME type string
+        mimeType = rawMimeType.split(";")[0].trim();
 
-        // Ensure it's a standard video MIME type
         if (mimeType.includes("webm")) {
           mimeType = "video/webm";
-          fileName = `sawing-operation-${timestamp}.webm`;
-        } else if (mimeType.includes("mp4")) {
+          fileName = `operation-recording-${timestamp}.webm`;
+        } else if (mimeType.includes("mp4") || mimeType.includes("mp4")) {
           mimeType = "video/mp4";
-          fileName = `sawing-operation-${timestamp}.mp4`;
+          fileName = `operation-recording-${timestamp}.mp4`;
         } else {
-          // Default to mp4
           mimeType = "video/mp4";
-          fileName = `sawing-operation-${timestamp}.mp4`;
+          fileName = `operation-recording-${timestamp}.mp4`;
         }
 
-        // Create the File object with clean MIME type
+        // Create the File object
         videoFile = new File([recordedBlob], fileName, {
           type: mimeType,
           lastModified: Date.now(),
@@ -601,80 +609,139 @@ const CameraOrBrowse = ({
       }
 
       console.log("Upload details:", {
-        blobType: recordedBlob.type,
-        cleanedType: mimeType,
+        mimeType: mimeType,
         fileName: fileName,
         size: recordedBlob.size,
+        operationType: operationType,
       });
 
-      formData.append("video", videoFile, fileName);
+      formData.append("video", videoFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      console.log("API URL:", apiUrl);
 
-      const response = await axios.post(
-        `${apiUrl}/api/subOperationMedia/uploadVideos`,
-        formData,
-        {
-          withCredentials: true,
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total,
-              );
-              setUploadProgress(percentCompleted);
-            }
-          },
-          timeout: 600000,
+      const endpoint =
+        operationType === "HelperOperation"
+          ? `${apiUrl}/api/helperOpMedia/uploadVideos`
+          : `${apiUrl}/api/subOperationMedia/uploadVideos`;
+
+      console.log("Upload endpoint:", endpoint);
+
+      const response = await axios.post(endpoint, formData, {
+        withCredentials: true,
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-      );
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total,
+            );
+            setUploadProgress(percentCompleted);
+          }
+        },
+        timeout: 600000, // Increased to 10 minutes for large files
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
 
-      if (response.status === 201 && response.data.success === true) {
-        let alertConfig = {
-          title: "Success!",
-          text: "Video uploaded successfully!",
-          icon: "success",
-          timer: 4000,
-          showConfirmButton: false,
-        };
+      console.log("Upload response:", response.data);
 
-        if (response.data.storageType === "local" || response.data.warning) {
-          alertConfig = {
-            title: "Uploaded with Note",
-            text: response.data.warning || "Video saved to local storage",
-            icon: "warning",
-            timer: 5000,
+      if (response.status === 201 || response.status === 200) {
+        if (response.data?.success === true) {
+          let alertConfig = {
+            title: "Success!",
+            text: "Video uploaded successfully!",
+            icon: "success",
+            timer: 4000,
             showConfirmButton: false,
           };
+
+          if (response.data.storageType === "local" || response.data.warning) {
+            alertConfig = {
+              title: "Uploaded with Note",
+              text: response.data.warning || "Video saved to local storage",
+              icon: "warning",
+              timer: 5000,
+              showConfirmButton: false,
+            };
+          }
+
+          await Swal.fire(alertConfig);
+
+          // Cleanup
+          if (recordedVideo) {
+            URL.revokeObjectURL(recordedVideo);
+          }
+          resetState();
+
+          // Close the component
+          if (setUploadingMaterial) {
+            setUploadingMaterial(null);
+          }
+        } else {
+          throw new Error(response.data?.message || "Upload failed");
         }
-
-        Swal.fire(alertConfig);
-
-        // Cleanup
-        if (recordedVideo) URL.revokeObjectURL(recordedVideo);
-        resetState();
       } else {
-        throw new Error(response.data.message || "Upload failed");
+        throw new Error(`Server responded with status ${response.status}`);
       }
     } catch (error) {
       console.error("Upload error:", error);
 
       let errorMessage = "Upload failed. Please try again.";
-      if (error.response?.status === 413) {
-        errorMessage = "File too large for server. Please compress further.";
-      } else if (error.response?.status === 415) {
-        errorMessage = "Unsupported video format.";
-      } else if (error.response?.status === 400) {
+      let errorTitle = "Upload Failed";
+
+      if (error.code === "ECONNABORTED") {
         errorMessage =
-          error.response.data?.message || "Invalid file. Please try again.";
-      } else if (!error.response) {
-        errorMessage = "Network error. Please check your connection.";
+          "Upload timeout. Please try again with a smaller file or better connection.";
+      } else if (error.message?.includes("Network Error")) {
+        errorMessage =
+          "Network error. Please check:\n• Your internet connection\n• Server is running\n• CORS configuration";
+        errorTitle = "Connection Failed";
+      } else if (error.response) {
+        // Server responded with error
+        switch (error.response.status) {
+          case 413:
+            errorMessage = "File too large for server. Please contact support.";
+            break;
+          case 415:
+            errorMessage = "Unsupported video format.";
+            break;
+          case 400:
+            errorMessage =
+              error.response.data?.message ||
+              "Invalid request. Please try again.";
+            break;
+          case 401:
+            errorMessage = "Please login again to upload.";
+            break;
+          case 403:
+            errorMessage = "You don't have permission to upload.";
+            break;
+          case 404:
+            errorMessage =
+              "Upload endpoint not found. Please check server configuration.";
+            break;
+          case 500:
+          case 502:
+          case 503:
+            errorMessage = "Server error. Please try again later.";
+            break;
+          default:
+            errorMessage = `Server error (${error.response.status}). Please try again.`;
+        }
+      } else if (error.request) {
+        errorMessage =
+          "No response from server. Please check:\n• Server is running\n• Network connection\n• Firewall settings";
+        errorTitle = "Server Unreachable";
       }
 
       Swal.fire({
-        title: "Upload Failed",
+        title: errorTitle,
         text: errorMessage,
         icon: "error",
         confirmButtonText: "OK",
+        confirmButtonColor: "#3085d6",
       });
     } finally {
       setUploading(false);
@@ -684,7 +751,9 @@ const CameraOrBrowse = ({
 
   // Reset state
   const resetState = () => {
-    if (recordedVideo) URL.revokeObjectURL(recordedVideo);
+    if (recordedVideo) {
+      URL.revokeObjectURL(recordedVideo);
+    }
     setRecordedVideo(null);
     setRecordedBlob(null);
     setStatus("idle");
@@ -694,7 +763,11 @@ const CameraOrBrowse = ({
     setIsVideoPlaying(false);
     setVideoError(false);
     stopCamera();
-    if (timerRef.current) clearInterval(timerRef.current);
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
     // Reset file input
     if (fileInputRef.current) {
@@ -714,6 +787,19 @@ const CameraOrBrowse = ({
     }
   }, [cameraFacing]);
 
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (recordedVideo) {
+        URL.revokeObjectURL(recordedVideo);
+      }
+      stopCamera();
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="bg-gray-900 min-h-screen p-4 w-full mx-auto text-white">
       {/* Compact Header */}
@@ -731,7 +817,7 @@ const CameraOrBrowse = ({
             >
               <FaCog className="text-sm" />
               <span className="hidden sm:inline">
-                {qualityPresets[videoQuality].name}
+                {qualityPresets[videoQuality]?.name || "Medium"}
               </span>
               <span className="sm:hidden">Quality</span>
             </button>
@@ -772,7 +858,10 @@ const CameraOrBrowse = ({
             className="p-1.5 hover:bg-red-600 rounded-lg transition"
             onClick={() => {
               if (!uploading && !compressing && !recording) {
-                setUploadingMaterial(null);
+                resetState();
+                if (setUploadingMaterial) {
+                  setUploadingMaterial(null);
+                }
               }
             }}
             disabled={uploading || compressing || recording}
@@ -915,7 +1004,7 @@ const CameraOrBrowse = ({
               <ClipLoader size={30} color="#F59E0B" />
               <p className="mt-3 text-lg font-medium">Optimizing Video Size</p>
               <p className="text-sm text-gray-300 mt-2">
-                Compressing for Cloudflare...
+                {ffmpegLoaded ? "Compressing..." : "Loading compressor..."}
               </p>
               <div className="mt-3 w-48 mx-auto bg-gray-700 rounded-full h-2">
                 <div
@@ -948,21 +1037,18 @@ const CameraOrBrowse = ({
             <div className="text-center">
               <div className="text-gray-400 text-xs">Status</div>
               <div
-                className={`font-medium ${recordedBlob.size > 95 * 1024 * 1024 ? "text-red-400" : "text-green-400"}`}
+                className={`font-medium ${
+                  recordedBlob.size > 95 * 1024 * 1024
+                    ? "text-yellow-400"
+                    : "text-green-400"
+                }`}
               >
                 {recordedBlob.size > 95 * 1024 * 1024
-                  ? "Needs Compression"
+                  ? "Will be compressed on server"
                   : "Ready"}
               </div>
             </div>
           </div>
-          {originalSize > recordedBlob.size && (
-            <div className="text-center text-xs text-green-400 mt-2">
-              ✓ Saved{" "}
-              {((originalSize - recordedBlob.size) / (1024 * 1024)).toFixed(1)}
-              MB
-            </div>
-          )}
         </div>
       )}
 
@@ -977,7 +1063,9 @@ const CameraOrBrowse = ({
                   ? "bg-green-500"
                   : status === "preview"
                     ? "bg-blue-500"
-                    : "bg-gray-500"
+                    : status === "compressing"
+                      ? "bg-yellow-500"
+                      : "bg-gray-500"
             }`}
           ></div>
           <span className="text-sm text-gray-300">
@@ -987,6 +1075,7 @@ const CameraOrBrowse = ({
               `Recording - ${formatTime(recordingTime)}`}
             {status === "preview" && "Review your video"}
             {status === "compressing" && "Optimizing video..."}
+            {status === "error" && "Error occurred. Please try again."}
           </span>
         </div>
       </div>
@@ -1140,12 +1229,13 @@ const CameraOrBrowse = ({
           <div className="text-center">
             <span className="inline-flex items-center gap-1 bg-gray-800/50 px-2 py-1 rounded">
               <FaVideo className="text-xs" />
-              Max 100MB • Auto-compression •{" "}
-              {isMobile ? "📱 Mobile" : "🖥️ Desktop"}
+              Server-side compression • {isMobile ? "📱 Mobile" : "🖥️ Desktop"}
             </span>
           </div>
           <div className="text-right">
-            <span>Quality: {qualityPresets[videoQuality].name}</span>
+            <span>
+              Quality: {qualityPresets[videoQuality]?.name || "Medium"}
+            </span>
           </div>
         </div>
       </div>
