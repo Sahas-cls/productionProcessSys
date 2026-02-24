@@ -8,50 +8,179 @@ const util = require("util");
 const execPromise = util.promisify(exec);
 const router = express.Router();
 
-// ==================== DEBUGGING SECTION ====================
-console.log("\n========== ENVIRONMENT VARIABLES DEBUG ==========");
-console.log("Current directory:", __dirname);
-console.log(
-  "Process running as user:",
-  process.env.USERNAME || process.env.USER,
-);
-console.log("Computer name:", process.env.COMPUTERNAME);
+// ==================== PLATFORM DETECTION ====================
+const IS_WINDOWS = process.platform === "win32";
+const IS_LINUX = process.platform === "linux";
 
-// Check if .env variables are loaded
-console.log("\nEnvironment variables status:");
+console.log("\n========== PLATFORM DETECTION ==========");
+console.log("Platform:", process.platform);
 console.log(
-  "NETWORK_USERNAME:",
-  process.env.NETWORK_USERNAME ? "✓ DEFINED" : "✗ UNDEFINED",
+  "Environment:",
+  IS_LINUX ? "🐧 Linux (DigitalOcean Droplet)" : "🪟 Windows",
 );
-console.log(
-  "NETWORK_PASSWORD:",
-  process.env.NETWORK_PASSWORD ? "✓ DEFINED" : "✗ UNDEFINED",
-);
-console.log(
-  "NETWORK_DOMAIN:",
-  process.env.NETWORK_DOMAIN ? "✓ DEFINED" : "✗ UNDEFINED",
-);
-console.log("================================================\n");
-// ==================== END DEBUGGING ====================
+console.log("=========================================\n");
 
 // ==================== NETWORK CONFIGURATION ====================
-// Use the mapped Y: drive that you already have connected
-const MAPPED_DRIVE = "Y:";
-const VIDEOS_FOLDER = "videos";
-const NETWORK_VIDEOS_PATH = path.join(MAPPED_DRIVE, VIDEOS_FOLDER);
+// Windows configuration (local development)
+const WINDOWS_CONFIG = {
+  mappedDrive: "Y:",
+  videosPath: path.join("Y:", "videos"),
+  uncPath: `\\\\192.168.47.127\\operation bulletin assets\\videos`,
+};
 
-// UNC path for reference only
-const UNC_PATH = `\\\\192.168.47.127\\operation bulletin assets\\videos`;
+// Linux configuration (DigitalOcean Droplet)
+const LINUX_CONFIG = {
+  mountPoint: "/mnt/windows_share",
+  videosPath: "/mnt/windows_share/videos",
+  uncPath: `//192.168.47.127/operation bulletin assets/videos`, // Linux-style UNC
+  sharePath: `//192.168.47.127/operation bulletin assets`,
+};
+
+// Select configuration based on platform
+const CONFIG = IS_WINDOWS ? WINDOWS_CONFIG : LINUX_CONFIG;
+const VIDEOS_PATH = CONFIG.videosPath;
 
 console.log("\n========== NETWORK CONFIGURATION ==========");
-console.log("Mapped Drive:", MAPPED_DRIVE);
-console.log("Target Path:", NETWORK_VIDEOS_PATH);
-console.log("UNC Path:", UNC_PATH);
+console.log("Target Path:", VIDEOS_PATH);
+console.log("UNC Path:", CONFIG.uncPath);
+console.log("Platform:", IS_LINUX ? "🐧 Linux" : "🪟 Windows");
 console.log("============================================\n");
 
-// Enhanced function to check mapped drive access with detailed error information
-const checkMappedDriveAccess = () => {
-  console.log("\n🔍 --- Detailed Network Drive Diagnostics ---");
+// ==================== LINUX-SPECIFIC FUNCTIONS ====================
+const checkLinuxMount = async () => {
+  if (!IS_LINUX) return { success: true, diagnostics: [] };
+
+  console.log("\n🔍 --- Checking Linux Mount Configuration ---");
+
+  const diagnostics = {
+    mountPointExists: false,
+    mountPointAccessible: false,
+    videosFolderExists: false,
+    writeAccess: false,
+    mountStatus: null,
+    errors: [],
+  };
+
+  try {
+    // Check 1: Does mount point directory exist?
+    try {
+      diagnostics.mountPointExists = fs.existsSync(CONFIG.mountPoint);
+      if (!diagnostics.mountPointExists) {
+        console.log(`Creating mount point: ${CONFIG.mountPoint}`);
+        fs.mkdirSync(CONFIG.mountPoint, { recursive: true });
+        diagnostics.mountPointExists = true;
+      } else {
+        console.log(`✅ Mount point exists: ${CONFIG.mountPoint}`);
+      }
+    } catch (error) {
+      diagnostics.errors.push(`Failed to create mount point: ${error.message}`);
+    }
+
+    // Check 2: Check if share is mounted
+    try {
+      const { stdout } = await execPromise("mount | grep cifs");
+      diagnostics.mountStatus = stdout;
+
+      if (stdout.includes(CONFIG.sharePath)) {
+        console.log(`✅ Windows share is mounted`);
+      } else {
+        console.log(`⚠️ Windows share not mounted, attempting to mount...`);
+
+        // Try to mount the share
+        const mountCmd = `mount -t cifs "${CONFIG.sharePath}" "${CONFIG.mountPoint}" -o username=${process.env.NETWORK_USERNAME},password=${process.env.NETWORK_PASSWORD},domain=${process.env.NETWORK_DOMAIN || "WORKGROUP"},uid=1000,gid=1000,file_mode=0755,dir_mode=0755,noperm`;
+
+        try {
+          await execPromise(mountCmd);
+          console.log(`✅ Successfully mounted Windows share`);
+        } catch (mountError) {
+          diagnostics.errors.push(
+            `Failed to mount share: ${mountError.message}`,
+          );
+        }
+      }
+    } catch (error) {
+      diagnostics.errors.push(`Error checking mount status: ${error.message}`);
+    }
+
+    // Check 3: Can we access the mount point?
+    try {
+      fs.accessSync(CONFIG.mountPoint, fs.constants.R_OK | fs.constants.W_OK);
+      diagnostics.mountPointAccessible = true;
+      console.log(`✅ Mount point is accessible`);
+    } catch (error) {
+      diagnostics.errors.push(`Mount point not accessible: ${error.message}`);
+    }
+
+    // Check 4: Does videos folder exist?
+    if (diagnostics.mountPointAccessible) {
+      try {
+        diagnostics.videosFolderExists = fs.existsSync(VIDEOS_PATH);
+        if (!diagnostics.videosFolderExists) {
+          console.log(`Creating videos folder: ${VIDEOS_PATH}`);
+          fs.mkdirSync(VIDEOS_PATH, { recursive: true });
+          diagnostics.videosFolderExists = true;
+        } else {
+          console.log(`✅ Videos folder exists`);
+        }
+      } catch (error) {
+        diagnostics.errors.push(
+          `Failed to create videos folder: ${error.message}`,
+        );
+      }
+    }
+
+    // Check 5: Test write access
+    if (diagnostics.videosFolderExists) {
+      const testFile = path.join(VIDEOS_PATH, `test-${Date.now()}.txt`);
+      try {
+        fs.writeFileSync(testFile, "Testing write access on Linux");
+        console.log(`✅ Write access verified`);
+        fs.unlinkSync(testFile);
+        diagnostics.writeAccess = true;
+      } catch (error) {
+        diagnostics.errors.push(`Write test failed: ${error.message}`);
+      }
+    }
+
+    console.log("\n📊 Linux Mount Diagnostic Summary:");
+    console.log(
+      `Mount Point Exists: ${diagnostics.mountPointExists ? "✅" : "❌"}`,
+    );
+    console.log(
+      `Mount Point Accessible: ${diagnostics.mountPointAccessible ? "✅" : "❌"}`,
+    );
+    console.log(
+      `Videos Folder: ${diagnostics.videosFolderExists ? "✅" : "❌"}`,
+    );
+    console.log(`Write Access: ${diagnostics.writeAccess ? "✅" : "❌"}`);
+
+    if (diagnostics.errors.length > 0) {
+      console.log("\n❌ Errors:");
+      diagnostics.errors.forEach((err) => console.log(`  - ${err}`));
+    }
+
+    return {
+      success:
+        diagnostics.mountPointExists &&
+        diagnostics.mountPointAccessible &&
+        diagnostics.videosFolderExists &&
+        diagnostics.writeAccess,
+      diagnostics,
+    };
+  } catch (error) {
+    console.error("❌ Unexpected error:", error);
+    return {
+      success: false,
+      diagnostics: { errors: [`Unexpected error: ${error.message}`] },
+    };
+  }
+};
+
+// ==================== WINDOWS-SPECIFIC FUNCTIONS ====================
+const checkWindowsDrive = () => {
+  if (!IS_WINDOWS) return { success: true, diagnostics: [] };
+
+  console.log("\n🔍 --- Checking Windows Drive Configuration ---");
 
   const diagnostics = {
     driveExists: false,
@@ -62,184 +191,116 @@ const checkMappedDriveAccess = () => {
   };
 
   try {
-    // Check 1: Does the Y: drive exist?
-    try {
-      diagnostics.driveExists = fs.existsSync(MAPPED_DRIVE);
-      if (diagnostics.driveExists) {
-        console.log(`✅ Drive ${MAPPED_DRIVE} exists`);
-      } else {
-        const error = `❌ Drive ${MAPPED_DRIVE} does not exist`;
-        console.log(error);
-        diagnostics.errors.push(error);
+    // Check if drive exists
+    diagnostics.driveExists = fs.existsSync("Y:");
+
+    if (diagnostics.driveExists) {
+      // Check videos folder
+      diagnostics.videosFolderExists = fs.existsSync(VIDEOS_PATH);
+
+      // Test write access
+      if (diagnostics.videosFolderExists) {
+        const testFile = path.join(VIDEOS_PATH, `test-${Date.now()}.txt`);
+        try {
+          fs.writeFileSync(testFile, "test");
+          fs.unlinkSync(testFile);
+          diagnostics.writeAccess = true;
+        } catch (error) {
+          diagnostics.errors.push(`Write test failed: ${error.message}`);
+        }
       }
-    } catch (error) {
-      diagnostics.errors.push(`Error checking drive: ${error.message}`);
+    } else {
+      diagnostics.errors.push("Y: drive not found");
     }
 
-    // Check 2: Check network connections using net use
+    // Check network connections
     try {
-      const { stdout } = execSync("net use", { encoding: "utf8" });
+      const { stdout } = require("child_process").execSync("net use", {
+        encoding: "utf8",
+      });
       const lines = stdout.split("\n");
-      let driveFound = false;
-
       lines.forEach((line) => {
-        if (line.includes(MAPPED_DRIVE)) {
-          driveFound = true;
-          const match = line.match(/([A-Z]:)\s+(\\\\[^\s]+)/);
-          if (match) {
-            const networkPath = match[2];
-            diagnostics.networkConnections.push({
-              drive: MAPPED_DRIVE,
-              networkPath: networkPath,
-              status: line.trim(),
-            });
-            console.log(`✅ Y: drive mapped to: ${networkPath}`);
-          }
+        if (line.includes("Y:")) {
+          diagnostics.networkConnections.push(line.trim());
         }
       });
-
-      if (!driveFound) {
-        const error = `❌ No network connection found for ${MAPPED_DRIVE} drive. Run 'net use' command to check connections.`;
-        diagnostics.errors.push(error);
-        console.log(error);
-      }
     } catch (error) {
       diagnostics.errors.push(`Error checking net use: ${error.message}`);
     }
-
-    // Check 3: Does videos folder exist?
-    if (diagnostics.driveExists) {
-      try {
-        diagnostics.videosFolderExists = fs.existsSync(NETWORK_VIDEOS_PATH);
-        if (diagnostics.videosFolderExists) {
-          console.log(`✅ Videos folder exists: ${NETWORK_VIDEOS_PATH}`);
-        } else {
-          console.log(
-            `⚠️ Videos folder does not exist, attempting to create...`,
-          );
-          try {
-            fs.mkdirSync(NETWORK_VIDEOS_PATH, { recursive: true });
-            diagnostics.videosFolderExists = true;
-            console.log(`✅ Videos folder created successfully`);
-          } catch (mkdirError) {
-            const error = `❌ Failed to create videos folder: ${mkdirError.message}`;
-            diagnostics.errors.push(error);
-            console.log(error);
-          }
-        }
-      } catch (error) {
-        diagnostics.errors.push(
-          `Error checking videos folder: ${error.message}`,
-        );
-      }
-    }
-
-    // Check 4: Test write access
-    if (diagnostics.driveExists && diagnostics.videosFolderExists) {
-      const testFile = path.join(
-        NETWORK_VIDEOS_PATH,
-        `write-test-${Date.now()}.txt`,
-      );
-      try {
-        fs.writeFileSync(testFile, "Testing write access to network drive");
-        console.log(`✅ Write access verified - test file created`);
-        fs.unlinkSync(testFile);
-        console.log(`✅ Test file cleaned up`);
-        diagnostics.writeAccess = true;
-      } catch (writeError) {
-        const error = `❌ Write access failed: ${writeError.message}`;
-        diagnostics.errors.push(error);
-        console.log(error);
-
-        // Check permissions
-        try {
-          const stats = fs.statSync(NETWORK_VIDEOS_PATH);
-          console.log(`📁 Folder permissions:`, {
-            mode: stats.mode,
-            uid: stats.uid,
-            gid: stats.gid,
-          });
-        } catch (statError) {}
-      }
-    }
-
-    // Summary
-    console.log("\n📊 --- Diagnostic Summary ---");
-    console.log(`Drive Exists: ${diagnostics.driveExists ? "✅" : "❌"}`);
-    console.log(
-      `Videos Folder: ${diagnostics.videosFolderExists ? "✅" : "❌"}`,
-    );
-    console.log(`Write Access: ${diagnostics.writeAccess ? "✅" : "❌"}`);
-
-    if (diagnostics.errors.length > 0) {
-      console.log("\n❌ Errors Found:");
-      diagnostics.errors.forEach((err, index) => {
-        console.log(`  ${index + 1}. ${err}`);
-      });
-    } else {
-      console.log(
-        "\n✅ All checks passed - Network drive is ready for writing",
-      );
-    }
-    console.log("----------------------------------------\n");
 
     return {
       success:
         diagnostics.driveExists &&
         diagnostics.videosFolderExists &&
         diagnostics.writeAccess,
-      diagnostics: diagnostics,
+      diagnostics,
     };
   } catch (error) {
-    console.error("❌ Unexpected error during diagnostics:", error);
     return {
       success: false,
-      diagnostics: {
-        errors: [`Unexpected error: ${error.message}`],
-      },
+      diagnostics: { errors: [`Unexpected error: ${error.message}`] },
     };
   }
 };
 
+// ==================== MAIN STORAGE CHECK ====================
+const checkStorageAccess = async () => {
+  console.log("\n🔍 --- Running Platform-Specific Storage Diagnostics ---");
+
+  let result;
+  if (IS_LINUX) {
+    result = await checkLinuxMount();
+  } else {
+    result = checkWindowsDrive();
+  }
+
+  if (!result.success) {
+    const errorDetails = {
+      message: "STORAGE NOT ACCESSIBLE",
+      platform: IS_LINUX ? "linux" : "windows",
+      targetPath: VIDEOS_PATH,
+      uncPath: CONFIG.uncPath,
+      diagnostics: result.diagnostics,
+      troubleshooting: IS_LINUX
+        ? [
+            "1. Install cifs-utils: sudo apt-get install cifs-utils -y",
+            "2. Create mount point: sudo mkdir -p /mnt/windows_share",
+            "3. Test connection: smbclient -L //192.168.47.127 -U administrator",
+            "4. Mount manually: sudo mount -t cifs '//192.168.47.127/operation bulletin assets' /mnt/windows_share -o username=administrator",
+            "5. Check credentials in .env file",
+            "6. Ensure network connectivity to 192.168.47.127 (port 445)",
+          ]
+        : [
+            "1. Check if Y: drive is mapped: Run 'net use' in Command Prompt",
+            "2. Verify network path: Should be mapped to \\\\192.168.47.127\\operation bulletin assets",
+            "3. Ensure 'videos' folder exists on Y: drive",
+            "4. Check Windows credentials",
+          ],
+    };
+
+    throw new Error(JSON.stringify(errorDetails, null, 2));
+  }
+
+  return true;
+};
+
 // Configure multer for video uploads
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: async function (req, file, cb) {
     console.log("\n📤 --- Processing file upload ---");
     console.log("File received:", file.originalname);
     console.log("File type:", file.mimetype);
-    console.log("File size:", file.size);
+    console.log("Platform:", IS_LINUX ? "🐧 Linux" : "🪟 Windows");
 
-    // Run comprehensive diagnostics
-    const driveStatus = checkMappedDriveAccess();
+    try {
+      // Check storage accessibility
+      await checkStorageAccess();
 
-    if (driveStatus.success) {
-      console.log(`✅ Writing to network drive: ${NETWORK_VIDEOS_PATH}`);
-      cb(null, NETWORK_VIDEOS_PATH);
-    } else {
-      // Create detailed error message for developer
-      const errorDetails = {
-        message: "NETWORK DRIVE NOT ACCESSIBLE",
-        drive: MAPPED_DRIVE,
-        targetPath: NETWORK_VIDEOS_PATH,
-        uncPath: UNC_PATH,
-        diagnostics: driveStatus.diagnostics,
-        troubleshooting: [
-          "1. Check if Y: drive is mapped: Run 'net use' in Command Prompt",
-          "2. Verify network path: Should be mapped to \\\\192.168.47.127\\operation bulletin assets",
-          "3. Ensure 'videos' folder exists on Y: drive or can be created",
-          "4. Check Windows credentials: The user running Node.js must have write permissions",
-          "5. Try accessing Y: drive manually in File Explorer",
-          "6. Restart your computer if network drive is stuck",
-        ],
-      };
-
-      console.error(
-        "❌ NETWORK DRIVE ERROR:",
-        JSON.stringify(errorDetails, null, 2),
-      );
-
-      // Throw error with detailed message
-      cb(new Error(JSON.stringify(errorDetails, null, 2)));
+      console.log(`✅ Writing to: ${VIDEOS_PATH}`);
+      cb(null, VIDEOS_PATH);
+    } catch (error) {
+      console.error("❌ STORAGE ERROR:", error.message);
+      cb(error);
     }
   },
   filename: function (req, file, cb) {
@@ -251,7 +312,7 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter to only allow video files
+// File filter
 const fileFilter = (req, file, cb) => {
   console.log("🔍 Checking file type:", file.mimetype);
 
@@ -269,169 +330,93 @@ const fileFilter = (req, file, cb) => {
     console.log("✅ File type allowed");
     cb(null, true);
   } else {
-    console.log("❌ File type not allowed");
-    cb(
-      new Error(
-        `Invalid file type: ${file.mimetype}. Only video files are allowed.`,
-      ),
-      false,
-    );
+    cb(new Error(`Invalid file type: ${file.mimetype}`), false);
   }
 };
 
-// Configure multer with limits
 const upload = multer({
   storage: storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB limit
-  },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: fileFilter,
 });
 
-// Handle video upload
-router.post(
-  "/test-video-upload",
-  upload.single("video"),
-  async (req, res, next) => {
-    console.log("\n🎯 ========== UPLOAD REQUEST RECEIVED ==========");
-    console.log("Request time:", new Date().toISOString());
+// Upload endpoint
+router.post("/test-video-upload", upload.single("video"), async (req, res) => {
+  console.log("\n🎯 ========== UPLOAD REQUEST ==========");
 
-    try {
-      if (!req.file) {
-        console.log("❌ No file in request");
-        return res.status(400).json({
-          success: false,
-          message: "No video file uploaded",
-        });
-      }
-
-      console.log("✅ File processed successfully");
-      console.log("📁 File details:", {
-        filename: req.file.filename,
-        originalName: req.file.originalname,
-        size: req.file.size,
-        destination: req.file.destination,
-        path: req.file.path,
-      });
-
-      // Verify file was written
-      if (fs.existsSync(req.file.path)) {
-        console.log(`✅ File successfully written to: ${req.file.path}`);
-        const stats = fs.statSync(req.file.path);
-
-        // Get UNC path equivalent for reference
-        const uncFilePath = req.file.path.replace(
-          MAPPED_DRIVE,
-          UNC_PATH.split("\\videos")[0],
-        );
-
-        console.log("\n📊 File Statistics:");
-        console.log(`  - Size: ${stats.size} bytes`);
-        console.log(`  - Created: ${stats.birthtime}`);
-        console.log(`  - Modified: ${stats.mtime}`);
-        console.log(`  - Network Path (UNC): ${uncFilePath}`);
-
-        res.status(200).json({
-          success: true,
-          message: "Video uploaded successfully to network drive",
-          data: {
-            filename: req.file.filename,
-            originalName: req.file.originalname,
-            size: req.file.size,
-            localPath: req.file.path,
-            networkPath: uncFilePath,
-            uploadDate: new Date().toISOString(),
-            fileStats: {
-              created: stats.birthtime,
-              modified: stats.mtime,
-              size: stats.size,
-            },
-          },
-        });
-      } else {
-        throw new Error("File not found after write operation");
-      }
-    } catch (error) {
-      console.error("❌ Upload error:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error uploading video to network drive",
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
+  try {
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
     }
-    console.log("========== UPLOAD COMPLETE ==========\n");
-  },
-);
 
-// Enhanced endpoint to check network drive status with detailed diagnostics
-router.get("/network-diagnostics", (req, res) => {
-  const driveStatus = checkMappedDriveAccess();
+    const fileInfo = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      size: req.file.size,
+      path: req.file.path,
+      platform: IS_LINUX ? "linux" : "windows",
+      uploadDate: new Date().toISOString(),
+    };
 
-  // Add system information
-  const systemInfo = {
-    platform: process.platform,
-    nodeVersion: process.version,
-    user: process.env.USERNAME || process.env.USER,
-    computerName: process.env.COMPUTERNAME,
-    currentTime: new Date().toISOString(),
-  };
+    if (fs.existsSync(req.file.path)) {
+      const stats = fs.statSync(req.file.path);
+      fileInfo.fileStats = {
+        created: stats.birthtime,
+        modified: stats.mtime,
+        size: stats.size,
+      };
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Video uploaded to ${IS_LINUX ? "mounted share" : "network drive"}`,
+      data: fileInfo,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Diagnostics endpoint
+router.get("/storage-diagnostics", async (req, res) => {
+  let diagnostics;
+
+  if (IS_LINUX) {
+    diagnostics = await checkLinuxMount();
+  } else {
+    diagnostics = checkWindowsDrive();
+  }
 
   res.json({
-    system: systemInfo,
-    configuration: {
-      mappedDrive: MAPPED_DRIVE,
-      videosPath: NETWORK_VIDEOS_PATH,
-      uncPath: UNC_PATH,
-    },
-    diagnostics: driveStatus.diagnostics,
-    ready: driveStatus.success,
+    platform: IS_LINUX ? "linux" : "windows",
+    config: CONFIG,
+    diagnostics: diagnostics.diagnostics,
+    ready: diagnostics.success,
   });
 });
 
-// Error handling middleware for multer errors
+// Error handling
 router.use((error, req, res, next) => {
-  console.error("❌ Multer error:", error);
+  console.error("❌ Error:", error);
 
-  if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({
-        success: false,
-        message: "File too large. Maximum size is 100MB",
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
-    }
-    return res.status(400).json({
+  try {
+    const parsedError = JSON.parse(error.message);
+    return res.status(500).json({
       success: false,
-      message: "Upload error",
+      message: "Storage not accessible",
+      details: parsedError,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    return res.status(500).json({
+      success: false,
+      message: "Upload failed",
       error: error.message,
       timestamp: new Date().toISOString(),
     });
   }
-
-  if (error) {
-    // Try to parse if it's our detailed network error
-    try {
-      const parsedError = JSON.parse(error.message);
-      return res.status(500).json({
-        success: false,
-        message: "Network drive not accessible",
-        details: parsedError,
-        timestamp: new Date().toISOString(),
-      });
-    } catch {
-      // Regular error
-      return res.status(500).json({
-        success: false,
-        message: "Upload failed",
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-
-  next();
 });
 
 module.exports = router;
