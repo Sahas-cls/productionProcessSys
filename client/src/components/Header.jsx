@@ -63,7 +63,7 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
           {loggedUser?.userRole === "Admin" ? "Admin " : "User "}
           Panel
         </h1>
-        <button onClick={navigate("/test")}>
+        <button onClick={() => navigate("/test")}>
           <FaDAndD />
         </button>
       </div>
