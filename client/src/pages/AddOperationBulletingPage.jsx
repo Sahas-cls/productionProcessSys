@@ -16,7 +16,7 @@ import { AiOutlineForm } from "react-icons/ai";
 const AddOperationBulletingPage = () => {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const navigate = useNavigate();
-  const [screen, setScreen] = useState("manual");
+  const [screen, setScreen] = useState("excel");
   const { user, loading, error } = useAuth();
 
   const handleSetScreen = (screen) => {

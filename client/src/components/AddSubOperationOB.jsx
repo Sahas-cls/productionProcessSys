@@ -18,10 +18,10 @@ const SubOperationSchema = Yup.object().shape({
     .typeError("SMV must be a number"),
   subOperationName: Yup.string().required("Sub Operation Name is required"),
   machineType: Yup.string().required("Machine Type is required"),
-  machineNo: Yup.number()
-    .required("Machine No is required")
-    .typeError("Machine No must be selected"),
-  machineName: Yup.string().required("Machine Name is required"),
+  // machineNo: Yup.number()
+  //   .required("Machine No is required")
+  //   .typeError("Machine No must be selected"),
+  // machineName: Yup.string().required("Machine Name is required"),
   needleCount: Yup.number()
     .required("Needle Count is required")
     .min(1, "Minimum 1 needle required")
@@ -40,7 +40,7 @@ const SubOperationSchema = Yup.object().shape({
 
 const apiUrl = import.meta.env.VITE_API_URL;
 
-const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
+const AddSubOperationOB = ({ mainOp, setIsAddingSubOP, onRefresh }) => {
   const { machineTList } = useMachineTypes();
   const { machineList } = useAllMachine();
 
@@ -143,7 +143,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
           (mch.machine_name &&
             mch.machine_name
               .toLowerCase()
-              .includes(searchMachineNo.toLowerCase())))
+              .includes(searchMachineNo.toLowerCase()))),
     );
   }, [selectedMachineT, machineList, searchMachineNo]);
 
@@ -153,7 +153,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
     if (!searchMachineType) return machineTList;
 
     return machineTList.filter((type) =>
-      type.toLowerCase().includes(searchMachineType.toLowerCase())
+      type.toLowerCase().includes(searchMachineType.toLowerCase()),
     );
   }, [machineTList, searchMachineType]);
 
@@ -173,7 +173,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
             .toLowerCase()
             .includes(searchNeedleType.toLowerCase())) ||
         (needle.needle_type_id &&
-          needle.needle_type_id.toString().includes(searchNeedleType))
+          needle.needle_type_id.toString().includes(searchNeedleType)),
     );
   }, [needleList, searchNeedleType]);
 
@@ -193,7 +193,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
             .toLowerCase()
             .includes(searchBobbinThread.toLowerCase())) ||
         (thread.thread_id &&
-          thread.thread_id.toString().includes(searchBobbinThread))
+          thread.thread_id.toString().includes(searchBobbinThread)),
     );
   }, [threadList, searchBobbinThread]);
 
@@ -213,7 +213,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
             .toLowerCase()
             .includes(searchNeedleThreads.toLowerCase())) ||
         (thread.thread_id &&
-          thread.thread_id.toString().includes(searchNeedleThreads))
+          thread.thread_id.toString().includes(searchNeedleThreads)),
     );
   }, [threadList, searchNeedleThreads]);
 
@@ -230,7 +230,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
       const response = await axios.post(
         `${apiUrl}/api/OperationBulleting/create/sub-operation`,
         payload,
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -242,6 +242,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
           showConfirmButton: false,
         });
         resetForm();
+        onRefresh();
         // Reset display states
         setDisplayMachineNo("");
         setDisplayNeedleType("");
@@ -475,7 +476,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                 </div>
 
                 {/* Machine No with Live Search */}
-                <div className="grid grid-cols-1 relative" ref={machineNoRef}>
+                {/* <div className="grid grid-cols-1 relative" ref={machineNoRef}>
                   <label htmlFor="machineNo">Machine No</label>
                   <input
                     type="text"
@@ -540,9 +541,9 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                         ))}
                       </div>
                     )}
-                </div>
+                </div> */}
 
-                <div className="grid grid-cols-1">
+                {/* <div className="grid grid-cols-1">
                   <label htmlFor="machineName">Machine Name</label>
                   <Field
                     name="machineName"
@@ -559,7 +560,7 @@ const AddSubOperationOB = ({ mainOp, setIsAddingSubOP }) => {
                     component="div"
                     className="text-red-500 text-sm"
                   />
-                </div>
+                </div> */}
 
                 <div className="grid grid-cols-1">
                   <label htmlFor="needleCount">Needle Size</label>

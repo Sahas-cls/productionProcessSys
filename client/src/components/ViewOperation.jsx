@@ -17,7 +17,7 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import { IoIosArrowDropdown, IoIosArrowDropdownCircle } from "react-icons/io";
-import { FaDeleteLeft } from "react-icons/fa6";
+import { FaArrowRight, FaDeleteLeft } from "react-icons/fa6";
 import { TbTool } from "react-icons/tb";
 import AddTechnicalData from "./technicalDataPage/AddTechnicalData";
 import { ArrowLeftCircleIcon } from "@heroicons/react/24/outline";
@@ -516,6 +516,7 @@ const ViewStyleDetails = () => {
               <div className="p-4 sm:p-6 max-h-[60vh] overflow-y-auto">
                 <AddSubOperationOB
                   mainOp={mainOperationId}
+                  onRefresh={() => fetchStyleData()}
                   setIsAddingSubOP={setIsAddingSubOP}
                   fetchStyleData={fetchStyleData}
                 />
@@ -567,7 +568,7 @@ const ViewStyleDetails = () => {
           <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">
             Style Details
           </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 text-sm sm:text-base">
+          <div className="grid grid-cols-2 lg:grid-cols-2 gap-4 sm:gap-6 text-sm sm:text-base">
             <div className="space-y-2 sm:space-y-3 justify-self-start">
               <p className="text-gray-600">
                 <span className="font-medium text-gray-700">Name:</span>{" "}
@@ -578,17 +579,6 @@ const ViewStyleDetails = () => {
                 {style.customer_id}
               </p>
             </div>
-
-            {/* <div className="space-y-2 sm:space-y-3">
-              <p className="text-gray-600">
-                <span className="font-medium text-gray-700">Created:</span>{" "}
-                {formatDate(style.createdAt)}
-              </p>
-              <p className="text-gray-600">
-                <span className="font-medium text-gray-700">Updated:</span>{" "}
-                {formatDate(style.updatedAt)}
-              </p>
-            </div> */}
 
             {!isLoading && (
               <div className="">
@@ -610,28 +600,43 @@ const ViewStyleDetails = () => {
                       {/* No layout created yet */}
                     </div>
                   ) : (
-                    <div
-                      className="justify-self-end py-2 relative bg-gradient-to-b from-blue-200 to-blue-200 w-48 border-l-2 border-l-blue-600 flex justify-center items-center rounded-md shadow-md border group cursor-pointer"
-                      onClick={() => {
-                        navigate(
-                          `/workstation/list-view/${layoutData?.layout_id}/${layoutData?.style_id}/${style?.style_no}`,
-                        );
-                      }}
-                    >
-                      <div className="absolute w-8 left-0 group-hover:translate-x-52 opacity-0 group-hover:opacity-100 duration-700 [animation-speed:20]">
-                        <FaChevronRight className="group-hover:text-5xl text-white" />
+                    <div className="">
+                      <div
+                        className="justify-self-end hidden py-2 relative bg-gradient-to-b from-blue-200 to-blue-200 w-48 border-l-2 border-l-blue-600 md:flex justify-center items-center rounded-md shadow-md border group cursor-pointer"
+                        onClick={() => {
+                          navigate(
+                            `/workstation/list-view/${layoutData?.layout_id}/${layoutData?.style_id}/${style?.style_no}`,
+                          );
+                        }}
+                      >
+                        <div className="absolute w-8 left-0 group-hover:translate-x-52 opacity-0 group-hover:opacity-100 duration-700 [animation-speed:20]">
+                          <FaChevronRight className="group-hover:text-5xl text-white" />
+                        </div>
+                        <div className="">
+                          <h1 className="font-semibold text-black text-center">
+                            Layout
+                          </h1>
+                          <hr className="border-1 border-black/20 my-1" />
+                          <p className="text-sm text-black">
+                            Workstation Count:{" "}
+                            <span className="font-semibold text-red-400">
+                              {layoutData?.workstation_count}
+                            </span>
+                          </p>
+                        </div>
                       </div>
+
                       <div className="">
-                        <h1 className="font-semibold text-black text-center">
-                          Layout
-                        </h1>
-                        <hr className="border-1 border-black/20 my-1" />
-                        <p className="text-sm text-black">
-                          Workstation Count:{" "}
-                          <span className="font-semibold text-red-400">
-                            {layoutData?.workstation_count}
-                          </span>
-                        </p>
+                        <button
+                          onClick={() =>
+                            navigate(
+                              `/workstation/list-view/${layoutData?.layout_id}/${layoutData?.style_id}/${style?.style_no}`,
+                            )
+                          }
+                          className="flex py-2 md:hidden justify-self-end items-self-start items-center justify-center gap-x-2 bg-blue-500 hover:bg-blue-600 text-white px-2 rounded-md font-semibold"
+                        >
+                          Layouts <FaArrowRight />
+                        </button>
                       </div>
                     </div>
                   )}

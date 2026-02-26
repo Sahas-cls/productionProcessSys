@@ -1,4 +1,3 @@
-// to create new operation
 const { where } = require("sequelize");
 const { processExcelFile } = require("../utils/excelProcessor");
 const { sequelize } = require("../models");
@@ -87,7 +86,7 @@ exports.getBOList = async (req, res, next) => {
   }
 };
 
-// to get operations and suboperations for specific style
+// NOTE to get operations and suboperations for specific style
 exports.getSBO = async (req, res, next) => {
   const { styleId } = req.params;
   try {
@@ -366,7 +365,7 @@ exports.createMainOperation = async (req, res, next) => {
   }
 };
 
-// to create sub operation based on main operation
+// NOTE to create sub operation based on main operation
 exports.createSubOp = async (req, res, next) => {
   console.log("request body: ", req.body);
 
@@ -381,8 +380,8 @@ exports.createSubOp = async (req, res, next) => {
     smv,
     subOperationName,
     machineType,
-    machineNo, // This is now machine_id from frontend
-    machineName,
+    //machineNo, // This is now machine_id from frontend
+    //machineName,
     needleCount,
     needleType, // This is now needle_type_id from frontend
     bobbinThread, // This is now thread_id for looper from frontend
@@ -407,16 +406,16 @@ exports.createSubOp = async (req, res, next) => {
       }
 
       // 2. Validate machine exists (now using machine_id from machineNo)
-      const machine = await Machine.findByPk(machineNo, {
-        transaction: t,
-        lock: t.LOCK.UPDATE,
-      });
+      // const machine = await Machine.findByPk(machineNo, {
+      //   transaction: t,
+      //   lock: t.LOCK.UPDATE,
+      // });
 
-      if (!machine) {
-        const error = new Error("Machine not found");
-        error.status = 404;
-        throw error;
-      }
+      // if (!machine) {
+      //   const error = new Error("Machine not found");
+      //   error.status = 404;
+      //   throw error;
+      // }
 
       // 3. Validate needle type exists if provided
       let needleTypeRecord = null;
@@ -480,13 +479,13 @@ exports.createSubOp = async (req, res, next) => {
       );
 
       // 7. Link machine to sub-operation through junction table
-      await SubOperationMachine.create(
-        {
-          sub_operation_id: subOperation.sub_operation_id,
-          machine_id: machine.machine_id,
-        },
-        { transaction: t },
-      );
+      // await SubOperationMachine.create(
+      //   {
+      //     sub_operation_id: subOperation.sub_operation_id,
+      //     machine_id: machine.machine_id,
+      //   },
+      //   { transaction: t },
+      // );
 
       // Note: Removed the bulkCreate for needleTypes, needleTreads, and needleLoopers
       // since we're now using single foreign key references directly in SubOperation
@@ -524,7 +523,7 @@ exports.createSubOp = async (req, res, next) => {
   }
 };
 
-// edit main operation data
+// NOTE edit main operation data
 exports.editMainOperation = async (req, res, next) => {
   // console.log(req.body);
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
@@ -572,7 +571,7 @@ exports.editMainOperation = async (req, res, next) => {
   }
 };
 
-// to create bulk operations including, Main Operation, SubOperations, Machines, NeedleTypes, NeedleTreads, NeedleLoopers
+// NOTE to create bulk operations including, Main Operation, SubOperations, Machines, NeedleTypes, NeedleTreads, NeedleLoopers
 exports.createBulkOperations = async (req, res, next) => {
   // console.log("request body: ", req.body);
   // console.log("req.user: ", req.user);
@@ -732,7 +731,7 @@ exports.createBulkOperations = async (req, res, next) => {
 
 exports.editOperation = async (req, res, next) => {};
 
-// to update one single sub operation
+// NOTE to update one single sub operation
 exports.updateSubOperation = async (req, res) => {
   const t = await sequelize.transaction();
 
@@ -921,7 +920,7 @@ exports.updateSubOperation = async (req, res) => {
   }
 };
 
-// to delete operation
+// NOTE to delete operation
 exports.deleteOperation = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
@@ -997,7 +996,7 @@ exports.deleteOperation = async (req, res, next) => {
   }
 };
 
-// delete main operation
+// NOTE delete main operation
 exports.deleteMo = async (req, res, next) => {
   // console.log("deleting main operation ☠️☠️");
   const { opId } = req.params;
@@ -1018,7 +1017,7 @@ exports.deleteMo = async (req, res, next) => {
   }
 };
 
-// to delete sub operation
+// NOTE to delete sub operation
 exports.deleteSubOperation = async (req, res, next) => {
   const subOpId = req.params.id;
   let t;
@@ -1191,7 +1190,7 @@ exports.deleteSubOperation = async (req, res, next) => {
   }
 };
 
-// ====================================
+// NOTE ====================================
 // create helper operations
 // ====================================
 exports.createHelperOps = async (req, res, next) => {
@@ -1417,7 +1416,7 @@ exports.saveOperations = async (req, res, next) => {
       // PROCESS SUB OPERATIONS
       // ============================
       if (!Array.isArray(SubOperations)) continue;
-
+      // sequence_number
       for (const subOpData of SubOperations) {
         const {
           OperationNo: subOperationNumber,
@@ -1613,7 +1612,7 @@ exports.addTechnicalData = async (req, res, next) => {
   }
 };
 
-// to get technical data
+// NOTE to get technical data
 exports.getTechnicalData = async (req, res, next) => {
   const { subOperationId } = req.params;
   console.log("getting technical data: ", req.params);
@@ -1649,7 +1648,7 @@ exports.getTechnicalData = async (req, res, next) => {
   }
 };
 
-// GENERATE TECHNICAL DATA SHEET
+// NOTE GENERATE TECHNICAL DATA SHEET
 // ===============================
 exports.generateDataSheet = async (req, res) => {
   // console.log(req.params);
@@ -1898,7 +1897,7 @@ exports.generateDataSheet = async (req, res) => {
   }
 };
 
-// Optional: Helper function for machine associations
+// NOTE Optional: Helper function for machine associations
 async function handleMachineAssociations(
   subOperation,
   machineType,
@@ -1943,3 +1942,8 @@ async function handleMachineAssociations(
     // Don't throw - we don't want machine association errors to stop the entire process
   }
 }
+
+/* 
+  sub op     main op
+   1559 -> 
+*/

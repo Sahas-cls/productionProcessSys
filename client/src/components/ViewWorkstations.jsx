@@ -727,6 +727,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
           timer: 2000,
           showConfirmButton: false,
         });
+        getWorkstations();
       }
     } catch (error) {
       console.error("Failed to save order:", error);
@@ -847,14 +848,18 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                       ) : (
                         <div className="flex items-center gap-2 mt-2 sm:mt-0">
                           {workstation.workstation_no
-                            ? workstation.workstation_no
+                            ? `WS-${workstation.sequence_number + 1}`
                             : "Not assigned yet"}
                           {(userRole === "Admin" ||
                             userRole === "SuperAdmin") && (
                             <button
-                              onClick={() =>
-                                startEditingWorkstation(workstation)
-                              }
+                              onClick={() => {
+                                // sessionStorage.setItem(
+                                //   "listScroll",
+                                //   window.scrollY,
+                                // );
+                                startEditingWorkstation(workstation);
+                              }}
                               className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
                             >
                               <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
@@ -881,20 +886,29 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                 <div className="flex gap-x-2">
                   <button
                     className="bg-green-300/40 p-1 text-green-700 rounded"
-                    onClick={() => openAddSubOperationModal(workstation)}
+                    title="Add main operation"
+                    onClick={() => {
+                      sessionStorage.setItem("listScroll", window.scrollY);
+                      openAddSubOperationModal(workstation);
+                    }}
                   >
                     <BiPlus className="text-2xl hover:scale-150" />
                   </button>
 
                   <button
                     className="bg-green-300/40 p-1 text-green-700 rounded"
-                    onClick={() => openAddHelperOperationModal(workstation)}
+                    title="Add helper operation"
+                    onClick={() => {
+                      sessionStorage.setItem("listScroll", window.scrollY);
+                      openAddHelperOperationModal(workstation);
+                    }}
                   >
                     <MdOutlinePersonAddAlt className="text-2xl hover:scale-150" />
                   </button>
 
                   <button
                     className="bg-red-300/40 p-1 text-red-700 rounded"
+                    title="Delete operation"
                     onClick={() =>
                       handleWorkstationDelete(workstation.workstation_id)
                     }

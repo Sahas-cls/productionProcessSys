@@ -237,6 +237,7 @@ exports.createLayout = async (req, res, next) => {
         for (let i = 1; i <= workstationCountInt; i++) {
           workstationBulk.push({
             layout_id: createL.layout_id,
+            sequence_number: i - 1,
             workstation_no: `WS${i.toString().padStart(3, "0")}`, // Fixed: Added required workstation_no field
           });
         }
