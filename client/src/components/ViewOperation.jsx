@@ -36,10 +36,8 @@ const ViewStyleDetails = () => {
   const [helperOp, setHelperOp] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [expandedOperations, setExpandedOperations] = useState(() => {
-    const saved = sessionStorage.getItem("expandedOperations");
-    return saved ? JSON.parse(saved) : {};
-  });
+  // MODIFIED: Initialize with empty object instead of reading from sessionStorage
+  const [expandedOperations, setExpandedOperations] = useState({});
   const [layoutData, setLayoutData] = useState({});
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
@@ -76,16 +74,12 @@ const ViewStyleDetails = () => {
         console.log("Fetched style data:", response.data.data);
         setStyle(response.data.data);
         setHelperOp(response.data.helperOp);
+        // MODIFIED: Initialize all operations as closed (false)
         const initialExpanded = {};
         response.data.data.operations?.forEach((op) => {
           initialExpanded[op.operation_id] = false;
         });
-        setExpandedOperations((prev) => {
-          if (Object.keys(prev || {}).length > 0) {
-            return prev; // keep restored state
-          }
-          return initialExpanded;
-        });
+        setExpandedOperations(initialExpanded);
       }
     } catch (error) {
       console.error("Error fetching style data:", error);
@@ -231,11 +225,8 @@ const ViewStyleDetails = () => {
   };
 
   const handleSearchResultClick = (result) => {
-    // Expand the parent operation
-    setExpandedOperations((prev) => ({
-      ...prev,
-      [result.parentOperation.operation_id]: true,
-    }));
+    // MODIFIED: Use handleOperationExpand to expand only this operation
+    handleOperationExpand(result.parentOperation.operation_id);
 
     // Scroll to the sub-operation
     setTimeout(() => {
@@ -306,15 +297,11 @@ const ViewStyleDetails = () => {
     if (!style) return;
 
     const savedPosition = sessionStorage.getItem("bulletinPosition");
-    const expanded = sessionStorage.getItem("expandedOperations");
+    // MODIFIED: Don't restore expanded state from sessionStorage
 
     if (savedPosition) {
       window.scrollTo(0, parseInt(savedPosition, 10));
       sessionStorage.removeItem("bulletinPosition");
-    }
-
-    if (expanded) {
-      setExpandedOperations(JSON.parse(expanded));
     }
   }, [style]);
 
@@ -396,21 +383,41 @@ const ViewStyleDetails = () => {
     }
   };
 
-  const toggleOperationExpand = (operationId) => {
-    setExpandedOperations((prev) => ({
-      ...prev,
-      [operationId]: !prev[operationId],
-    }));
+  // MODIFIED: New function to handle operation expansion with single open at a time
+  const handleOperationExpand = (operationId) => {
+    setExpandedOperations((prev) => {
+      // Create new object with all operations set to false
+      const newExpanded = {};
+      // Set all operations to false
+      Object.keys(prev).forEach((key) => {
+        newExpanded[key] = false;
+      });
+      // Set the clicked operation to true (opposite of its current state)
+      newExpanded[operationId] = !prev[operationId];
+      return newExpanded;
+    });
   };
 
-  useEffect(() => {
-    if (Object.keys(expandedOperations).length === 0) return;
+  const toggleOperationExpand = (operationId) => {
+    handleOperationExpand(operationId);
 
-    sessionStorage.setItem(
-      "expandedOperations",
-      JSON.stringify(expandedOperations),
-    );
-  }, [expandedOperations]);
+    // Use setTimeout to ensure DOM has updated before scrolling
+    setTimeout(() => {
+      const element = document.getElementById(`mo-${operationId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100); // delaying scrolling
+  };
+
+  // MODIFIED: Remove the effect that saves to sessionStorage
+  // useEffect(() => {
+  //   if (Object.keys(expandedOperations).length === 0) return;
+  //   sessionStorage.setItem(
+  //     "expandedOperations",
+  //     JSON.stringify(expandedOperations),
+  //   );
+  // }, [expandedOperations]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -644,7 +651,6 @@ const ViewStyleDetails = () => {
               </div>
             )}
           </div>
-
           <div className="mt-4 sm:mt-6 pt-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <p className="text-gray-600 text-sm sm:text-base">
               <span className="font-medium text-gray-700">Description:</span>{" "}
@@ -763,6 +769,7 @@ const ViewStyleDetails = () => {
                   {/* Operation Header */}
                   <div
                     className="bg-gray-50 p-3 sm:p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-gray-100 transition-colors duration-200"
+                    id={`mo-${operation.operation_id}`}
                     onClick={() =>
                       toggleOperationExpand(operation.operation_id)
                     }

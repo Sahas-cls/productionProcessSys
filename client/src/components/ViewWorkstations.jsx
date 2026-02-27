@@ -46,6 +46,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import AddHelperOperations from "./AddHelperOperations";
+import { IoIosArrowDropup, IoIosArrowUp } from "react-icons/io";
 
 // Dragging overlay component
 const DraggingOverlay = ({ activeWorkstation }) => {
@@ -1214,7 +1215,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     <div className="px-4 py-6 sm:px-6 lg:px-8 relative">
       {(userRole === "Admin" || userRole === "SuperAdmin") &&
         hasUnsavedChanges && (
-          <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2">
+          <div className="fixed bottom-16 right-6 z-40 flex flex-col items-end gap-2">
             <button
               onClick={resetToOriginalOrder}
               className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all duration-200"
@@ -1249,6 +1250,37 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
             </button>
           </div>
         )}
+
+      <div className="fixed right-6 bottom-4">
+        <div className="flex gap-x-4">
+          <button
+            title="Go Top of the page"
+            className="p-2 bg-gray-500/40 hover:bg-gray-500/70 rounded-full duration-200"
+            onClick={() => {
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              // window.scrollBy({ top: -600, behavior: "smooth" });
+            }}
+          >
+            <IoIosArrowUp className="text-xl text-white" />
+          </button>
+          <button
+            title="Go Bottom of the page"
+            onClick={() => {
+              window.scrollTo({
+                top: document.documentElement.scrollHeight,
+                behavior: "smooth",
+              });
+              // window.scrollBy({
+              //   top: 600,
+              //   behavior: "smooth",
+              // });
+            }}
+            className="p-2 bg-gray-500/40 hover:bg-gray-500/70 rounded-full duration-200"
+          >
+            <IoIosArrowUp className="text-xl text-white rotate-180" />
+          </button>
+        </div>
+      </div>
 
       {/* ============= FIXED: UPLOAD MODAL - EXACTLY LIKE WORKING CODE ============= */}
       <AnimatePresence>
