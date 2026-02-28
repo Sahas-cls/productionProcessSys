@@ -43,16 +43,16 @@ const HelperVideoGallery = () => {
         `${import.meta.env.VITE_API_URL}/api/helperOpMedia/getVideos/${hOpId}`,
         { withCredentials: true },
       );
-      
+
       // Transform the data to include media_id field
-      const transformedData = (response.data?.data || []).map(item => ({
+      const transformedData = (response.data?.data || []).map((item) => ({
         ...item,
         // Map helper_video_id to media_id for consistent usage
         media_id: item.helper_video_id,
         // Also keep original field for reference
-        helper_video_id: item.helper_video_id
+        helper_video_id: item.helper_video_id,
       }));
-      
+
       setVideos(transformedData);
     } catch (error) {
       console.error("Error fetching helper operation videos:", error);
@@ -113,7 +113,7 @@ const HelperVideoGallery = () => {
 
   const handleStopVideo = useCallback((id) => {
     if (!id) return;
-    
+
     const video = videoRefs.current[id];
     if (video) {
       video.pause();
@@ -126,7 +126,7 @@ const HelperVideoGallery = () => {
 
   const toggleFullscreen = useCallback(async (id) => {
     if (!id) return;
-    
+
     const video = videoRefs.current[id];
     if (!video) return;
 
@@ -168,8 +168,8 @@ const HelperVideoGallery = () => {
   const handleDownloadVideo = useCallback(
     (item) => {
       if (!item) return;
-      
-      const videoUrl = getVideoUrl(item)?.split('?')[0];
+
+      const videoUrl = getVideoUrl(item)?.split("?")[0];
       const fileName = getFileName(item);
 
       if (videoUrl) {
@@ -193,7 +193,7 @@ const HelperVideoGallery = () => {
 
   const handleDeleteVideo = async (item) => {
     if (!item?.helper_video_id) return;
-    
+
     const fileName = getFileName(item);
     const isActive = activeVideoId === item.helper_video_id;
 
@@ -213,7 +213,7 @@ const HelperVideoGallery = () => {
         }
 
         const response = await axios.delete(
-          `${backendUrl}/api/helperOperationMedia/deleteVideo/${item.helper_video_id}`,
+          `${backendUrl}/api/helperOpMedia/deleteVideo/${item.helper_video_id}/${item.b2_file_id}`,
           { withCredentials: true },
         );
 
@@ -240,12 +240,12 @@ const HelperVideoGallery = () => {
       console.error("Video error with undefined ID:", error);
       return;
     }
-    
+
     console.error("Video error for ID:", id, error);
-    
+
     const video = videoRefs.current[id];
     let errorMessage = "Failed to load video";
-    
+
     if (video?.error) {
       switch (video.error.code) {
         case MediaError.MEDIA_ERR_ABORTED:
@@ -276,7 +276,7 @@ const HelperVideoGallery = () => {
   // Don't render video element if not active - this fixes empty src warning
   const renderVideoElement = (item, isActive, videoUrl) => {
     if (!isActive || !videoUrl || !item?.helper_video_id) return null;
-    
+
     return (
       <video
         ref={(el) => {
@@ -293,12 +293,18 @@ const HelperVideoGallery = () => {
         onError={(e) => handleVideoError(item?.helper_video_id, e)}
         onLoadedData={() => {
           if (item?.helper_video_id) {
-            setLoadingStates((prev) => ({ ...prev, [item.helper_video_id]: false }));
+            setLoadingStates((prev) => ({
+              ...prev,
+              [item.helper_video_id]: false,
+            }));
           }
         }}
         onPlaying={() => {
           if (item?.helper_video_id) {
-            setVideoErrors((prev) => ({ ...prev, [item.helper_video_id]: null }));
+            setVideoErrors((prev) => ({
+              ...prev,
+              [item.helper_video_id]: null,
+            }));
           }
         }}
       >
@@ -356,7 +362,7 @@ const HelperVideoGallery = () => {
           {videos.map((item) => {
             // Use helper_video_id as the unique identifier
             const mediaId = item?.helper_video_id;
-            
+
             if (!mediaId) {
               console.warn("Video item missing helper_video_id:", item);
               return null;
@@ -368,7 +374,8 @@ const HelperVideoGallery = () => {
             const error = videoErrors[mediaId];
             const videoUrl = getVideoUrl(item);
             const helperName = item.helper_operation?.helper_name || "N/A";
-            const operationName = item.helper_operation?.operation_name || "N/A";
+            const operationName =
+              item.helper_operation?.operation_name || "N/A";
             const styleName = item.style?.style_name || "N/A";
 
             return (
@@ -551,7 +558,7 @@ const HelperVideoGallery = () => {
                       <button
                         onClick={() => handleDeleteVideo(item)}
                         className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                        title="Delete video"
+                        title="Delete videodfs"
                       >
                         <FaTrash size={14} />
                       </button>

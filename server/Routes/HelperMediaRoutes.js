@@ -230,7 +230,7 @@ routes.post(
   generateFilenames, // Add filename generation
   controller.uploadVideos,
 );
-routes.delete("/deleteVideo/:ho_media_id", controller.deleteVideo);
+routes.delete("/deleteVideo/:ho_media_id/:deleteVideo", controller.deleteVideo);
 
 // NOTE to handle helper images
 routes.get("/getImages/:hOpId", controller.getImages);

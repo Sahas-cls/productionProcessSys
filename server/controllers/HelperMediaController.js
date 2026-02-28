@@ -5,6 +5,7 @@ const b2HelperStorage = require("../utils/b2HelperStorage");
 const ffmpeg = require("fluent-ffmpeg");
 const path = require("path");
 const fs = require("fs");
+require("dotenv").config();
 
 // to get uploaded video according to the specific sub operation
 
@@ -407,8 +408,66 @@ exports.uploadVideos = async (req, res, next) => {
   }
 };
 
-exports.deleteVideo = async (req, res, next) => {
-  console.log("deleting helper operation");
+exports.deleteVideo = async (req, res) => {
+  try {
+    const { ho_media_id } = req.params;
+
+    if (!ho_media_id) {
+      return res.status(400).json({
+        message: "Missing required parameter: ho_media_id is required",
+      });
+    }
+
+    const videoRec = await HelperVideo.findByPk(ho_media_id);
+
+    if (!videoRec) {
+      return res.status(404).json({
+        message: "Video record not found",
+      });
+    }
+
+    const B2 = require("backblaze-b2");
+    const b2 = new B2({
+      applicationKeyId: process.env.B2_KEY_ID,
+      applicationKey: process.env.B2_APP_KEY,
+    });
+
+    // 🔥 Step 1: Delete from Backblaze if fileId exists
+    if (videoRec.b2_file_id) {
+      try {
+        await b2.authorize();
+
+        await b2.deleteFileVersion({
+          fileId: videoRec.b2_file_id,
+          fileName: videoRec.video_url,
+        });
+
+        console.log("File deleted from B2 successfully");
+      } catch (b2Error) {
+        if (b2Error?.response?.status === 404) {
+          console.log("File not found in B2. Continuing DB deletion...");
+        } else {
+          console.error("B2 deletion failed:", b2Error);
+          return res.status(500).json({
+            message: "Failed to delete file from storage",
+          });
+        }
+      }
+    }
+
+    //  Step 2: Delete from Database
+    await videoRec.destroy();
+
+    return res.status(200).json({
+      status: "ok",
+      message: "Video deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete video error:", error);
+    return res.status(500).json({
+      message: "Something went wrong while deleting video",
+    });
+  }
 };
 
 // NOTE helper image handling

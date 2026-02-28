@@ -642,7 +642,7 @@ exports.deleteVideo = async (req, res, next) => {
 
     // Extract filename from record (adjust based on your field name)
     const filename = videoRecord.media_url || videoRecord.video_url;
-    const bucketId = process.env.B2_BUCKET_ID || "your-bucket-id";
+    const bucketId = process.env.B2_BUCKET_ID || "Guston-test bucket";
 
     // Initialize Backblaze B2 client
     const B2 = require("backblaze-b2");
