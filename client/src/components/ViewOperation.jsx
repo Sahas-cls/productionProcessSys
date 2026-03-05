@@ -26,18 +26,22 @@ import { MdOutlinePersonAddAlt } from "react-icons/md";
 const ViewStyleDetails = () => {
   const navigate = useNavigate();
   const { style_id } = useParams();
-  // const [styleId, setStyleId] = useState(
-  //   useParams.style_id || useParams.styleId,
-  // );
   const apiUrl = import.meta.env.VITE_API_URL;
-  const location = useLocation(); //holds the style id
-  // console.log("location: ", location);
+  const location = useLocation();
+
   const [style, setStyle] = useState(null);
   const [helperOp, setHelperOp] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
-  // MODIFIED: Initialize with empty object instead of reading from sessionStorage
-  const [expandedOperations, setExpandedOperations] = useState({});
+
+  // FIXED: Synchronously get the saved ID from sessionStorage
+  const [expandedOperationId, setExpandedOperationId] = useState(() => {
+    const saved = sessionStorage.getItem("expandedOperationId");
+    return saved || null;
+  });
+
+  console.log("expanded operation id::::: ", expandedOperationId);
+
   const [layoutData, setLayoutData] = useState({});
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
   const [isAddingMO, setIsAddingMO] = useState(false);
@@ -53,6 +57,7 @@ const ViewStyleDetails = () => {
   const [selectedOperation, setSelectedOperation] = useState(null);
   const [selectedSubOperation, setSelectedSubOperation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -61,25 +66,15 @@ const ViewStyleDetails = () => {
   const searchInputRef = useRef(null);
   const searchResultsRef = useRef(null);
 
-  console.log("last active op id; ", location.state);
-
   const fetchStyleData = async () => {
     try {
       setLoading(true);
       const response = await axios.get(
         `${apiUrl}/api/operationBulleting/getOB/${location.state}`,
       );
-      console.log("fetched data: ", response);
       if (response.data && response.data.data) {
-        console.log("Fetched style data:", response.data.data);
         setStyle(response.data.data);
         setHelperOp(response.data.helperOp);
-        // MODIFIED: Initialize all operations as closed (false)
-        const initialExpanded = {};
-        response.data.data.operations?.forEach((op) => {
-          initialExpanded[op.operation_id] = false;
-        });
-        setExpandedOperations(initialExpanded);
       }
     } catch (error) {
       console.error("Error fetching style data:", error);
@@ -90,7 +85,7 @@ const ViewStyleDetails = () => {
       });
       if (error.status === 401) {
         Swal.fire({
-          title: "You'r session has been expired please login again",
+          title: "Your session has been expired please login again",
           icon: "warning",
         });
         navigate("/");
@@ -100,27 +95,21 @@ const ViewStyleDetails = () => {
     }
   };
 
-  // NOTE sending request to check is layout exist
   const fetchLayout = async () => {
-    console.log("sending request to check is layout exist");
     try {
       setIsLoading(true);
       const response = await axios.get(
         `${apiUrl}/api/layout/get-layout-data/${location.state}`,
-        {
-          withCredentials: true,
-        },
+        { withCredentials: true },
       );
-      console.log("layout response: ", layoutData);
-      if ((response.status = 200)) {
+      if (response.status === 200) {
         setLayoutData(response?.data?.data || {});
       }
-      console.log("layout response: ", response);
     } catch (error) {
       console.error;
       if (error.status === 401) {
         Swal.fire({
-          title: "You'r session has been expired please login again",
+          title: "Your session has been expired please login again",
           icon: "warning",
         });
         navigate("/");
@@ -136,11 +125,6 @@ const ViewStyleDetails = () => {
     fetchStyleData();
     fetchLayout();
   }, [style_id]);
-
-  // useEffect(() => {
-  //   if (style_id) {
-  //   }
-  // }, []);
 
   // Search functionality
   useEffect(() => {
@@ -177,7 +161,6 @@ const ViewStyleDetails = () => {
               });
             }
 
-            // Also search by sub-operation number if needed
             if (
               subOp.sub_operation_number &&
               subOp.sub_operation_number.toLowerCase().includes(query)
@@ -198,7 +181,6 @@ const ViewStyleDetails = () => {
       setIsSearching(false);
     };
 
-    // Debounce search to avoid too many searches while typing
     const debounceTimer = setTimeout(performSearch, 300);
     return () => clearTimeout(debounceTimer);
   }, [searchQuery, style]);
@@ -225,17 +207,18 @@ const ViewStyleDetails = () => {
   };
 
   const handleSearchResultClick = (result) => {
-    // MODIFIED: Use handleOperationExpand to expand only this operation
-    handleOperationExpand(result.parentOperation.operation_id);
+    setExpandedOperationId(result.parentOperation.operation_id);
+    sessionStorage.setItem(
+      "expandedOperationId",
+      result.parentOperation.operation_id,
+    );
 
-    // Scroll to the sub-operation
     setTimeout(() => {
       const element = document.getElementById(
         `subop-${result.sub_operation_id}`,
       );
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "center" });
-        // Highlight temporarily
         element.classList.add(
           "bg-yellow-100",
           "transition-colors",
@@ -292,19 +275,71 @@ const ViewStyleDetails = () => {
   };
 
   //! =====================================================================
-  // for scroll handling
+  // FIXED: Scroll handling with proper timing
   useEffect(() => {
     if (!style) return;
 
     const savedPosition = sessionStorage.getItem("bulletinPosition");
-    // MODIFIED: Don't restore expanded state from sessionStorage
+    const savedExpandedId = sessionStorage.getItem("expandedOperationId");
+    const lastActiveOpId = sessionStorage.getItem("lastActiveOp");
+
+    console.log("Restoring state:", { savedExpandedId, lastActiveOpId });
+
+    // First restore the expanded operation
+    if (savedExpandedId) {
+      setExpandedOperationId(savedExpandedId);
+    }
+
+    // Then handle scrolling after a delay to ensure DOM is ready
+    const scrollTimeout = setTimeout(() => {
+      if (lastActiveOpId && savedExpandedId) {
+        const element = document.getElementById(`subop-${lastActiveOpId}`);
+        if (element) {
+          console.log(`Scrolling to sub-operation: ${lastActiveOpId}`);
+          element.scrollIntoView({ behavior: "smooth", block: "center" });
+          element.classList.add(
+            "bg-yellow-100",
+            "transition-colors",
+            "duration-1000",
+          );
+          setTimeout(() => {
+            element.classList.remove("bg-yellow-100");
+          }, 2000);
+          sessionStorage.removeItem("lastActiveOp");
+        } else {
+          console.log("Element not found on first attempt, trying again...");
+          // Try one more time after a longer delay
+          setTimeout(() => {
+            const retryElement = document.getElementById(
+              `subop-${lastActiveOpId}`,
+            );
+            if (retryElement) {
+              retryElement.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+              retryElement.classList.add(
+                "bg-yellow-100",
+                "transition-colors",
+                "duration-1000",
+              );
+              setTimeout(() => {
+                retryElement.classList.remove("bg-yellow-100");
+              }, 2000);
+            }
+            sessionStorage.removeItem("lastActiveOp");
+          }, 800);
+        }
+      }
+    }, 500);
 
     if (savedPosition) {
       window.scrollTo(0, parseInt(savedPosition, 10));
       sessionStorage.removeItem("bulletinPosition");
     }
-  }, [style]);
 
+    return () => clearTimeout(scrollTimeout);
+  }, [style]);
   //! =====================================================================
 
   const handleDeleteSubOperation = async (subOperationId, operationId) => {
@@ -344,7 +379,6 @@ const ViewStyleDetails = () => {
     }
   };
 
-  // handle delete main operation
   const handleDeleteMainOP = async (operation) => {
     const isConfirmed = await Swal.fire({
       title: "Are you sure?",
@@ -353,19 +387,14 @@ const ViewStyleDetails = () => {
       showCancelButton: true,
     });
 
-    if (!isConfirmed.isConfirmed) {
-      return;
-    }
+    if (!isConfirmed.isConfirmed) return;
 
-    // send delete request
     try {
       setIsLoading(true);
       const response = await axios.delete(
         `${apiUrl}/api/operationBulleting/delete-mo/${operation.operation_id}`,
         { withCredentials: true },
       );
-
-      console.log("response delete: ", response);
 
       if (response.status === 200) {
         await Swal.fire({
@@ -383,41 +412,31 @@ const ViewStyleDetails = () => {
     }
   };
 
-  // MODIFIED: New function to handle operation expansion with single open at a time
-  const handleOperationExpand = (operationId) => {
-    setExpandedOperations((prev) => {
-      // Create new object with all operations set to false
-      const newExpanded = {};
-      // Set all operations to false
-      Object.keys(prev).forEach((key) => {
-        newExpanded[key] = false;
-      });
-      // Set the clicked operation to true (opposite of its current state)
-      newExpanded[operationId] = !prev[operationId];
-      return newExpanded;
-    });
-  };
-
   const toggleOperationExpand = (operationId) => {
-    handleOperationExpand(operationId);
+    if (expandedOperationId === operationId) {
+      setExpandedOperationId(null);
+      sessionStorage.removeItem("expandedOperationId");
+    } else {
+      setExpandedOperationId(operationId);
+      sessionStorage.setItem("expandedOperationId", operationId);
+    }
 
-    // Use setTimeout to ensure DOM has updated before scrolling
     setTimeout(() => {
       const element = document.getElementById(`mo-${operationId}`);
       if (element) {
         element.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    }, 100); // delaying scrolling
+    }, 100);
   };
 
-  // MODIFIED: Remove the effect that saves to sessionStorage
-  // useEffect(() => {
-  //   if (Object.keys(expandedOperations).length === 0) return;
-  //   sessionStorage.setItem(
-  //     "expandedOperations",
-  //     JSON.stringify(expandedOperations),
-  //   );
-  // }, [expandedOperations]);
+  // Save to sessionStorage whenever expandedOperationId changes
+  useEffect(() => {
+    if (expandedOperationId) {
+      sessionStorage.setItem("expandedOperationId", expandedOperationId);
+    } else {
+      sessionStorage.removeItem("expandedOperationId");
+    }
+  }, [expandedOperationId]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -456,7 +475,6 @@ const ViewStyleDetails = () => {
   const userRole = user?.userRole || null;
 
   const handleAddTechnicalData = (operation, subOperation) => {
-    console.log(`operation ${operation} || subOperation ${subOperation}`);
     setSelectedOperation(operation);
     setSelectedSubOperation(subOperation);
     setIsTechnicalDataModalOpen(true);
@@ -467,7 +485,7 @@ const ViewStyleDetails = () => {
       <AddTechnicalData
         isOpen={isTechnicalDataModalOpen}
         onClose={() => setIsTechnicalDataModalOpen(false)}
-        styleId={location.state} // Using the style_id from location.state
+        styleId={location.state}
         mainOperation={selectedOperation}
         subOperation={selectedSubOperation}
         userRole={user}
@@ -604,7 +622,6 @@ const ViewStyleDetails = () => {
                         <FaPlus className="group-hover:scale-125 duration-200" />
                         <p className="font-semibold">Create new Layout</p>
                       </button>
-                      {/* No layout created yet */}
                     </div>
                   ) : (
                     <div className="">
@@ -748,15 +765,14 @@ const ViewStyleDetails = () => {
             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
               Operations ({style.operations?.length || 0})
             </h2>
-            {userRole === "Admin" ||
-              (userRole === "SuperAdmin" && (
-                <button
-                  onClick={() => setIsAddingMO(true)}
-                  className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm"
-                >
-                  Add Operation
-                </button>
-              ))}
+            {(userRole === "Admin" || userRole === "SuperAdmin") && (
+              <button
+                onClick={() => setIsAddingMO(true)}
+                className="px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm sm:text-base font-medium transition-colors duration-200 shadow-sm"
+              >
+                Add Operation
+              </button>
+            )}
           </div>
 
           {style.operations?.length > 0 ? (
@@ -814,7 +830,8 @@ const ViewStyleDetails = () => {
                       </div>
                       <svg
                         className={`h-4 w-4 sm:h-5 sm:w-5 text-gray-500 transform transition-transform duration-200 ${
-                          expandedOperations[operation.operation_id]
+                          String(expandedOperationId) ===
+                          String(operation.operation_id)
                             ? "rotate-180"
                             : ""
                         }`}
@@ -830,8 +847,8 @@ const ViewStyleDetails = () => {
                     </div>
                   </div>
 
-                  {/* Expanded Sub-Operations */}
-                  {expandedOperations[operation.operation_id] && (
+                  {/* SIMPLIFIED: Check against single ID instead of object */}
+                  {String(expandedOperationId) === String(operation.operation_id) && (
                     <div className="p-3 sm:p-4 space-y-4 bg-white">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <h4 className="font-semibold text-gray-700 text-sm sm:text-base">
@@ -859,19 +876,19 @@ const ViewStyleDetails = () => {
                             <div
                               id={`subop-${subOp.sub_operation_id}`}
                               key={subOp.sub_operation_id}
-                              className={`border border-gray-200 rounded-lg p-3 sm:p-4 ${lastActiveOp == subOp.sub_operation_id ? "bg-blue-100/80" : ""} hover:bg-gray-50 transition-colors duration-200`}
+                              className={`border border-gray-200 rounded-lg p-3 sm:p-4 ${
+                                lastActiveOp == subOp.sub_operation_id
+                                  ? "bg-blue-100/80"
+                                  : ""
+                              } hover:bg-gray-50 transition-colors duration-200`}
                             >
-                              <div
-                                className={`flex flex-col lg:flex-row justify-between items-start lg:items-start gap-3 relative`}
-                              >
+                              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-start gap-3 relative">
                                 <div className="flex-1 min-w-0">
                                   <h5 className="font-semibold text-gray-800 text-sm sm:text-base mb-2">
                                     {subOp.sub_operation_name} (
                                     {subOp.sub_operation_number})
                                   </h5>
-                                  <div
-                                    className={`grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm`}
-                                  >
+                                  <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 text-xs sm:text-sm">
                                     <p className="text-gray-600">
                                       <span className="font-medium">ID:</span>{" "}
                                       {subOp.sub_operation_id}
@@ -918,8 +935,8 @@ const ViewStyleDetails = () => {
                                           subOp.sub_operation_id,
                                         );
                                         sessionStorage.setItem(
-                                          "bulletinPosition",
-                                          window.scrollY,
+                                          "expandedOperationId",
+                                          operation.operation_id,
                                         );
                                         navigate(
                                           `/operations/edit-sub-operation`,
@@ -1245,37 +1262,35 @@ const ViewStyleDetails = () => {
                 {/* helper op card */}
                 {helperOp && helperOp.length > 0 ? (
                   <div>
-                    {helperOp &&
-                      helperOp.length > 0 &&
-                      helperOp.map((hOp) => (
-                        <div
-                          key={hOp.helper_id}
-                          className="bg-gray-50 p-3 mt-2 mb-3 border rounded-md sm:p-4 sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-gray-100 hover:shadow-md transition-colors duration-200"
-                        >
-                          <div className="">
-                            <h3 className="font-semibold uppercase text-lg">
-                              {hOp.operation_name || "N/A"}
-                            </h3>
-                          </div>
+                    {helperOp.map((hOp) => (
+                      <div
+                        key={hOp.helper_id}
+                        className="bg-gray-50 p-3 mt-2 mb-3 border rounded-md sm:p-4 sm:flex-row justify-between items-start sm:items-center gap-3 cursor-pointer hover:bg-gray-100 hover:shadow-md transition-colors duration-200"
+                      >
+                        <div className="">
+                          <h3 className="font-semibold uppercase text-lg">
+                            {hOp.operation_name || "N/A"}
+                          </h3>
+                        </div>
 
-                          <div className="">
-                            <div className="mt-2 relative">
-                              <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                                {`ID: ${hOp.helper_id}` || "N/A"}
-                              </span>
-                              <span className="bg-green-50 text-green-700 px-2 py-1 rounded ml-2">
-                                Type: Helper
-                              </span>
-                              <span className="text-sm ml-3">{`Created: ${formatDate(
-                                hOp.createdAt,
-                              )}`}</span>
-                              <span className="absolute right-8 bg-blue-200/40 px-2 py-1 rounded-full text-blue-800 font-semibold">
-                                {`SMV: ${hOp.mc_smv}`}
-                              </span>
-                            </div>
+                        <div className="">
+                          <div className="mt-2 relative">
+                            <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                              {`ID: ${hOp.helper_id}` || "N/A"}
+                            </span>
+                            <span className="bg-green-50 text-green-700 px-2 py-1 rounded ml-2">
+                              Type: Helper
+                            </span>
+                            <span className="text-sm ml-3">{`Created: ${formatDate(
+                              hOp.createdAt,
+                            )}`}</span>
+                            <span className="absolute right-8 bg-blue-200/40 px-2 py-1 rounded-full text-blue-800 font-semibold">
+                              {`SMV: ${hOp.mc_smv}`}
+                            </span>
                           </div>
                         </div>
-                      ))}
+                      </div>
+                    ))}
                   </div>
                 ) : (
                   <div
@@ -1285,7 +1300,9 @@ const ViewStyleDetails = () => {
                     tabIndex={0}
                   >
                     <div
-                      className={`flex flex-col items-center text-gray-400 ${helperFocus ? "animate-pulse" : ""}`}
+                      className={`flex flex-col items-center text-gray-400 ${
+                        helperFocus ? "animate-pulse" : ""
+                      }`}
                     >
                       <MdPersonOff className={`text-5xl`} />
                       <h5 className="font-semibold">
