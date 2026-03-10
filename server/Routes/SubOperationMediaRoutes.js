@@ -240,7 +240,7 @@ routes.post(
   "/uploadImages",
   imageUpload.single("image"),
   handleMulterError,
-  generateFilenames, // Add filename generation
+  generateFilenames, // Add filename generation - 
   controller.uploadImage,
 );
 routes.delete("/deleteImage/:so_img_id", controller.deleteImage);

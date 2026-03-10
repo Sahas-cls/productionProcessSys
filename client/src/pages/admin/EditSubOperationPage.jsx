@@ -357,17 +357,26 @@ const EditSubOperationPage = () => {
     setShowLooperSuggestions(false);
   };
 
+  useEffect(() => {
+    document.getElementById("title").scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, []);
+
   return (
     <div className="bg-gray-50 min-h-screen md:py-8 md:px-4 sm:px-6 lg:px-8 relative">
       <div className="max-w-7xl mx-auto">
         {/* Header with Back Button */}
-        <div className="md:mb-8 absolute md:relative">
+        <div className="md:mb-8 absolute md:relative p-4 md:p-0">
           <button
             onClick={handleGoBack}
             className="inline-flex items-center text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200 group"
           >
             <GoArrowLeft className="mr-2 text-xl group-hover:-translate-x-1 transition-transform duration-200" />
-            <p className="text-sm">Back to Operation</p>
+            <p className="text-sm flex">
+              Back <span className="hidden md:block">to Operation</span>
+            </p>
           </button>
         </div>
 
@@ -419,7 +428,10 @@ const EditSubOperationPage = () => {
               <Form className="bg-white md:border border-gray-200 mt-2 md:mt-0 md:p-6 sm:p-8 lg:p-12 rounded-2xl shadow-lg w-full max-w-6xl hover:shadow-xl transition-shadow duration-300">
                 {/* Form Header */}
                 <div className="text-center mb-8 sm:mb-12 mt-2">
-                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2">
+                  <h1
+                    id="title"
+                    className="text-2xl pt-4 sm:text-3xl font-bold text-gray-800 mb-2"
+                  >
                     Edit Sub-Operation
                   </h1>
                   <div className="w-20 h-1 bg-blue-600 mx-auto rounded-full"></div>

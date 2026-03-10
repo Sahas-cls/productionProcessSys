@@ -30,8 +30,8 @@ const WINDOWS_CONFIG = {
 
 // Linux configuration (DigitalOcean Droplet)
 const LINUX_CONFIG = {
-  mountPoint: "/mnt/windows_share",
-  videosPath: "/mnt/windows_share/videos",
+  mountPoint: "/mnt/bulletin-assets",
+  videosPath: "/mnt/bulletin-assets/videos",
   uncPath: `//192.168.47.127/operation bulletin assets/videos`, // Linux-style UNC
   sharePath: `//192.168.47.127/operation bulletin assets`,
 };
@@ -343,7 +343,9 @@ const upload = multer({
 // Upload endpoint
 router.post("/test-video-upload", upload.single("video"), async (req, res) => {
   console.log("\n🎯 ========== UPLOAD REQUEST ==========");
-
+  console.log("path == = = ", req.file.path);
+  console.log("req body: ", req);
+  return;
   try {
     if (!req.file) {
       return res

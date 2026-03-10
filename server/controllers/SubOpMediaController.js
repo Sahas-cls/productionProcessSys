@@ -1003,6 +1003,7 @@ async function deleteFromBackblazeB2(filename, fileId = null) {
 
   await s3Client.send(new DeleteObjectCommand(deleteParams));
 }
+
 // to delete image
 exports.deleteImage = async (req, res, next) => {
   const { so_img_id } = req.params;

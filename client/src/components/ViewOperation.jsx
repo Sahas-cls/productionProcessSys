@@ -599,10 +599,10 @@ const ViewStyleDetails = () => {
                 <span className="font-medium text-gray-700">Name:</span>{" "}
                 {style.style_name}
               </p>
-              <p className="text-gray-600">
+              {/* <p className="text-gray-600">
                 <span className="font-medium text-gray-700">Customer ID:</span>{" "}
                 {style.customer_id}
-              </p>
+              </p> */}
             </div>
 
             {!isLoading && (
