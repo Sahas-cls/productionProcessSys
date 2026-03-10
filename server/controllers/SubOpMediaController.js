@@ -19,7 +19,7 @@ require("dotenv").config();
 // Set the ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-// Helper function to check network path accessibility
+
 exports.uploadVideo = async (req, res, next) => {
   const {
     SubOperationMedia,
