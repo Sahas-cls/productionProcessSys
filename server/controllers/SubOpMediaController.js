@@ -11,37 +11,16 @@ const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
-const axios = require("axios");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-const b2SubOpStorage = require("../utils/b2SubOpStorage");
+const localStorage = require("../utils/FileStorageService");
 require("dotenv").config();
 
 // Set the ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
 
+// ==================== VIDEO CONTROLLERS ====================
 
 exports.uploadVideo = async (req, res, next) => {
-  const {
-    SubOperationMedia,
-    SubOperationImages,
-    SubOperationTechPack,
-    SubOperationFolder,
-    SubOperation,
-    Style,
-    MainOperation,
-  } = require("../models");
-  const path = require("path");
-  const ffmpeg = require("fluent-ffmpeg");
-  const ffmpegPath = require("ffmpeg-static");
-  const fs = require("fs");
-  const axios = require("axios");
-  const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
-  const b2SubOpStorage = require("../utils/b2SubOpStorage");
-  require("dotenv").config();
-
-  // Set the ffmpeg path - THIS IS THE KEY LINE
-  ffmpeg.setFfmpegPath(ffmpegPath);
-  console.log("📤 [B2] Video upload request received");
+  console.log("📤 [Local] Video upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 File details:",
@@ -91,7 +70,7 @@ exports.uploadVideo = async (req, res, next) => {
     }
     const styleIdDb = styleRecord.style_id;
 
-    // Optionally: validate moId exists in Operations table
+    // Validate moId exists in Operations table
     const operationExists = await MainOperation.findByPk(moId);
     if (!operationExists) {
       return res.status(400).json({
@@ -100,7 +79,7 @@ exports.uploadVideo = async (req, res, next) => {
       });
     }
 
-    // Optionally: validate subOpId exists in SubOperations table
+    // Validate subOpId exists in SubOperations table
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists) {
       return res.status(400).json({
@@ -135,7 +114,6 @@ exports.uploadVideo = async (req, res, next) => {
               (s) => s.codec_type === "video",
             );
 
-            // Check various places where rotation might be stored
             let rotation = 0;
             if (videoStream?.tags?.rotate) {
               rotation = parseInt(videoStream.tags.rotate);
@@ -144,14 +122,6 @@ exports.uploadVideo = async (req, res, next) => {
                 (sd) => sd.rotation !== undefined,
               );
               if (rotateData) rotation = rotateData.rotation;
-            }
-
-            // Also check display matrix side data
-            if (videoStream?.side_data_list) {
-              const displayMatrix = videoStream.side_data_list.find(
-                (sd) => sd.displaymatrix,
-              );
-              // Parse display matrix if needed for complex rotations
             }
 
             resolve({
@@ -168,38 +138,30 @@ exports.uploadVideo = async (req, res, next) => {
           );
 
           try {
-            // Determine correct transpose filter based on rotation
-            // transpose=1 : 90° clockwise
-            // transpose=2 : 90° counter-clockwise
-            // transpose=0 : 90° counter-clockwise + vertical flip (rare)
-            // transpose=3 : 90° clockwise + vertical flip (rare)
-
-            let transposeFilter = "transpose=1"; // default 90° clockwise
+            let transposeFilter = "transpose=1";
 
             if (rotationInfo.rotation === 90) {
-              transposeFilter = "transpose=1"; // 90° clockwise
+              transposeFilter = "transpose=1";
             } else if (
               rotationInfo.rotation === 270 ||
               rotationInfo.rotation === -90
             ) {
-              transposeFilter = "transpose=2"; // 90° counter-clockwise (for 270°)
+              transposeFilter = "transpose=2";
             } else if (rotationInfo.rotation === 180) {
-              // For 180° rotation, use hflip + vflip or transpose twice
-              transposeFilter = "transpose=1,transpose=1"; // 90° twice = 180°
+              transposeFilter = "transpose=1,transpose=1";
             }
 
-            // ALWAYS use physical rotation with transcoding for web compatibility
             await new Promise((resolve, reject) => {
               ffmpeg(tempInputPath)
                 .videoFilters(transposeFilter)
-                .audioCodec("aac") // Ensure audio compatibility
-                .videoCodec("libx264") // Ensure web-compatible video codec
+                .audioCodec("aac")
+                .videoCodec("libx264")
                 .outputOptions([
-                  "-preset fast", // Balance speed and quality
-                  "-crf 23", // Good quality, reasonable size
-                  "-movflags +faststart", // Optimize for web streaming
-                  "-map_metadata 0", // Preserve other metadata
-                  "-metadata:s:v:0 rotate=0", // Explicitly remove rotation metadata
+                  "-preset fast",
+                  "-crf 23",
+                  "-movflags +faststart",
+                  "-map_metadata 0",
+                  "-metadata:s:v:0 rotate=0",
                 ])
                 .on("start", (commandLine) => {
                   console.log("FFmpeg command:", commandLine);
@@ -215,7 +177,6 @@ exports.uploadVideo = async (req, res, next) => {
                 .save(tempOutputPath);
             });
 
-            // Read the processed file
             processedBuffer = await fs.promises.readFile(tempOutputPath);
             req.file.size = processedBuffer.length;
             wasNormalized = true;
@@ -228,7 +189,6 @@ exports.uploadVideo = async (req, res, next) => {
               rotationError.message,
             );
 
-            // Fallback: at least try to remove rotation metadata
             try {
               await new Promise((resolve, reject) => {
                 ffmpeg(tempInputPath)
@@ -254,7 +214,6 @@ exports.uploadVideo = async (req, res, next) => {
                 "❌ Even metadata removal failed:",
                 fallbackError.message,
               );
-              // Keep original buffer
             }
           }
         } else {
@@ -262,7 +221,6 @@ exports.uploadVideo = async (req, res, next) => {
             "✅ No rotation detected, video orientation is web-compatible",
           );
 
-          // Even if no rotation, ensure web optimization for consistent experience
           try {
             await new Promise((resolve, reject) => {
               ffmpeg(tempInputPath)
@@ -280,7 +238,7 @@ exports.uploadVideo = async (req, res, next) => {
 
             processedBuffer = await fs.promises.readFile(tempOutputPath);
             req.file.size = processedBuffer.length;
-            wasNormalized = true; // Still marked as processed for consistency
+            wasNormalized = true;
             console.log("✅ Video optimized for web playback");
           } catch (optimizeError) {
             console.log(
@@ -304,7 +262,6 @@ exports.uploadVideo = async (req, res, next) => {
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    // Add web-optimized indicator to filename if processed
     const webOptimizedSuffix = wasNormalized ? "_web_optimized" : "";
     finalFilename =
       req.file.generatedName ||
@@ -316,15 +273,7 @@ exports.uploadVideo = async (req, res, next) => {
         .json({ message: "Processed file is empty", success: false });
     }
 
-    // ==================== UPLOAD TO BACKBLAZE B2 ====================
-    uploadResult = await b2SubOpStorage.uploadSubOpFile(
-      processedBuffer,
-      finalFilename,
-      "video",
-      subOpId,
-    );
-
-    //NOTE ==================== FORCE SIZE UNDER 100MB ====================
+    // ==================== SIZE CONTROL ====================
     const MAX_SIZE_MB = 95;
     const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
@@ -334,21 +283,18 @@ exports.uploadVideo = async (req, res, next) => {
       const getVideoDuration = () =>
         new Promise((resolve) => {
           ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-            if (err) return resolve(60); // fallback duration
+            if (err) return resolve(60);
             const duration = metadata.format?.duration || 60;
             resolve(duration);
           });
         });
 
       const duration = await getVideoDuration();
-      const audioBitrate = 128000; // 128k
+      const audioBitrate = 128000;
       const targetSizeBits = MAX_SIZE_BYTES * 8;
 
       let videoBitrate = Math.floor(targetSizeBits / duration) - audioBitrate;
-
-      // Clamp bitrate between 800k and 2500k
       videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000));
-
       const bitrateK = Math.floor(videoBitrate / 1000) + "k";
 
       console.log(`📉 Calculated video bitrate: ${bitrateK}`);
@@ -378,7 +324,6 @@ exports.uploadVideo = async (req, res, next) => {
 
       let finalBuffer = await fs.promises.readFile(sizeControlledPath);
 
-      // SECOND PASS IF STILL TOO BIG
       if (finalBuffer.length > MAX_SIZE_BYTES) {
         console.log("🔁 Second compression pass...");
 
@@ -414,13 +359,20 @@ exports.uploadVideo = async (req, res, next) => {
 
       processedBuffer = finalBuffer;
       req.file.size = finalBuffer.length;
-
       await fs.promises.unlink(sizeControlledPath);
 
       console.log(
         `✅ Final compressed size: ${(processedBuffer.length / (1024 * 1024)).toFixed(2)} MB`,
       );
     }
+
+    // ==================== UPLOAD TO LOCAL STORAGE ====================
+    uploadResult = await localStorage.uploadSubOpFile(
+      processedBuffer,
+      finalFilename,
+      "video",
+      subOpId,
+    );
 
     // ==================== SAVE TO DATABASE ====================
     dbRecord = await SubOperationMedia.create({
@@ -430,7 +382,6 @@ exports.uploadVideo = async (req, res, next) => {
       sub_operation_name: sopName || null,
       media_url: uploadResult.filePath,
       video_url: uploadResult.filePath,
-      b2_file_id: uploadResult.fileId,
       file_size: req.file.size,
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
@@ -460,37 +411,32 @@ exports.uploadVideo = async (req, res, next) => {
         so_media_id: dbRecord.so_media_id,
         media_url: uploadResult.filePath,
         video_url: uploadResult.filePath,
-        video_url_proxy: `/api/b2-files/${uploadResult.filePath}`,
+        video_url_proxy: `/api/local-files/${uploadResult.filePath}`,
         file_name: uploadResult.fileName,
         original_filename: req.file.originalname,
         file_size: req.file.size,
         file_type: req.file.mimetype,
         sub_operation_name: dbRecord.sub_operation_name,
         uploaded_at: dbRecord.createdAt,
-        b2_file_id: uploadResult.fileId,
         orientation_normalized: wasNormalized,
         rotation_fixed: rotationApplied !== null,
         web_optimized: true,
       },
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: "eu-central-003",
+        type: "local",
+        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
     console.error("❌ Unhandled error:", error);
 
-    // Cleanup B2 file if uploaded
-    if (uploadResult?.fileId) {
+    // Cleanup local file if uploaded
+    if (uploadResult?.filePath) {
       try {
-        await b2SubOpStorage.deleteFile(
-          uploadResult.fileId,
-          uploadResult.filePath,
-        );
-        console.log("🧹 Cleaned up B2 file after error");
-      } catch (b2Error) {
-        console.error("❌ Failed to cleanup B2 file:", b2Error.message);
+        await localStorage.deleteFile(null, uploadResult.filePath);
+        console.log("🧹 Cleaned up local file after error");
+      } catch (localError) {
+        console.error("❌ Failed to cleanup local file:", localError.message);
       }
     }
 
@@ -526,47 +472,9 @@ exports.uploadVideo = async (req, res, next) => {
   }
 };
 
-async function checkNetworkPath(networkPath) {
-  return new Promise((resolve) => {
-    // First try fs.access
-    fs.promises
-      .access(networkPath)
-      .then(() => {
-        console.log("✅ Network path accessible via fs.access");
-        resolve(true);
-      })
-      .catch((accessError) => {
-        console.log(
-          "❌ Network path not accessible via fs.access:",
-          accessError.message,
-        );
-
-        // Alternative check: try to list directory
-        fs.promises
-          .readdir(networkPath)
-          .then((files) => {
-            console.log(
-              "✅ Network path accessible via readdir, found",
-              files.length,
-              "files",
-            );
-            resolve(true);
-          })
-          .catch((readError) => {
-            console.log(
-              "❌ Network path not accessible via readdir:",
-              readError.message,
-            );
-            resolve(false);
-          });
-      });
-  });
-}
-
-// to get uploaded video according to the specific sub operation
 exports.getVideos = async (req, res, next) => {
   const { subOpId } = req.params;
-  console.log("📹 [B2] Fetching videos for subOpId:", subOpId);
+  console.log("📹 [Local] Fetching videos for subOpId:", subOpId);
 
   if (isNaN(subOpId)) {
     return res.status(400).json({
@@ -583,25 +491,18 @@ exports.getVideos = async (req, res, next) => {
         { model: SubOperation, as: "sub_operation" },
         { model: MainOperation, as: "main_operation" },
       ],
-      order: [["createdAt", "DESC"]], // Newest first
+      order: [["createdAt", "DESC"]],
     });
 
     console.log(`✅ Found ${videos.length} videos for subOpId ${subOpId}`);
 
-    // Transform videos to include proxy URLs for frontend
     const videosWithUrls = videos.map((video) => {
       const videoData = video.toJSON();
 
-      // Add proxy URL for frontend access
       if (videoData.media_url) {
-        videoData.video_url_proxy = `/api/b2-files/${videoData.media_url}`;
+        videoData.video_url_proxy = `/api/local-files/${videoData.media_url}`;
       }
-
-      // If you want to keep both URLs for reference
       videoData.video_url_original = videoData.media_url;
-
-      // Optional: Add direct B2 URL if bucket is public
-      // videoData.video_url_direct = `https://s3.eu-central-003.backblazeb2.com/${process.env.B2_BUCKET_NAME}/${videoData.media_url}`;
 
       return videoData;
     });
@@ -610,8 +511,8 @@ exports.getVideos = async (req, res, next) => {
       status: "success",
       data: videosWithUrls,
       count: videos.length,
-      storage_type: "backblaze_b2",
-      proxy_base: "/api/b2-files/",
+      storage_type: "local",
+      proxy_base: "/api/local-files/",
     });
   } catch (error) {
     console.error("❌ Error while fetching videos:", error);
@@ -619,19 +520,16 @@ exports.getVideos = async (req, res, next) => {
   }
 };
 
-// to delete specific video from server
 exports.deleteVideo = async (req, res, next) => {
   try {
     const { so_media_id } = req.params;
 
-    // Validate required parameter
     if (!so_media_id) {
       return res.status(400).json({
         message: "Missing required parameter: so_media_id is required",
       });
     }
 
-    // Find the video record in database
     const videoRecord = await SubOperationMedia.findByPk(so_media_id);
 
     if (!videoRecord) {
@@ -640,67 +538,17 @@ exports.deleteVideo = async (req, res, next) => {
       });
     }
 
-    // Extract filename from record (adjust based on your field name)
     const filename = videoRecord.media_url || videoRecord.video_url;
-    const bucketId = process.env.B2_BUCKET_ID || "Guston-test bucket";
 
-    // Initialize Backblaze B2 client
-    const B2 = require("backblaze-b2");
-    const b2 = new B2({
-      applicationKeyId: process.env.B2_KEY_ID,
-      applicationKey: process.env.B2_APPLICATION_KEY,
-    });
-
+    // Delete from local storage
     let fileDeleted = false;
-    let b2FileId = null;
-
-    // Check if we have a Backblaze file reference
-    if (videoRecord.b2_file_id) {
-      b2FileId = videoRecord.b2_file_id;
-    }
-
-    // Delete from Backblaze B2 if filename exists
-    if (filename || b2FileId) {
+    if (filename) {
       try {
-        // Authorize with B2
-        await b2.authorize();
-
-        // If we have a fileId (most reliable way to delete)
-        if (b2FileId) {
-          await b2.deleteFileVersion({
-            fileId: b2FileId,
-            fileName: filename || videoRecord.original_filename,
-          });
-          fileDeleted = true;
-        }
-        // Fallback: delete by filename if we don't have fileId
-        else if (filename) {
-          // First, get file info to obtain fileId
-          const listResponse = await b2.listFileNames({
-            bucketId: bucketId,
-            startFileName: filename,
-            maxFileCount: 1,
-          });
-
-          if (listResponse.data.files.length > 0) {
-            const fileInfo = listResponse.data.files[0];
-            await b2.deleteFileVersion({
-              fileId: fileInfo.fileId,
-              fileName: fileInfo.fileName,
-            });
-            fileDeleted = true;
-          }
-        }
-      } catch (b2Error) {
-        // If file not found in B2, that's okay - we'll still delete DB record
-        if (b2Error.response && b2Error.response.status === 404) {
-          console.log(
-            "File not found in Backblaze B2, proceeding with DB deletion",
-          );
-        } else {
-          console.error("Backblaze B2 deletion error:", b2Error);
-          // Don't fail completely - we'll still try to delete the DB record
-        }
+        await localStorage.deleteFile(null, filename);
+        fileDeleted = true;
+        console.log("✅ File deleted from local storage");
+      } catch (localError) {
+        console.error("❌ Local storage deletion error:", localError);
       }
     }
 
@@ -715,7 +563,7 @@ exports.deleteVideo = async (req, res, next) => {
         recordDeleted: true,
         fileDeleted: fileDeleted,
         filename: filename,
-        storageProvider: "Backblaze B2",
+        storageProvider: "Local Storage",
       },
     });
   } catch (error) {
@@ -731,11 +579,10 @@ exports.deleteVideo = async (req, res, next) => {
   }
 };
 
-// !================================== image controllers
+// ==================== IMAGE CONTROLLERS ====================
 
-// to upload image
 exports.uploadImage = async (req, res, next) => {
-  console.log("📤 [B2] Image upload request received");
+  console.log("📤 [Local] Image upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 File details:",
@@ -753,7 +600,6 @@ exports.uploadImage = async (req, res, next) => {
   let dbRecord = null;
 
   try {
-    // Check if file uploaded
     if (!req.file) {
       console.log("❌ No file uploaded");
       return res.status(400).json({
@@ -764,7 +610,6 @@ exports.uploadImage = async (req, res, next) => {
 
     const { styleNo, moId, sopId, sopName, styleId, subOpId } = req.body;
 
-    // Validate required fields
     if (!styleNo || !moId || !sopId || !subOpId) {
       console.log("❌ Missing required fields:", {
         styleNo,
@@ -779,7 +624,6 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    // Generate filename with timestamp
     const ext = path.extname(req.file.originalname).toLowerCase();
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
@@ -795,15 +639,12 @@ exports.uploadImage = async (req, res, next) => {
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    // Generate filename - use generatedName from middleware if available
     const filename =
       req.file.generatedName ||
       `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
     console.log("📁 Generated filename:", filename);
-    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
 
-    // Validate file buffer
     if (!req.file.buffer || req.file.buffer.length === 0) {
       console.log("❌ File buffer is empty");
       return res.status(400).json({
@@ -812,56 +653,35 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    // ==================== UPLOAD TO BACKBLAZE B2 ====================
-    console.log("☁️ Uploading to Backblaze B2...");
+    // ==================== UPLOAD TO LOCAL STORAGE ====================
+    console.log("💾 Saving to local storage...");
 
     try {
-      // Upload file to B2 - using "image" type instead of "video"
-      uploadResult = await b2SubOpStorage.uploadSubOpFile(
+      uploadResult = await localStorage.uploadSubOpFile(
         req.file.buffer,
         filename,
-        "image", // Changed to "image" for folder organization
-        subOpId, // subOpId for folder organization
+        "image",
+        subOpId,
       );
 
-      console.log("✅ B2 Upload Successful:", {
+      console.log("✅ Local storage successful:", {
         filePath: uploadResult.filePath,
-        fileId: uploadResult.fileId,
         fileName: uploadResult.fileName,
       });
-    } catch (b2Error) {
-      console.error("❌ B2 Upload Failed:", {
-        error: b2Error.message,
-        code: b2Error.code,
-        stack: b2Error.stack?.split("\n")[0],
+    } catch (localError) {
+      console.error("❌ Local storage failed:", {
+        error: localError.message,
+        stack: localError.stack?.split("\n")[0],
       });
 
-      let errorMessage = "Failed to upload image to cloud storage";
-      let statusCode = 500;
-
-      if (
-        b2Error.code === "AccessDenied" ||
-        b2Error.code === "InvalidAccessKeyId"
-      ) {
-        errorMessage = "Cloud storage authentication failed";
-        statusCode = 503;
-      } else if (b2Error.code === "NoSuchBucket") {
-        errorMessage = "Cloud storage bucket not found";
-        statusCode = 503;
-      } else if (
-        b2Error.message.includes("ENOTFOUND") ||
-        b2Error.message.includes("ECONNREFUSED")
-      ) {
-        errorMessage = "Cannot connect to cloud storage";
-        statusCode = 503;
-      }
-
-      return res.status(statusCode).json({
-        message: errorMessage,
+      return res.status(500).json({
+        message: "Failed to save image to storage",
         error:
-          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+          process.env.NODE_ENV === "development"
+            ? localError.message
+            : undefined,
         success: false,
-        storage: "backblaze_b2",
+        storage: "local",
       });
     }
 
@@ -869,43 +689,33 @@ exports.uploadImage = async (req, res, next) => {
     console.log("💾 Saving to database...");
 
     try {
-      // Assuming your image model is SubOperationImages
       dbRecord = await SubOperationImages.create({
-        style_id: styleId || 1, // Default to 1 if not provided
+        style_id: styleId || 1,
         operation_id: moId,
         sub_operation_id: sopId,
         sub_operation_name: sopName || null,
-        // Store B2 file paths
         image_url: uploadResult.filePath,
-        // NEW FIELDS to match video structure:
-        b2_file_id: uploadResult.fileId, // Store B2 file ID for deletion
         file_size: req.file.size,
         original_filename: req.file.originalname,
         uploaded_by: req.user?.userId || null,
         file_type: req.file.mimetype,
-        // If you want to track subOpId separately:
         sub_op_id: subOpId,
       });
 
       console.log("✅ Database record created:", {
         so_img_id: dbRecord.so_img_id,
         image_url: dbRecord.image_url,
-        b2_file_id: dbRecord.b2_file_id,
       });
     } catch (dbError) {
       console.error("❌ Database save failed:", dbError);
 
-      // Attempt to delete from B2 since DB save failed
-      if (uploadResult && uploadResult.fileId) {
+      if (uploadResult && uploadResult.filePath) {
         try {
-          console.log("🧹 Cleaning up B2 file after DB failure...");
-          await b2SubOpStorage.deleteFile(
-            uploadResult.fileId,
-            uploadResult.filePath,
-          );
-          console.log("✅ B2 file cleaned up");
+          console.log("🧹 Cleaning up local file after DB failure...");
+          await localStorage.deleteFile(null, uploadResult.filePath);
+          console.log("✅ Local file cleaned up");
         } catch (cleanupError) {
-          console.error("❌ Failed to clean up B2 file:", cleanupError);
+          console.error("❌ Failed to clean up local file:", cleanupError);
         }
       }
 
@@ -917,28 +727,25 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    // ==================== SUCCESS RESP ====================
     console.log("🎉 Image upload completed successfully!");
 
     res.status(201).json({
-      message: "Image uploaded to cloud storage successfully",
+      message: "Image uploaded to local storage successfully",
       success: true,
       data: {
         so_img_id: dbRecord.so_img_id,
         image_url: uploadResult.filePath,
-        image_url_proxy: `/api/b2-files/${uploadResult.filePath}`, // Proxy URL for frontend
+        image_url_proxy: `/api/local-files/${uploadResult.filePath}`,
         file_name: uploadResult.fileName,
         original_filename: req.file.originalname,
         file_size: req.file.size,
         file_type: req.file.mimetype,
         sub_operation_name: dbRecord.sub_operation_name,
         uploaded_at: dbRecord.createdAt,
-        b2_file_id: uploadResult.fileId,
       },
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: "eu-central-003", // Adjust if needed
+        type: "local",
+        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
@@ -947,20 +754,15 @@ exports.uploadImage = async (req, res, next) => {
       stack: error.stack,
     });
 
-    // Final cleanup if anything went wrong
-    if (uploadResult && uploadResult.fileId) {
+    if (uploadResult && uploadResult.filePath) {
       try {
-        console.log("🧹 Final cleanup of B2 file...");
-        await b2SubOpStorage.deleteFile(
-          uploadResult.fileId,
-          uploadResult.filePath,
-        );
+        console.log("🧹 Final cleanup of local file...");
+        await localStorage.deleteFile(null, uploadResult.filePath);
       } catch (cleanupError) {
         console.error("❌ Final cleanup failed:", cleanupError);
       }
     }
 
-    // Clean up DB record if it was created
     if (dbRecord && dbRecord.so_img_id) {
       try {
         console.log("🧹 Final cleanup of database record...");
@@ -980,42 +782,16 @@ exports.uploadImage = async (req, res, next) => {
   }
 };
 
-// Helper function to delete from Backblaze B2
-async function deleteFromBackblazeB2(filename, fileId = null) {
-  const { S3Client, DeleteObjectCommand } = require("@aws-sdk/client-s3");
-
-  const s3Client = new S3Client({
-    endpoint: `https://s3.${
-      process.env.B2_REGION || "us-west-002"
-    }.backblazeb2.com`,
-    region: process.env.B2_REGION || "us-west-002",
-    credentials: {
-      accessKeyId: process.env.B2_KEY_ID,
-      secretAccessKey: process.env.B2_APPLICATION_KEY,
-    },
-    forcePathStyle: true,
-  });
-
-  const deleteParams = {
-    Bucket: process.env.B2_BUCKET_NAME,
-    Key: `images/${filename}`,
-  };
-
-  await s3Client.send(new DeleteObjectCommand(deleteParams));
-}
-
-// to delete image
 exports.deleteImage = async (req, res, next) => {
   const { so_img_id } = req.params;
 
-  console.log("🗑️ [B2] Delete image request for ID:", so_img_id);
+  console.log("🗑️ [Local] Delete image request for ID:", so_img_id);
 
   let imageRecord = null;
-  let b2Deleted = false;
-  let b2Error = null;
+  let localDeleted = false;
+  let localError = null;
 
   try {
-    // Validate image ID
     if (!so_img_id || isNaN(so_img_id)) {
       console.log("❌ Invalid image ID:", so_img_id);
       return res.status(400).json({
@@ -1024,7 +800,6 @@ exports.deleteImage = async (req, res, next) => {
       });
     }
 
-    // Find the image record in database
     try {
       console.log("🔍 Searching for image record in database...");
       imageRecord = await SubOperationImages.findOne({
@@ -1032,7 +807,6 @@ exports.deleteImage = async (req, res, next) => {
         attributes: [
           "so_img_id",
           "image_url",
-          "b2_file_id",
           "sub_operation_name",
           "original_filename",
           "file_size",
@@ -1052,80 +826,44 @@ exports.deleteImage = async (req, res, next) => {
 
       console.log("✅ Image record found:", {
         id: imageRecord.so_img_id,
-        b2_file_id: imageRecord.b2_file_id,
         image_url: imageRecord.image_url,
         original_filename: imageRecord.original_filename,
         file_size: imageRecord.file_size,
-        sub_operation_id: imageRecord.sub_operation_id,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // ==================== DELETE FROM BACKBLAZE B2 ====================
-    if (imageRecord.b2_file_id && imageRecord.image_url) {
-      console.log("☁️ Deleting from Backblaze B2...");
+    // ==================== DELETE FROM LOCAL STORAGE ====================
+    if (imageRecord.image_url) {
+      console.log("🗑️ Deleting from local storage...");
 
       try {
-        // Check if we have the b2SubOpStorage service
-        if (!b2SubOpStorage || !b2SubOpStorage.deleteFile) {
-          console.error("❌ B2 storage service not available");
-          throw new Error("Cloud storage service unavailable");
-        }
-
-        await b2SubOpStorage.deleteFile(
-          imageRecord.b2_file_id,
-          imageRecord.image_url,
-        );
-
-        b2Deleted = true;
-        console.log("✅ B2 deletion successful:", {
-          fileId: imageRecord.b2_file_id,
+        await localStorage.deleteFile(null, imageRecord.image_url);
+        localDeleted = true;
+        console.log("✅ Local deletion successful:", {
           filePath: imageRecord.image_url,
         });
-      } catch (b2DeleteError) {
-        b2Error = b2DeleteError;
-        console.error("⚠️ B2 deletion failed:", {
-          error: b2DeleteError.message,
-          code: b2DeleteError.code,
-          fileId: imageRecord.b2_file_id,
+      } catch (localDeleteError) {
+        localError = localDeleteError;
+        console.error("⚠️ Local deletion failed:", {
+          error: localDeleteError.message,
+          filePath: imageRecord.image_url,
         });
 
-        // Check if it's a "not found" error - that's okay, file might already be deleted
         if (
-          b2DeleteError.code === "NoSuchKey" ||
-          b2DeleteError.message.includes("not found") ||
-          b2DeleteError.message.includes("NoSuchFile")
+          localDeleteError.message.includes("not found") ||
+          localDeleteError.code === "ENOENT"
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)",
+            "ℹ️ File not found in local storage (may have been deleted already)",
           );
-          b2Deleted = true; // Consider it "deleted" for our purposes
-        } else if (
-          b2DeleteError.code === "AccessDenied" ||
-          b2DeleteError.message.includes("InvalidAccessKeyId")
-        ) {
-          console.error("❌ B2 authentication failed - check credentials");
-          // Don't throw - still delete DB record
-        } else if (
-          b2DeleteError.message.includes("ENOTFOUND") ||
-          b2DeleteError.message.includes("ECONNREFUSED")
-        ) {
-          console.error("❌ Cannot connect to B2 - network issue");
-          // Don't throw - still delete DB record
+          localDeleted = true;
         }
       }
     } else {
-      console.log("ℹ️ No B2 file ID or image URL found, skipping B2 deletion");
-      console.log(
-        "   B2 File ID:",
-        imageRecord.b2_file_id ? "Exists" : "Missing",
-      );
-      console.log(
-        "   Image URL:",
-        imageRecord.image_url ? "Exists" : "Missing",
-      );
+      console.log("ℹ️ No image URL found, skipping local deletion");
     }
 
     // ==================== DELETE FROM DATABASE ====================
@@ -1140,13 +878,11 @@ exports.deleteImage = async (req, res, next) => {
     } catch (dbDeleteError) {
       console.error("❌ Database deletion error:", dbDeleteError);
 
-      // If DB deletion fails, but B2 deletion succeeded, we have an orphaned file
-      if (b2Deleted) {
+      if (localDeleted) {
         console.error(
-          "⚠️ WARNING: File deleted from B2 but database record remains!",
+          "⚠️ WARNING: File deleted from local storage but database record remains!",
         );
         console.error("⚠️ Image data:", {
-          b2_file_id: imageRecord.b2_file_id,
           image_url: imageRecord.image_url,
           original_filename: imageRecord.original_filename,
         });
@@ -1155,7 +891,6 @@ exports.deleteImage = async (req, res, next) => {
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // ==================== PREPARE RESPONSE ====================
     console.log("🎉 Image deletion process completed");
 
     const response = {
@@ -1166,25 +901,18 @@ exports.deleteImage = async (req, res, next) => {
         filename: imageRecord.original_filename || imageRecord.image_url,
         original_filename: imageRecord.original_filename,
         file_size: imageRecord.file_size,
-        b2_file_id: imageRecord.b2_file_id,
-        b2_deleted: b2Deleted,
+        local_deleted: localDeleted,
         db_deleted: dbDeleted,
-        storage_provider: "backblaze_b2",
+        storage_provider: "local",
       },
     };
 
-    // Add warnings if B2 deletion had issues
-    if (b2Error && !b2Deleted) {
+    if (localError && !localDeleted) {
       response.warning =
-        "Image removed from database but cloud storage cleanup failed";
+        "Image removed from database but local storage cleanup failed";
       response.warning_details = {
-        message: b2Error.message,
-        code: b2Error.code,
+        message: localError.message,
       };
-
-      console.log("⚠️ Returning with warning:", response.warning);
-    } else if (!imageRecord.b2_file_id) {
-      response.note = "Image was stored without B2 file ID (legacy record)";
     }
 
     res.json(response);
@@ -1192,7 +920,6 @@ exports.deleteImage = async (req, res, next) => {
     console.error("❌ Delete process failed:", error.message);
     console.error("❌ Error stack:", error.stack);
 
-    // Determine appropriate status code and error message
     let statusCode = 500;
     let errorMessage = "Server error during image deletion";
 
@@ -1203,17 +930,13 @@ exports.deleteImage = async (req, res, next) => {
       statusCode = 500;
       errorMessage = "Failed to delete image record from database";
 
-      // If DB failed but B2 succeeded, add specific warning
-      if (b2Deleted) {
+      if (localDeleted) {
         errorMessage +=
-          " (WARNING: File was deleted from cloud storage but database record remains)";
+          " (WARNING: File was deleted from local storage but database record remains)";
       }
     } else if (error.message.includes("Valid image ID is required")) {
       statusCode = 400;
       errorMessage = error.message;
-    } else if (error.message.includes("Cloud storage service unavailable")) {
-      statusCode = 503;
-      errorMessage = "Cloud storage service is temporarily unavailable";
     }
 
     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
@@ -1225,179 +948,29 @@ exports.deleteImage = async (req, res, next) => {
           ? error.message
           : "Internal server error",
       success: false,
-      // Include debug info for failed deletions
       debug:
         process.env.NODE_ENV === "development"
           ? {
               image_id: so_img_id,
-              b2_file_id: imageRecord?.b2_file_id,
-              b2_deleted: b2Deleted,
-              b2_error: b2Error?.message,
+              local_deleted: localDeleted,
+              local_error: localError?.message,
             }
           : undefined,
     });
   }
 };
 
-// !================================== tech pack controllers (excel)
-exports.uploadTechPack = async (req, res, next) => {
-  console.log("📤 [B2] Tech pack upload request received");
+// ==================== TECH PACK CONTROLLERS ====================
 
-  let uploadResult = null;
-  let dbRecord = null;
-
-  try {
-    /* -----------------------------------
-       Validate File
-    ----------------------------------- */
-
-    if (!req.file) {
-      return res.status(400).json({
-        message: "No file uploaded",
-        success: false,
-      });
-    }
-
-    const { styleId, styleNo } = req.body;
-
-    if (!styleId) {
-      return res.status(400).json({
-        message: "styleId is required",
-        success: false,
-      });
-    }
-
-    /* -----------------------------------
-       Generate Filename
-    ----------------------------------- */
-
-    const ext = path.extname(req.file.originalname).toLowerCase();
-
-    const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds(),
-    ).padStart(2, "0")}`;
-
-    const filename =
-      req.file.generatedName ||
-      `${styleNo || "STYLE"}_TECHPACK_${dateTime}${ext}`;
-
-    /* -----------------------------------
-       Upload To Backblaze
-    ----------------------------------- */
-
-    uploadResult = await b2SubOpStorage.uploadSubOpFile(
-      req.file.buffer,
-      filename,
-      "techpack",
-      styleId, // folder by style
-    );
-
-    /* -----------------------------------
-       Optional Excel Processing
-    ----------------------------------- */
-
-    let excelProcessingResults = null;
-
-    if (ext === ".xlsx" || ext === ".xls") {
-      try {
-        excelProcessingResults = await processTechPackExcel(req.file.buffer);
-      } catch (err) {
-        excelProcessingResults = {
-          sheetsProcessed: 0,
-          totalRows: 0,
-          error: err.message,
-        };
-      }
-    }
-
-    /* -----------------------------------
-       Save Database Record
-    ----------------------------------- */
-
-    dbRecord = await SubOperationTechPack.create({
-      style_id: styleId,
-      tech_pack_url: uploadResult.filePath,
-      b2_file_id: uploadResult.fileId,
-      file_size: req.file.size,
-      original_filename: req.file.originalname,
-      uploaded_by: req.user?.userId || null,
-      file_type: req.file.mimetype,
-    });
-
-    /* -----------------------------------
-       Response
-    ----------------------------------- */
-
-    return res.status(201).json({
-      message: "Tech pack uploaded successfully",
-      success: true,
-      data: {
-        so_tech_id: dbRecord.so_tech_id,
-        style_id: dbRecord.style_id,
-        tech_pack_url: uploadResult.filePath,
-        tech_pack_url_proxy: `/api/b2-files/${uploadResult.filePath}`,
-        original_filename: dbRecord.original_filename,
-        file_size: dbRecord.file_size,
-        file_type: dbRecord.file_type,
-        uploaded_at: dbRecord.createdAt,
-        excel_processing: excelProcessingResults,
-      },
-    });
-  } catch (error) {
-    console.error("❌ Tech pack upload failed:", error);
-
-    /* -----------------------------------
-       Cleanup B2
-    ----------------------------------- */
-
-    if (uploadResult?.fileId) {
-      try {
-        await b2SubOpStorage.deleteFile(
-          uploadResult.fileId,
-          uploadResult.filePath,
-        );
-      } catch (err) {
-        console.error("Cleanup failed:", err);
-      }
-    }
-
-    /* -----------------------------------
-       Cleanup DB
-    ----------------------------------- */
-
-    if (dbRecord?.so_tech_id) {
-      await SubOperationTechPack.destroy({
-        where: { so_tech_id: dbRecord.so_tech_id },
-      });
-    }
-
-    return res.status(500).json({
-      message: "Failed to upload tech pack",
-      success: false,
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
-  }
-};
-
-// Helper function to process Excel tech pack data (if needed)
 async function processTechPackExcel(buffer) {
   try {
     const XLSX = require("xlsx");
-
-    // Read the Excel file from buffer
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const sheetNames = workbook.SheetNames;
 
     let totalRows = 0;
     const processedSheets = [];
 
-    // Process each sheet
     for (const sheetName of sheetNames) {
       const worksheet = workbook.Sheets[sheetName];
       const sheetData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -1425,145 +998,140 @@ async function processTechPackExcel(buffer) {
   }
 }
 
-// Delete tech pack controller
-// exports.deleteTechPack = async (req, res, next) => {
-//   const { so_tech_id } = req.params;
+exports.uploadTechPack = async (req, res, next) => {
+  console.log("📤 [Local] Tech pack upload request received");
 
-//   console.log("🗑️ Delete tech pack request for ID:", so_tech_id);
+  let uploadResult = null;
+  let dbRecord = null;
 
-//   let techPackRecord = null;
-//   let filePath = null;
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: "No file uploaded",
+        success: false,
+      });
+    }
 
-//   try {
-//     // Validate tech pack ID
-//     if (!so_tech_id || isNaN(so_tech_id)) {
-//       console.log("❌ Invalid tech pack ID:", so_tech_id);
-//       return res.status(400).json({
-//         message: "Valid tech pack ID is required",
-//         success: false,
-//       });
-//     }
+    const { styleId, styleNo } = req.body;
 
-//     // Find the tech pack record in database
-//     try {
-//       console.log("🔍 Searching for tech pack record in database...");
-//       techPackRecord = await SubOperationTechPack.findOne({
-//         where: { so_tech_id: so_tech_id },
-//       });
+    if (!styleId) {
+      return res.status(400).json({
+        message: "styleId is required",
+        success: false,
+      });
+    }
 
-//       if (!techPackRecord) {
-//         console.log("❌ Tech pack record not found for ID:", so_tech_id);
-//         return res.status(404).json({
-//           message: "Tech pack record not found",
-//           success: false,
-//         });
-//       }
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const now = new Date();
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}${String(now.getDate()).padStart(2, "0")}_${String(
+      now.getHours(),
+    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
+      now.getSeconds(),
+    ).padStart(2, "0")}`;
 
-//       console.log("✅ Tech pack record found:", {
-//         id: techPackRecord.so_tech_id,
-//         filename: techPackRecord.tech_pack_url,
-//         style_id: techPackRecord.style_id,
-//         operation_id: techPackRecord.operation_id,
-//       });
-//     } catch (findError) {
-//       console.error("❌ Database find error:", findError);
-//       throw new Error(`Database search failed: ${findError.message}`);
-//     }
+    const filename =
+      req.file.generatedName ||
+      `${styleNo || "STYLE"}_TECHPACK_${dateTime}${ext}`;
 
-//     // Construct file path
-//     const networkPath =
-//       "\\\\192.168.46.209\\Operation bullatin videos\\SubOpTechPacks";
-//     filePath = path.join(networkPath, techPackRecord.tech_pack_url);
-//     console.log("📁 File path to delete:", filePath);
+    /* -----------------------------------
+       Upload To Local Storage
+    ----------------------------------- */
+    uploadResult = await localStorage.uploadSubOpFile(
+      req.file.buffer,
+      filename,
+      "techpack",
+      styleId,
+    );
 
-//     // Check if file exists and delete it
-//     let fileDeleted = false;
-//     try {
-//       console.log("🔍 Checking if file exists...");
-//       if (fs.existsSync(filePath)) {
-//         console.log("✅ File exists, proceeding with deletion...");
-//         fs.unlinkSync(filePath);
-//         fileDeleted = true;
-//         console.log("✅ File deleted successfully from network storage");
-//       } else {
-//         console.log(
-//           "⚠️ File not found in storage, but will delete database record"
-//         );
-//       }
-//     } catch (fileError) {
-//       console.error("❌ File deletion error:", fileError);
-//       // Don't throw error here - we still want to delete the DB record
-//       console.log(
-//         "⚠️ File deletion failed, but continuing with database record deletion"
-//       );
-//     }
+    /* -----------------------------------
+       Optional Excel Processing
+    ----------------------------------- */
+    let excelProcessingResults = null;
 
-//     // Delete database record
-//     try {
-//       console.log("💾 Deleting database record...");
-//       await SubOperationTechPack.destroy({
-//         where: { so_tech_id: so_tech_id },
-//       });
-//       console.log("✅ Database record deleted successfully");
-//     } catch (dbDeleteError) {
-//       console.error("❌ Database deletion error:", dbDeleteError);
-//       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
-//     }
+    if (ext === ".xlsx" || ext === ".xls") {
+      try {
+        excelProcessingResults = await processTechPackExcel(req.file.buffer);
+      } catch (err) {
+        excelProcessingResults = {
+          sheetsProcessed: 0,
+          totalRows: 0,
+          error: err.message,
+        };
+      }
+    }
 
-//     // Success response
-//     console.log("🎉 Tech pack deletion completed successfully");
-//     res.json({
-//       message: "Tech pack deleted successfully",
-//       data: {
-//         id: so_tech_id,
-//         filename: techPackRecord.tech_pack_url,
-//         fileDeleted: fileDeleted,
-//         recordDeleted: true,
-//       },
-//       success: true,
-//     });
-//   } catch (error) {
-//     console.error("❌ Delete process failed:", error.message);
+    /* -----------------------------------
+       Save Database Record
+    ----------------------------------- */
+    dbRecord = await SubOperationTechPack.create({
+      style_id: styleId,
+      tech_pack_url: uploadResult.filePath,
+      file_size: req.file.size,
+      original_filename: req.file.originalname,
+      uploaded_by: req.user?.userId || null,
+      file_type: req.file.mimetype,
+    });
 
-//     // Determine appropriate status code and error message
-//     let statusCode = 500;
-//     let errorMessage = "Server error during tech pack deletion";
+    /* -----------------------------------
+       Response
+    ----------------------------------- */
+    return res.status(201).json({
+      message: "Tech pack uploaded successfully",
+      success: true,
+      data: {
+        so_tech_id: dbRecord.so_tech_id,
+        style_id: dbRecord.style_id,
+        tech_pack_url: uploadResult.filePath,
+        tech_pack_url_proxy: `/api/local-files/${uploadResult.filePath}`,
+        original_filename: dbRecord.original_filename,
+        file_size: dbRecord.file_size,
+        file_type: dbRecord.file_type,
+        uploaded_at: dbRecord.createdAt,
+        excel_processing: excelProcessingResults,
+      },
+      storage: {
+        type: "local",
+        path: "/mnt/bulletin-assets",
+      },
+    });
+  } catch (error) {
+    console.error("❌ Tech pack upload failed:", error);
 
-//     if (error.message.includes("Database search failed")) {
-//       statusCode = 500;
-//       errorMessage = "Failed to find tech pack record";
-//     } else if (error.message.includes("Database deletion failed")) {
-//       statusCode = 500;
-//       errorMessage = "Failed to delete tech pack record from database";
-//     } else if (error.message.includes("Valid tech pack ID is required")) {
-//       statusCode = 400;
-//       errorMessage = error.message;
-//     }
+    if (uploadResult?.filePath) {
+      try {
+        await localStorage.deleteFile(null, uploadResult.filePath);
+      } catch (err) {
+        console.error("Cleanup failed:", err);
+      }
+    }
 
-//     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
+    if (dbRecord?.so_tech_id) {
+      await SubOperationTechPack.destroy({
+        where: { so_tech_id: dbRecord.so_tech_id },
+      });
+    }
 
-//     res.status(statusCode).json({
-//       message: errorMessage,
-//       error:
-//         process.env.NODE_ENV === "development"
-//           ? error.message
-//           : "Internal server error",
-//       success: false,
-//     });
-//   }
-// };
+    return res.status(500).json({
+      message: "Failed to upload tech pack",
+      success: false,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
 
 exports.deleteTechPack = async (req, res, next) => {
   const { so_tech_id } = req.params;
 
-  console.log("🗑️ [B2] Delete tech pack request for ID:", so_tech_id);
+  console.log("🗑️ [Local] Delete tech pack request for ID:", so_tech_id);
 
   let techPackRecord = null;
-  let b2Deleted = false;
-  let b2Error = null;
+  let localDeleted = false;
+  let localError = null;
 
   try {
-    // Validate tech pack ID
     if (!so_tech_id || isNaN(so_tech_id)) {
       console.log("❌ Invalid tech pack ID:", so_tech_id);
       return res.status(400).json({
@@ -1572,7 +1140,6 @@ exports.deleteTechPack = async (req, res, next) => {
       });
     }
 
-    // Find the tech pack record in database
     try {
       console.log("🔍 Searching for tech pack record in database...");
       techPackRecord = await SubOperationTechPack.findOne({
@@ -1580,13 +1147,9 @@ exports.deleteTechPack = async (req, res, next) => {
         attributes: [
           "so_tech_id",
           "tech_pack_url",
-          "b2_file_id",
-          "sub_operation_name",
           "original_filename",
           "file_size",
           "style_id",
-          "operation_id",
-          "sub_operation_id",
         ],
       });
 
@@ -1600,46 +1163,39 @@ exports.deleteTechPack = async (req, res, next) => {
 
       console.log("✅ Tech pack record found:", {
         id: techPackRecord.so_tech_id,
-        b2_file_id: techPackRecord.b2_file_id,
         tech_pack_url: techPackRecord.tech_pack_url,
         original_filename: techPackRecord.original_filename,
         file_size: techPackRecord.file_size,
-        sub_op_id: techPackRecord.sub_op_id,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // ==================== DELETE FROM BACKBLAZE B2 ====================
-    if (techPackRecord.b2_file_id && techPackRecord.tech_pack_url) {
-      console.log("☁️ Deleting from Backblaze B2...");
+    // ==================== DELETE FROM LOCAL STORAGE ====================
+    if (techPackRecord.tech_pack_url) {
+      console.log("🗑️ Deleting from local storage...");
 
       try {
-        await b2SubOpStorage.deleteFile(
-          techPackRecord.b2_file_id,
-          techPackRecord.tech_pack_url,
-        );
+        await localStorage.deleteFile(null, techPackRecord.tech_pack_url);
+        localDeleted = true;
+        console.log("✅ Local deletion successful");
+      } catch (localDeleteError) {
+        localError = localDeleteError;
+        console.error("⚠️ Local deletion failed:", localDeleteError.message);
 
-        b2Deleted = true;
-        console.log("✅ B2 deletion successful");
-      } catch (b2DeleteError) {
-        b2Error = b2DeleteError;
-        console.error("⚠️ B2 deletion failed:", b2DeleteError.message);
-
-        // Check if it's a "not found" error
         if (
-          b2DeleteError.code === "NoSuchKey" ||
-          b2DeleteError.message.includes("not found")
+          localDeleteError.message.includes("not found") ||
+          localDeleteError.code === "ENOENT"
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)",
+            "ℹ️ File not found in local storage (may have been deleted already)",
           );
-          b2Deleted = true;
+          localDeleted = true;
         }
       }
     } else {
-      console.log("ℹ️ No B2 file ID or tech pack URL, skipping B2 deletion");
+      console.log("ℹ️ No tech pack URL, skipping local deletion");
     }
 
     // ==================== DELETE FROM DATABASE ====================
@@ -1656,7 +1212,6 @@ exports.deleteTechPack = async (req, res, next) => {
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // ==================== SUCCESS RESPONSE ====================
     console.log("🎉 Tech pack deletion completed");
 
     const response = {
@@ -1666,19 +1221,17 @@ exports.deleteTechPack = async (req, res, next) => {
         id: so_tech_id,
         filename:
           techPackRecord.original_filename || techPackRecord.tech_pack_url,
-        b2_deleted: b2Deleted,
+        local_deleted: localDeleted,
         db_deleted: dbDeleted,
-        storage_provider: "backblaze_b2",
+        storage_provider: "local",
       },
     };
 
-    // Add warnings if B2 deletion had issues
-    if (b2Error && !b2Deleted) {
+    if (localError && !localDeleted) {
       response.warning =
-        "Tech pack removed from database but cloud storage cleanup failed";
+        "Tech pack removed from database but local storage cleanup failed";
       response.warning_details = {
-        message: b2Error.message,
-        code: b2Error.code,
+        message: localError.message,
       };
     }
 
@@ -1711,16 +1264,12 @@ exports.deleteTechPack = async (req, res, next) => {
   }
 };
 
-// !================================== folder controllers
-// to upload folder (multiple documents)
+// ==================== FOLDER CONTROLLERS ====================
+
 exports.uploadFolder = async (req, res) => {
-  console.log("📤 [B2] Folder upload request received", req.body);
+  console.log("📤 [Local] Folder upload request received", req.body);
 
   try {
-    /* -----------------------------------
-       Validate Files
-    ----------------------------------- */
-
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
         message: "No files uploaded",
@@ -1745,10 +1294,6 @@ exports.uploadFolder = async (req, res) => {
     const failedFiles = [];
     const filesToCleanup = [];
 
-    /* -----------------------------------
-       Process Each File
-    ----------------------------------- */
-
     for (const [index, file] of req.files.entries()) {
       let uploadResult;
       let dbRecord;
@@ -1771,26 +1316,22 @@ exports.uploadFolder = async (req, res) => {
           throw new Error("File buffer is empty");
         }
 
-        /* ---------------- Upload to B2 ---------------- */
-
-        uploadResult = await b2SubOpStorage.uploadSubOpFile(
+        /* ---------------- Upload to Local Storage ---------------- */
+        uploadResult = await localStorage.uploadSubOpFile(
           file.buffer,
           filename,
           "document",
-          styleId, // store under style
+          styleId,
         );
 
         filesToCleanup.push({
-          fileId: uploadResult.fileId,
           filePath: uploadResult.filePath,
         });
 
         /* ---------------- Save DB ---------------- */
-
         dbRecord = await SubOperationFolder.create({
           style_id: styleId,
           folder_url: uploadResult.filePath,
-          b2_file_id: uploadResult.fileId,
           file_size: file.size,
           original_filename: file.originalname,
           uploaded_by: req.user?.userId || null,
@@ -1815,20 +1356,13 @@ exports.uploadFolder = async (req, res) => {
           status: "failed",
         });
 
-        if (uploadResult?.fileId) {
+        if (uploadResult?.filePath) {
           try {
-            await b2SubOpStorage.deleteFile(
-              uploadResult.fileId,
-              uploadResult.filePath,
-            );
+            await localStorage.deleteFile(null, uploadResult.filePath);
           } catch (_) {}
         }
       }
     }
-
-    /* -----------------------------------
-       Final Response
-    ----------------------------------- */
 
     if (uploadResults.length === 0) {
       return res.status(500).json({
@@ -1843,6 +1377,10 @@ exports.uploadFolder = async (req, res) => {
       success: true,
       files: uploadResults,
       failedFilesCount: failedFiles.length,
+      storage: {
+        type: "local",
+        path: "/mnt/bulletin-assets",
+      },
     });
   } catch (error) {
     console.error("❌ Upload process failed:", error);
@@ -1855,148 +1393,16 @@ exports.uploadFolder = async (req, res) => {
   }
 };
 
-// Delete folder document
-// exports.deleteFolderDocument = async (req, res, next) => {
-//   const { so_folder_id } = req.params;
-
-//   console.log("🗑️ Delete folder document request for ID:", so_folder_id);
-
-//   let folderRecord = null;
-//   let filePath = null;
-
-//   try {
-//     // Validate folder document ID
-//     if (!so_folder_id || isNaN(so_folder_id)) {
-//       console.log("❌ Invalid folder document ID:", so_folder_id);
-//       return res.status(400).json({
-//         message: "Valid folder document ID is required",
-//         success: false,
-//       });
-//     }
-
-//     // Find the folder record in database
-//     try {
-//       console.log("🔍 Searching for folder document record in database...");
-//       folderRecord = await SubOperationFolder.findOne({
-//         where: { so_folder_id: so_folder_id },
-//       });
-
-//       if (!folderRecord) {
-//         console.log(
-//           "❌ Folder document record not found for ID:",
-//           so_folder_id
-//         );
-//         return res.status(404).json({
-//           message: "Folder document record not found",
-//           success: false,
-//         });
-//       }
-
-//       console.log("✅ Folder document record found:", {
-//         id: folderRecord.so_folder_id,
-//         filename: folderRecord.folder_url,
-//         style_id: folderRecord.style_id,
-//         operation_id: folderRecord.operation_id,
-//       });
-//     } catch (findError) {
-//       console.error("❌ Database find error:", findError);
-//       throw new Error(`Database search failed: ${findError.message}`);
-//     }
-
-//     // Construct file path
-//     const networkPath =
-//       "\\\\192.168.46.209\\Operation bullatin videos\\SubOpFolders";
-//     filePath = path.join(networkPath, folderRecord.folder_url);
-//     console.log("📁 File path to delete:", filePath);
-
-//     // Check if file exists and delete it
-//     let fileDeleted = false;
-//     try {
-//       console.log("🔍 Checking if file exists...");
-//       if (fs.existsSync(filePath)) {
-//         console.log("✅ File exists, proceeding with deletion...");
-//         fs.unlinkSync(filePath);
-//         fileDeleted = true;
-//         console.log("✅ File deleted successfully from network storage");
-//       } else {
-//         console.log(
-//           "⚠️ File not found in storage, but will delete database record"
-//         );
-//       }
-//     } catch (fileError) {
-//       console.error("❌ File deletion error:", fileError);
-//       // Don't throw error here - we still want to delete the DB record
-//       console.log(
-//         "⚠️ File deletion failed, but continuing with database record deletion"
-//       );
-//     }
-
-//     // Delete database record
-//     try {
-//       console.log("💾 Deleting database record...");
-//       await SubOperationFolder.destroy({
-//         where: { so_folder_id: so_folder_id },
-//       });
-//       console.log("✅ Database record deleted successfully");
-//     } catch (dbDeleteError) {
-//       console.error("❌ Database deletion error:", dbDeleteError);
-//       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
-//     }
-
-//     // Success response
-//     console.log("🎉 Folder document deletion completed successfully");
-//     res.json({
-//       message: "Folder document deleted successfully",
-//       data: {
-//         id: so_folder_id,
-//         filename: folderRecord.folder_url,
-//         fileDeleted: fileDeleted,
-//         recordDeleted: true,
-//       },
-//       success: true,
-//     });
-//   } catch (error) {
-//     console.error("❌ Delete process failed:", error.message);
-
-//     // Determine appropriate status code and error message
-//     let statusCode = 500;
-//     let errorMessage = "Server error during folder document deletion";
-
-//     if (error.message.includes("Database search failed")) {
-//       statusCode = 500;
-//       errorMessage = "Failed to find folder document record";
-//     } else if (error.message.includes("Database deletion failed")) {
-//       statusCode = 500;
-//       errorMessage = "Failed to delete folder document record from database";
-//     } else if (error.message.includes("Valid folder document ID is required")) {
-//       statusCode = 400;
-//       errorMessage = error.message;
-//     }
-
-//     console.log(`📤 Sending error response: ${statusCode} - ${errorMessage}`);
-
-//     res.status(statusCode).json({
-//       message: errorMessage,
-//       error:
-//         process.env.NODE_ENV === "development"
-//           ? error.message
-//           : "Internal server error",
-//       success: false,
-//     });
-//   }
-// };
-
 exports.deleteFolderDocument = async (req, res, next) => {
   const { so_folder_id } = req.params;
 
-  console.log("🗑️ [B2] Delete folder file request for ID:", so_folder_id);
+  console.log("🗑️ [Local] Delete folder file request for ID:", so_folder_id);
 
   let folderFileRecord = null;
-  let b2Deleted = false;
-  let b2Error = null;
+  let localDeleted = false;
+  let localError = null;
 
   try {
-    // Validate folder file ID
     if (!so_folder_id || isNaN(so_folder_id)) {
       console.log("❌ Invalid folder file ID:", so_folder_id);
       return res.status(400).json({
@@ -2005,7 +1411,6 @@ exports.deleteFolderDocument = async (req, res, next) => {
       });
     }
 
-    // Find the folder file record in database
     try {
       console.log("🔍 Searching for folder file record in database...");
       folderFileRecord = await SubOperationFolder.findOne({
@@ -2013,13 +1418,9 @@ exports.deleteFolderDocument = async (req, res, next) => {
         attributes: [
           "so_folder_id",
           "folder_url",
-          "b2_file_id",
-          "sub_operation_name",
           "original_filename",
           "file_size",
           "style_id",
-          "operation_id",
-          "sub_operation_id",
         ],
       });
 
@@ -2033,46 +1434,39 @@ exports.deleteFolderDocument = async (req, res, next) => {
 
       console.log("✅ Folder file record found:", {
         id: folderFileRecord.so_folder_id,
-        b2_file_id: folderFileRecord.b2_file_id,
         folder_url: folderFileRecord.folder_url,
         original_filename: folderFileRecord.original_filename,
         file_size: folderFileRecord.file_size,
-        folder_name: folderFileRecord.folder_name,
       });
     } catch (findError) {
       console.error("❌ Database find error:", findError);
       throw new Error(`Database search failed: ${findError.message}`);
     }
 
-    // ==================== DELETE FROM BACKBLAZE B2 ====================
-    if (folderFileRecord.b2_file_id && folderFileRecord.folder_url) {
-      console.log("☁️ Deleting from Backblaze B2...");
+    // ==================== DELETE FROM LOCAL STORAGE ====================
+    if (folderFileRecord.folder_url) {
+      console.log("🗑️ Deleting from local storage...");
 
       try {
-        await b2SubOpStorage.deleteFile(
-          folderFileRecord.b2_file_id,
-          folderFileRecord.folder_url,
-        );
+        await localStorage.deleteFile(null, folderFileRecord.folder_url);
+        localDeleted = true;
+        console.log("✅ Local deletion successful");
+      } catch (localDeleteError) {
+        localError = localDeleteError;
+        console.error("⚠️ Local deletion failed:", localDeleteError.message);
 
-        b2Deleted = true;
-        console.log("✅ B2 deletion successful");
-      } catch (b2DeleteError) {
-        b2Error = b2DeleteError;
-        console.error("⚠️ B2 deletion failed:", b2DeleteError.message);
-
-        // Check if it's a "not found" error
         if (
-          b2DeleteError.code === "NoSuchKey" ||
-          b2DeleteError.message.includes("not found")
+          localDeleteError.message.includes("not found") ||
+          localDeleteError.code === "ENOENT"
         ) {
           console.log(
-            "ℹ️ File not found in B2 (may have been deleted already)",
+            "ℹ️ File not found in local storage (may have been deleted already)",
           );
-          b2Deleted = true;
+          localDeleted = true;
         }
       }
     } else {
-      console.log("ℹ️ No B2 file ID or folder URL, skipping B2 deletion");
+      console.log("ℹ️ No folder URL, skipping local deletion");
     }
 
     // ==================== DELETE FROM DATABASE ====================
@@ -2089,7 +1483,6 @@ exports.deleteFolderDocument = async (req, res, next) => {
       throw new Error(`Database deletion failed: ${dbDeleteError.message}`);
     }
 
-    // ==================== SUCCESS RESPONSE ====================
     console.log("🎉 Folder file deletion completed");
 
     const response = {
@@ -2099,20 +1492,17 @@ exports.deleteFolderDocument = async (req, res, next) => {
         id: so_folder_id,
         filename:
           folderFileRecord.original_filename || folderFileRecord.folder_url,
-        folder_name: folderFileRecord.folder_name,
-        b2_deleted: b2Deleted,
+        local_deleted: localDeleted,
         db_deleted: dbDeleted,
-        storage_provider: "backblaze_b2",
+        storage_provider: "local",
       },
     };
 
-    // Add warnings if B2 deletion had issues
-    if (b2Error && !b2Deleted) {
+    if (localError && !localDeleted) {
       response.warning =
-        "Folder file removed from database but cloud storage cleanup failed";
+        "Folder file removed from database but local storage cleanup failed";
       response.warning_details = {
-        message: b2Error.message,
-        code: b2Error.code,
+        message: localError.message,
       };
     }
 
@@ -2145,7 +1535,6 @@ exports.deleteFolderDocument = async (req, res, next) => {
   }
 };
 
-// Delete multiple folder documents
 exports.deleteMultipleFolderDocuments = async (req, res, next) => {
   const { documentIds } = req.body;
 
@@ -2155,7 +1544,6 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
   );
 
   try {
-    // Validate document IDs
     if (
       !documentIds ||
       !Array.isArray(documentIds) ||
@@ -2169,14 +1557,11 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
     }
 
     const deleteResults = [];
-    const networkPath =
-      "\\\\192.168.46.209\\Operation bullatin videos\\SubOpFolders";
 
     for (const docId of documentIds) {
       try {
         console.log(`\n🔍 Processing deletion for ID: ${docId}`);
 
-        // Find the folder record
         const folderRecord = await SubOperationFolder.findOne({
           where: { so_folder_id: docId },
         });
@@ -2192,19 +1577,16 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
         }
 
         let fileDeleted = false;
-        const filePath = path.join(networkPath, folderRecord.folder_url);
 
-        // Delete file from storage
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        // Delete file from local storage
+        if (folderRecord.folder_url) {
+          try {
+            await localStorage.deleteFile(null, folderRecord.folder_url);
             fileDeleted = true;
-            console.log("✅ File deleted from storage");
-          } else {
-            console.log("⚠️ File not found in storage");
+            console.log("✅ File deleted from local storage");
+          } catch (fileError) {
+            console.error("❌ File deletion error:", fileError);
           }
-        } catch (fileError) {
-          console.error("❌ File deletion error:", fileError);
         }
 
         // Delete database record
@@ -2268,48 +1650,12 @@ exports.deleteMultipleFolderDocuments = async (req, res, next) => {
   }
 };
 
-// to get data
-// In your SubOpMediaController.js
+// ==================== GET CONTROLLERS ====================
 
-// Get all media by subOpId (combined endpoint)
-// exports.getAllMedia = async (req, res) => {
-//   try {
-//     const { subOpId } = req.params;
-
-//     // Fetch all media types in parallel
-//     const [videos, images, techPacks, folders] = await Promise.all([
-//       // Your existing methods for each type
-//       this.getVideosData(subOpId),
-//       this.getImagesData(subOpId),
-//       this.getTechPacksData(subOpId),
-//       this.getFolderDocumentsData(subOpId),
-//     ]);
-
-//     res.json({
-//       success: true,
-//       data: {
-//         videos: videos.data || [],
-//         images: images.data || [],
-//         techPacks: techPacks.data || [],
-//         folders: folders.data || [],
-//       },
-//       message: "All media fetched successfully",
-//     });
-//   } catch (error) {
-//     console.error("Error fetching all media:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to fetch media",
-//     });
-//   }
-// };
-
-// Individual get methods (you need to implement these based on your models)
 exports.getImages = async (req, res) => {
   try {
     const { subOpId } = req.params;
 
-    // Validate parameter
     if (!subOpId) {
       return res.status(400).json({
         success: false,
@@ -2319,16 +1665,14 @@ exports.getImages = async (req, res) => {
 
     console.log(`📸 Fetching images for subOpId: ${subOpId}`);
 
-    // Get images from database
     const images = await SubOperationImages.findAll({
-      where: { sub_operation_id: subOpId }, // Using sub_op_id instead of sub_operation_id
+      where: { sub_operation_id: subOpId },
       order: [["createdAt", "DESC"]],
       attributes: [
         "so_img_id",
         "sub_operation_id",
         "sub_operation_name",
         "image_url",
-        "b2_file_id",
         "file_size",
         "original_filename",
         "file_type",
@@ -2340,37 +1684,17 @@ exports.getImages = async (req, res) => {
 
     console.log(`✅ Found ${images.length} images for subOpId: ${subOpId}`);
 
-    // Generate B2 URLs for each image
     const imagesWithUrls = images.map((image) => {
       const imageData = image.toJSON();
 
-      // Generate B2 public URL
-      let publicUrl = imageData.public_url; // If already stored in DB
-
-      if (!publicUrl && imageData.image_url) {
-        // Construct B2 URL from image_url (which should be the B2 path)
-        const bucketName = process.env.B2_BUCKET_NAME;
-        const region = process.env.B2_REGION || "eu-central-003";
-
-        // Check if image_url is already a full path
-        if (imageData.image_url.startsWith("http")) {
-          publicUrl = imageData.image_url;
-        } else {
-          // Construct URL - adjust based on your bucket configuration
-          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${imageData.image_url}`;
-        }
-      }
-
-      // Add proxy URL for frontend access
-      const proxyUrl = `/api/b2-files/${imageData.image_url}`;
+      const proxyUrl = `/api/local-files/${imageData.image_url}`;
 
       return {
         ...imageData,
-        public_url: publicUrl,
+        public_url: proxyUrl,
         proxy_url: proxyUrl,
-        // For compatibility with frontend
-        direct_url: publicUrl,
-        preview_url: proxyUrl, // Use proxy for preview to avoid CORS issues
+        direct_url: proxyUrl,
+        preview_url: proxyUrl,
       };
     });
 
@@ -2380,9 +1704,8 @@ exports.getImages = async (req, res) => {
       count: images.length,
       message: "Images fetched successfully",
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: process.env.B2_REGION || "eu-central-003",
+        type: "local",
+        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
@@ -2399,7 +1722,7 @@ exports.getStyleTechPacks = async (req, res) => {
   try {
     const { subOpId: styleId } = req.params;
     console.log("requested style id: ", styleId);
-    // Validate parameter
+
     if (!styleId) {
       return res.status(400).json({
         success: false,
@@ -2409,7 +1732,6 @@ exports.getStyleTechPacks = async (req, res) => {
 
     console.log(`📋 Fetching tech packs for styleId: ${styleId}`);
 
-    // Get tech packs from database - NOW BY STYLE_ID
     const techPacks = await SubOperationTechPack.findAll({
       where: { style_id: styleId },
       order: [["createdAt", "DESC"]],
@@ -2417,7 +1739,6 @@ exports.getStyleTechPacks = async (req, res) => {
         "so_tech_id",
         "style_id",
         "tech_pack_url",
-        "b2_file_id",
         "file_size",
         "original_filename",
         "file_type",
@@ -2431,36 +1752,19 @@ exports.getStyleTechPacks = async (req, res) => {
       `✅ Found ${techPacks.length} tech packs for styleId: ${styleId}`,
     );
 
-    // Generate URLs for each tech pack
     const techPacksWithUrls = techPacks.map((techPack) => {
       const techPackData = techPack.toJSON();
 
-      // Generate B2 URL
-      let publicUrl = techPackData.public_url;
-
-      if (!publicUrl && techPackData.tech_pack_url) {
-        if (techPackData.tech_pack_url.startsWith("http")) {
-          publicUrl = techPackData.tech_pack_url;
-        } else {
-          const bucketName = process.env.B2_BUCKET_NAME;
-          const region = process.env.B2_REGION || "eu-central-003";
-          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${techPackData.tech_pack_url}`;
-        }
-      }
-
-      // Add proxy URL for frontend access
-      const proxyUrl = `/api/b2-files/${techPackData.tech_pack_url}`;
-
-      // Determine file icon based on extension
+      const proxyUrl = `/api/local-files/${techPackData.tech_pack_url}`;
       const fileIcon = getFileIcon(
         techPackData.original_filename || techPackData.tech_pack_url,
       );
 
       return {
         ...techPackData,
-        public_url: publicUrl,
+        public_url: proxyUrl,
         proxy_url: proxyUrl,
-        direct_url: publicUrl,
+        direct_url: proxyUrl,
         preview_url: proxyUrl,
         file_icon: fileIcon,
         file_name:
@@ -2480,9 +1784,8 @@ exports.getStyleTechPacks = async (req, res) => {
       count: techPacks.length,
       message: "Style tech packs fetched successfully",
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: process.env.B2_REGION || "eu-central-003",
+        type: "local",
+        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
@@ -2495,52 +1798,10 @@ exports.getStyleTechPacks = async (req, res) => {
   }
 };
 
-// Helper function to get file icon
-function getFileIcon(filename) {
-  if (!filename) return "📄";
-
-  const ext = getFileExtension(filename).toLowerCase();
-
-  const iconMap = {
-    ".xlsx": "📊",
-    ".xls": "📊",
-    ".csv": "📑",
-    ".pdf": "📕",
-    ".doc": "📘",
-    ".docx": "📘",
-    ".txt": "📝",
-    ".zip": "🗜️",
-    ".rar": "🗜️",
-    ".7z": "🗜️",
-  };
-
-  return iconMap[ext] || "📄";
-}
-
-// Helper function to get file extension
-function getFileExtension(filename) {
-  if (!filename) return "";
-  const lastDot = filename.lastIndexOf(".");
-  return lastDot === -1 ? "" : filename.substring(lastDot);
-}
-
-// Helper function to format file size
-function formatFileSize(bytes) {
-  if (!bytes || bytes === 0) return "0 Bytes";
-
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-// Get folder documents.
 exports.getFolderDocuments = async (req, res) => {
   try {
     const { styleId } = req.params;
 
-    // Validate parameter
     if (!styleId) {
       return res.status(400).json({
         success: false,
@@ -2550,7 +1811,6 @@ exports.getFolderDocuments = async (req, res) => {
 
     console.log(`📂 Fetching folder files for styleId: ${styleId}`);
 
-    // Get folder files from database
     const folderFiles = await SubOperationFolder.findAll({
       where: { style_id: styleId },
       order: [["createdAt", "DESC"]],
@@ -2558,7 +1818,6 @@ exports.getFolderDocuments = async (req, res) => {
         "so_folder_id",
         "style_id",
         "folder_url",
-        "b2_file_id",
         "file_size",
         "original_filename",
         "file_type",
@@ -2572,29 +1831,13 @@ exports.getFolderDocuments = async (req, res) => {
       `✅ Found ${folderFiles.length} folder files for styleId: ${styleId}`,
     );
 
-    // Generate URLs for each file
     const folderFilesWithUrls = folderFiles.map((folderFile) => {
       const folderFileData = folderFile.toJSON();
 
-      // Generate B2 public URL
-      let publicUrl = null;
-      if (folderFileData.folder_url) {
-        if (folderFileData.folder_url.startsWith("http")) {
-          publicUrl = folderFileData.folder_url;
-        } else {
-          const bucketName = process.env.B2_BUCKET_NAME;
-          const region = process.env.B2_REGION || "eu-central-003";
-
-          publicUrl = `https://${bucketName}.s3.${region}.backblazeb2.com/${folderFileData.folder_url}`;
-        }
-      }
-
-      // Proxy URL (optional)
       const proxyUrl = folderFileData.folder_url
-        ? `/api/b2-files/${folderFileData.folder_url}`
+        ? `/api/local-files/${folderFileData.folder_url}`
         : null;
 
-      // Helpers
       const fileName =
         folderFileData.original_filename ||
         folderFileData.folder_url?.split("/").pop() ||
@@ -2602,20 +1845,14 @@ exports.getFolderDocuments = async (req, res) => {
 
       return {
         ...folderFileData,
-
-        // URLs
-        public_url: publicUrl,
+        public_url: proxyUrl,
         proxy_url: proxyUrl,
-        direct_url: publicUrl,
+        direct_url: proxyUrl,
         preview_url: proxyUrl,
-
-        // File info
         file_name: fileName,
         file_extension: getFileExtension(fileName),
         file_icon: getFileIcon(fileName),
         file_type_name: getFileType(folderFileData.file_type || fileName),
-
-        // Human readable size
         file_size_formatted: formatFileSize(folderFileData.file_size),
       };
     });
@@ -2626,9 +1863,8 @@ exports.getFolderDocuments = async (req, res) => {
       count: folderFiles.length,
       message: "Folder files fetched successfully",
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        region: process.env.B2_REGION || "eu-central-003",
+        type: "local",
+        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
@@ -2641,7 +1877,8 @@ exports.getFolderDocuments = async (req, res) => {
   }
 };
 
-// Helper functions (add these or reuse from previous controllers)
+// ==================== HELPER FUNCTIONS ====================
+
 function getFileIcon(filename) {
   if (!filename) return "📄";
   const ext = getFileExtension(filename).toLowerCase();
@@ -2664,15 +1901,29 @@ function getFileIcon(filename) {
   return iconMap[ext] || "📄";
 }
 
+function getFileExtension(filename) {
+  if (!filename) return "";
+  const lastDot = filename.lastIndexOf(".");
+  return lastDot === -1 ? "" : filename.substring(lastDot);
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 function getFileType(mimeTypeOrFilename) {
   if (!mimeTypeOrFilename) return "Document";
 
   if (mimeTypeOrFilename.includes("/")) {
-    // It's a MIME type
     const parts = mimeTypeOrFilename.split("/");
     return parts[1] ? parts[1].toUpperCase() : "Document";
   } else {
-    // It's a filename
     const ext = getFileExtension(mimeTypeOrFilename).toLowerCase();
     const typeMap = {
       ".pdf": "PDF Document",
