@@ -63,6 +63,7 @@ const VideoGallery = () => {
         .map(encodeURIComponent)
         .join("/");
 
+      // const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${encodedPath}`;
       const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${encodedPath}`;
       console.log("Final URL:", finalUrl);
       return finalUrl;
