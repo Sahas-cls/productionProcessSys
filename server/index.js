@@ -41,24 +41,100 @@ const validatePath = (reqPath) => {
   return normalized;
 };
 
+//BUG debug test
+// Add this near your other routes
+app.get("/api/debug/video-exists/:filename(*)", (req, res) => {
+  const filename = req.params[0];
+  const videoPath = path.join(STORAGE_UNC_PATH, "SubOpVideos", filename);
+
+  console.log("Checking video existence:");
+  console.log("Filename:", filename);
+  console.log("Full path:", videoPath);
+
+  fs.access(videoPath, fs.constants.F_OK, (err) => {
+    if (err) {
+      console.error("File does not exist:", err);
+      return res.status(404).json({
+        exists: false,
+        path: videoPath,
+        error: err.message,
+      });
+    }
+
+    // Get file stats
+    fs.stat(videoPath, (statErr, stats) => {
+      if (statErr) {
+        return res.json({
+          exists: true,
+          path: videoPath,
+          error: statErr.message,
+        });
+      }
+
+      res.json({
+        exists: true,
+        path: videoPath,
+        size: stats.size,
+        isFile: stats.isFile(),
+        permissions: {
+          readable: true, // You might want to check actual permissions
+        },
+      });
+    });
+  });
+});
+
 // Videos route
+// Replace your current /videos route with this enhanced version
 app.use(
   "/videos",
   (req, res, next) => {
-    // Security check
     const requestedPath = req.path;
+    console.log("📽️ Video request received:", requestedPath);
+
     if (requestedPath.includes("..")) {
       return res.status(403).json({ error: "Access denied" });
     }
-    console.log("📽️📽️📽️ request received...");
+
+    // Decode the URL path
+    const decodedPath = decodeURIComponent(requestedPath);
+    const fullPath = path.join(STORAGE_UNC_PATH, "SubOpVideos", decodedPath);
+
+    console.log("Decoded path:", decodedPath);
+    console.log("Full filesystem path:", fullPath);
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      console.error("File not found:", fullPath);
+      return res.status(404).json({
+        error: "Video not found",
+        path: requestedPath,
+        fullPath: fullPath,
+      });
+    }
+
+    // Get file stats for debugging
+    try {
+      const stats = fs.statSync(fullPath);
+      console.log("File found, size:", stats.size, "bytes");
+
+      // Check if file is empty
+      if (stats.size === 0) {
+        console.error("File is empty:", fullPath);
+        return res.status(500).json({ error: "Video file is empty" });
+      }
+    } catch (statErr) {
+      console.error("Error getting file stats:", statErr);
+    }
+
     next();
   },
-
   express.static(path.join(STORAGE_UNC_PATH, "SubOpVideos"), {
     setHeaders: (res, filePath) => {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Accept-Ranges", "bytes");
 
       const ext = path.extname(filePath).toLowerCase();
       const mimeTypes = {
@@ -77,9 +153,6 @@ app.use(
       if (mimeTypes[ext]) {
         res.setHeader("Content-Type", mimeTypes[ext]);
       }
-
-      // Allow byte-range requests for video streaming
-      res.setHeader("Accept-Ranges", "bytes");
     },
   }),
 );
@@ -223,6 +296,46 @@ app.use(
     },
   }),
 );
+
+// test
+
+
+//BUG debug
+const debugVideoUrl = async (item) => {
+  const videoUrl = getVideoUrl(item);
+  console.log("Testing video URL:", videoUrl);
+
+  try {
+    // Test with HEAD request
+    const response = await fetch(videoUrl, { method: "HEAD" });
+    console.log("HEAD request response:", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+    });
+
+    if (!response.ok) {
+      console.error("Video URL not accessible:", response.status);
+      Swal.fire({
+        title: "Video Debug Info",
+        html: `
+          <p><strong>URL:</strong> ${videoUrl}</p>
+          <p><strong>Status:</strong> ${response.status}</p>
+          <p><strong>Content-Type:</strong> ${response.headers.get("content-type")}</p>
+          <p><strong>Content-Length:</strong> ${response.headers.get("content-length")}</p>
+        `,
+        icon: response.ok ? "success" : "error",
+      });
+    }
+  } catch (error) {
+    console.error("Error testing video URL:", error);
+    Swal.fire({
+      title: "Video Debug Error",
+      text: error.message,
+      icon: "error",
+    });
+  }
+};
 
 // ==================== CSRF Token ====================
 app.get("/api/csrf-token", (req, res) => {

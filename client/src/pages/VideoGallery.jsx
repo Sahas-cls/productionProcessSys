@@ -63,8 +63,10 @@ const VideoGallery = () => {
         .map(encodeURIComponent)
         .join("/");
 
-      // const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${encodedPath}`;
       const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${encodedPath}`;
+      console.log("Original media_url:", item.media_url);
+      console.log("Cleaned path:", cleanPath);
+      console.log("Encoded path:", encodedPath);
       console.log("Final URL:", finalUrl);
       return finalUrl;
     }
@@ -88,6 +90,45 @@ const VideoGallery = () => {
     },
     [activeVideoId],
   );
+
+  const handleVideoError = useCallback((e, id) => {
+    const video = e.target;
+    const error = video.error;
+
+    console.error("Video error details:", {
+      code: error?.code,
+      message: error?.message,
+      networkState: video.networkState,
+      readyState: video.readyState,
+      currentSrc: video.currentSrc,
+    });
+
+    let errorMessage = "Failed to load video";
+
+    if (error) {
+      switch (error.code) {
+        case 1:
+          errorMessage = "Video loading aborted";
+          break;
+        case 2:
+          errorMessage = "Network error while loading video";
+          break;
+        case 3:
+          errorMessage = "Video decoding failed - file may be corrupted";
+          break;
+        case 4:
+          errorMessage = "Video format not supported or file not found";
+          break;
+        default:
+          errorMessage = error.message || "Unknown video error";
+      }
+    }
+
+    setVideoErrors((prev) => ({
+      ...prev,
+      [id]: errorMessage,
+    }));
+  }, []);
 
   const handleStopVideo = useCallback((id) => {
     const video = videoRefs.current[id];
