@@ -6,7 +6,7 @@ const db = require("./models");
 const multer = require("multer");
 const path = require("path");
 const morgan = require("morgan");
-const fs = require("fs"); // ADD THIS - it was missing
+const fs = require("fs");
 
 // ==================== Load environment variables ====================
 require("dotenv").config();
@@ -22,7 +22,11 @@ app.use(
   }),
 );
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -30,133 +34,143 @@ app.use(morgan("combined"));
 
 // ==================== STATIC FILE SERVING FOR NETWORK STORAGE ====================
 
-// Define the base UNC path for the new storage location
+// Define the base path for the storage location
 const STORAGE_UNC_PATH =
-  process.platform == "win32" ? "Y:\\" : "/mnt/bulletin-assets";
+  process.platform === "win32" ? "Y:\\" : "/mnt/bulletin-assets";
 
-// Helper function to validate and sanitize paths
-const validatePath = (reqPath) => {
-  // Prevent directory traversal attacks
-  const normalized = path.normalize(reqPath).replace(/^(\.\.[\/\\])+/, "");
-  return normalized;
-};
-
-//BUG debug test
-// Add this near your other routes
-app.get("/api/debug/video-exists/:filename(*)", (req, res) => {
-  const filename = req.params[0];
-  const videoPath = path.join(STORAGE_UNC_PATH, "SubOpVideos", filename);
-
-  console.log("Checking video existence:");
-  console.log("Filename:", filename);
-  console.log("Full path:", videoPath);
-
-  fs.access(videoPath, fs.constants.F_OK, (err) => {
-    if (err) {
-      console.error("File does not exist:", err);
-      return res.status(404).json({
-        exists: false,
-        path: videoPath,
-        error: err.message,
-      });
-    }
-
-    // Get file stats
-    fs.stat(videoPath, (statErr, stats) => {
-      if (statErr) {
-        return res.json({
-          exists: true,
-          path: videoPath,
-          error: statErr.message,
-        });
-      }
-
-      res.json({
-        exists: true,
-        path: videoPath,
-        size: stats.size,
-        isFile: stats.isFile(),
-        permissions: {
-          readable: true, // You might want to check actual permissions
-        },
-      });
-    });
-  });
+// Debug logging middleware for all requests
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
 });
 
-// Videos route
-// Replace your current /videos route with this enhanced version
-app.use(
-  "/videosTest",
-  (req, res, next) => {
-    const requestedPath = req.path;
-    console.log("📽️ Video request received:", requestedPath);
+// ==================== VIDEO SERVING WITH PROPER HANDLING ====================
+app.get("/videos/*", (req, res) => {
+  // Get the filename from the URL path
+  const videoPath = req.params[0] || req.path.replace("/videos/", "");
 
-    if (requestedPath.includes("..")) {
-      return res.status(403).json({ error: "Access denied" });
+  console.log("🎥 Video requested:", {
+    originalPath: req.path,
+    videoPath: videoPath,
+    method: req.method,
+  });
+
+  // Security check - prevent directory traversal
+  if (
+    videoPath.includes("..") ||
+    videoPath.includes("\\") ||
+    videoPath.includes("//")
+  ) {
+    console.log("❌ Security violation - path traversal attempt:", videoPath);
+    return res.status(403).json({ error: "Access denied" });
+  }
+
+  // Decode the filename (handles %20, etc.)
+  const decodedFilename = decodeURIComponent(videoPath);
+
+  // Try both possible locations (videos and SubOpVideos)
+  const possiblePaths = [
+    path.join(STORAGE_UNC_PATH, "SubOpVideos", decodedFilename),
+    path.join(STORAGE_UNC_PATH, "videos", decodedFilename),
+  ];
+
+  console.log("🔍 Looking for video in locations:");
+  let foundPath = null;
+
+  for (const checkPath of possiblePaths) {
+    console.log("  Checking:", checkPath);
+    if (fs.existsSync(checkPath)) {
+      foundPath = checkPath;
+      console.log("  ✅ Found at:", checkPath);
+      break;
+    }
+  }
+
+  // If file not found in either location
+  if (!foundPath) {
+    console.log("❌ Video not found in any location");
+
+    // List directory contents for debugging
+    try {
+      const subOpVideosDir = path.join(STORAGE_UNC_PATH, "SubOpVideos");
+      if (fs.existsSync(subOpVideosDir)) {
+        const files = fs.readdirSync(subOpVideosDir).slice(0, 10);
+        console.log("📁 SubOpVideos contains:", files);
+      }
+    } catch (e) {
+      console.log("Could not read directory:", e.message);
     }
 
-    // Decode the URL path
-    const decodedPath = decodeURIComponent(requestedPath);
-    const fullPath = path.join(STORAGE_UNC_PATH, "SubOpVideos", decodedPath);
+    return res.status(404).json({
+      error: "Video not found",
+      requested: decodedFilename,
+    });
+  }
 
-    console.log("Decoded path:", decodedPath);
-    console.log("Full filesystem path:", fullPath);
+  // Get file stats
+  try {
+    const stat = fs.statSync(foundPath);
+    console.log("📊 File stats:", {
+      size: stat.size,
+      isFile: stat.isFile(),
+      modified: stat.mtime,
+    });
 
-    // Check if file exists
-    if (!fs.existsSync(fullPath)) {
-      console.error("File not found:", fullPath);
-      return res.status(404).json({
-        error: "Video not found",
-        path: requestedPath,
-        fullPath: fullPath,
+    // Set proper headers for video streaming
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+
+    // Handle range requests (for seeking in video)
+    const range = req.headers.range;
+
+    if (range) {
+      console.log("📊 Range request:", range);
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const chunksize = end - start + 1;
+
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+        "Content-Length": chunksize,
+        "Content-Type": "video/mp4",
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cross-Origin-Resource-Policy": "cross-origin",
+      });
+
+      const stream = fs.createReadStream(foundPath, { start, end });
+      stream.pipe(res);
+
+      stream.on("error", (err) => {
+        console.error("Stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Error streaming video" });
+        }
+      });
+    } else {
+      console.log("📊 Full file request");
+      const stream = fs.createReadStream(foundPath);
+      stream.pipe(res);
+
+      stream.on("error", (err) => {
+        console.error("Stream error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Error streaming video" });
+        }
       });
     }
+  } catch (error) {
+    console.error("❌ Error accessing video:", error);
+    res.status(500).json({ error: "Error accessing video file" });
+  }
+});
 
-    // Get file stats for debugging
-    try {
-      const stats = fs.statSync(fullPath);
-      console.log("File found, size:", stats.size, "bytes");
-
-      // Check if file is empty
-      if (stats.size === 0) {
-        console.error("File is empty:", fullPath);
-        return res.status(500).json({ error: "Video file is empty" });
-      }
-    } catch (statErr) {
-      console.error("Error getting file stats:", statErr);
-    }
-
-    next();
-  },
-  express.static(path.join(STORAGE_UNC_PATH, "SubOpVideos"), {
-    setHeaders: (res, filePath) => {
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      res.setHeader("Accept-Ranges", "bytes");
-
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        ".mp4": "video/mp4",
-        ".avi": "video/x-msvideo",
-        ".mov": "video/quicktime",
-        ".mkv": "video/x-matroska",
-        ".webm": "video/webm",
-        ".wmv": "video/x-ms-wmv",
-        ".flv": "video/x-flv",
-        ".m4v": "video/x-m4v",
-        ".mpg": "video/mpeg",
-        ".mpeg": "video/mpeg",
-        ".3gp": "video/3gpp",
-      };
-      if (mimeTypes[ext]) {
-        res.setHeader("Content-Type", mimeTypes[ext]);
-      }
-    },
-  }),
-);
-
+// ==================== OTHER STATIC ROUTES ====================
 // Images route
 app.use(
   "/subop-images",
@@ -171,23 +185,6 @@ app.use(
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
-
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".bmp": "image/bmp",
-        ".tiff": "image/tiff",
-        ".tif": "image/tiff",
-        ".svg": "image/svg+xml",
-        ".ico": "image/x-icon",
-      };
-      if (mimeTypes[ext]) {
-        res.setHeader("Content-Type", mimeTypes[ext]);
-      }
     },
   }),
 );
@@ -206,35 +203,6 @@ app.use(
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
-
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".csv": "text/csv",
-        ".ods": "application/vnd.oasis.opendocument.spreadsheet",
-        ".pdf": "application/pdf",
-        ".doc": "application/msword",
-        ".docx":
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".txt": "text/plain",
-        ".zip": "application/zip",
-        ".rar": "application/x-rar-compressed",
-        ".7z": "application/x-7z-compressed",
-      };
-      if (mimeTypes[ext]) {
-        res.setHeader("Content-Type", mimeTypes[ext]);
-      } else {
-        res.setHeader("Content-Type", "application/octet-stream");
-      }
-
-      // Set download headers for certain file types
-      if (
-        [".xls", ".xlsx", ".csv", ".ods", ".pdf", ".doc", ".docx"].includes(ext)
-      ) {
-        res.setHeader("Content-Disposition", "inline");
-      }
     },
   }),
 );
@@ -253,96 +221,11 @@ app.use(
       res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
-
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        // Documents
-        ".pdf": "application/pdf",
-        ".doc": "application/msword",
-        ".docx":
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        ".xls": "application/vnd.ms-excel",
-        ".xlsx":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ".csv": "text/csv",
-        ".txt": "text/plain",
-        ".ods": "application/vnd.oasis.opendocument.spreadsheet",
-
-        // Images
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".bmp": "image/bmp",
-
-        // Archives
-        ".zip": "application/zip",
-        ".rar": "application/x-rar-compressed",
-        ".7z": "application/x-7z-compressed",
-        ".tar": "application/x-tar",
-        ".gz": "application/gzip",
-      };
-      if (mimeTypes[ext]) {
-        res.setHeader("Content-Type", mimeTypes[ext]);
-      } else {
-        res.setHeader("Content-Type", "application/octet-stream");
-      }
-
-      // Set appropriate disposition
-      if ([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt"].includes(ext)) {
-        res.setHeader("Content-Disposition", "inline");
-      }
     },
   }),
 );
 
-// test
-
-
-//BUG debug
-const debugVideoUrl = async (item) => {
-  const videoUrl = getVideoUrl(item);
-  console.log("Testing video URL:", videoUrl);
-
-  try {
-    // Test with HEAD request
-    const response = await fetch(videoUrl, { method: "HEAD" });
-    console.log("HEAD request response:", {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-    });
-
-    if (!response.ok) {
-      console.error("Video URL not accessible:", response.status);
-      Swal.fire({
-        title: "Video Debug Info",
-        html: `
-          <p><strong>URL:</strong> ${videoUrl}</p>
-          <p><strong>Status:</strong> ${response.status}</p>
-          <p><strong>Content-Type:</strong> ${response.headers.get("content-type")}</p>
-          <p><strong>Content-Length:</strong> ${response.headers.get("content-length")}</p>
-        `,
-        icon: response.ok ? "success" : "error",
-      });
-    }
-  } catch (error) {
-    console.error("Error testing video URL:", error);
-    Swal.fire({
-      title: "Video Debug Error",
-      text: error.message,
-      icon: "error",
-    });
-  }
-};
-
-// ==================== CSRF Token ====================
-app.get("/api/csrf-token", (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
-});
-
-// ==================== ROUTES ====================
+// ==================== API ROUTES ====================
 // Users
 const userRoutes = require("./Routes/UserRoutes.js");
 app.use("/api/user/", userRoutes);
@@ -404,31 +287,130 @@ const helperOpMediaRoutes = require("./Routes/HelperMediaRoutes.js");
 app.use("/api/helperOpMedia", helperOpMediaRoutes);
 
 // Dashboard
-const dashboardRoutes = require("../server/Routes/DashboardRoutes.js");
+const dashboardRoutes = require("./Routes/DashboardRoutes.js");
 app.use("/api/dashboard", dashboardRoutes);
 
 // needle types
-const needleTypes = require("../server/Routes/NeedleTypeRoutes.js");
+const needleTypes = require("./Routes/NeedleTypeRoutes.js");
 app.use("/api/needleType", needleTypes);
 
 // thread routes
-const threadTypes = require("../server/Routes/ThreadRoutes.js");
+const threadTypes = require("./Routes/ThreadRoutes.js");
 app.use("/api/thread", threadTypes);
 
-const test = require("../server/Routes/TestRoutes.js");
+const test = require("./Routes/TestRoutes.js");
 app.use("/api/test", test);
 
 // ==================== HEALTH CHECK ENDPOINT ====================
 app.get("/api/health", (req, res) => {
+  const subOpVideosPath = path.join(STORAGE_UNC_PATH, "SubOpVideos");
+  const videosExist = fs.existsSync(subOpVideosPath);
+  let videoCount = 0;
+
+  if (videosExist) {
+    try {
+      videoCount = fs.readdirSync(subOpVideosPath).length;
+    } catch (e) {
+      console.log("Error reading videos directory:", e.message);
+    }
+  }
+
   res.json({
     status: "ok",
     timestamp: new Date().toISOString(),
     storage: {
       path: STORAGE_UNC_PATH,
+      subOpVideosExists: videosExist,
+      videoCount: videoCount,
       folders: ["SubOpVideos", "SubOpImages", "SubOpTechPacks", "SubOpFolders"],
     },
   });
 });
+
+// ==================== DEBUG ENDPOINT ====================
+app.get("/api/debug/video/:filename(*)", (req, res) => {
+  const filename = req.params[0];
+  const decodedFilename = decodeURIComponent(filename);
+
+  const subOpVideosPath = path.join(
+    STORAGE_UNC_PATH,
+    "SubOpVideos",
+    decodedFilename,
+  );
+  const videosPath = path.join(STORAGE_UNC_PATH, "videos", decodedFilename);
+
+  const result = {
+    requested: filename,
+    decoded: decodedFilename,
+    storagePath: STORAGE_UNC_PATH,
+    locations: {
+      subOpVideos: {
+        path: subOpVideosPath,
+        exists: fs.existsSync(subOpVideosPath),
+      },
+      videos: {
+        path: videosPath,
+        exists: fs.existsSync(videosPath),
+      },
+    },
+  };
+
+  // Add stats if file exists
+  if (result.locations.subOpVideos.exists) {
+    const stats = fs.statSync(subOpVideosPath);
+    result.locations.subOpVideos.stats = {
+      size: stats.size,
+      isFile: stats.isFile(),
+      modified: stats.mtime,
+    };
+  }
+
+  if (result.locations.videos.exists) {
+    const stats = fs.statSync(videosPath);
+    result.locations.videos.stats = {
+      size: stats.size,
+      isFile: stats.isFile(),
+      modified: stats.mtime,
+    };
+  }
+
+  // List directory contents
+  try {
+    const subOpVideosDir = path.join(STORAGE_UNC_PATH, "SubOpVideos");
+    if (fs.existsSync(subOpVideosDir)) {
+      result.directoryContents = fs.readdirSync(subOpVideosDir).slice(0, 20);
+    }
+  } catch (e) {
+    result.directoryError = e.message;
+  }
+
+  res.json(result);
+});
+
+// ==================== SERVE REACT APP (MUST BE LAST) ====================
+// Serve static files from React build
+const reactBuildPath = path.join(__dirname, "..", "frontend", "dist");
+if (fs.existsSync(reactBuildPath)) {
+  console.log("📁 Serving React app from:", reactBuildPath);
+  app.use(express.static(reactBuildPath));
+
+  // Catch-all route for React SPA - this must be LAST
+  app.get("*", (req, res) => {
+    // Don't serve index.html for API routes or file requests
+    if (
+      req.url.startsWith("/api/") ||
+      req.url.startsWith("/videos/") ||
+      req.url.startsWith("/subop-images/") ||
+      req.url.startsWith("/techpacks/") ||
+      req.url.startsWith("/documents/")
+    ) {
+      return res.status(404).json({ error: "Not found" });
+    }
+    res.sendFile(path.join(reactBuildPath, "index.html"));
+  });
+} else {
+  console.log("⚠️ React build not found at:", reactBuildPath);
+}
 
 // ==================== ERROR HANDLER ====================
 app.use((err, req, res, next) => {
@@ -439,45 +421,26 @@ app.use((err, req, res, next) => {
     message: err.message,
     statusCode,
     stack: !isProduction ? err.stack : undefined,
-    errors: err.errors,
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString(),
   });
 
-  const response = {
+  res.status(statusCode).json({
     success: false,
     message: err.message || "Internal server error",
     ...(!isProduction && { stack: err.stack }),
-  };
-
-  if (err.field) response.field = err.field;
-  if (err.errors) response.errors = err.errors;
-
-  switch (statusCode) {
-    case 401:
-      response.message = response.message || "Unauthorized";
-      break;
-    case 403:
-      response.message = response.message || "Forbidden";
-      break;
-    case 404:
-      response.message = response.message || "Not found";
-      break;
-    case 422:
-      response.message = response.message || "Validation failed";
-      break;
-  }
-
-  return res.status(statusCode).json(response);
+  });
 });
 
 // ==================== START SERVER ====================
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
+  console.log("\n" + "=".repeat(50));
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log("\n📁 Static file paths configured for network storage:");
+  console.log("=".repeat(50));
+  console.log("\n📁 Static file paths:");
   console.log(`   📍 Base path: ${STORAGE_UNC_PATH}`);
   console.log(`   🎥 /videos → ${path.join(STORAGE_UNC_PATH, "SubOpVideos")}`);
   console.log(
@@ -489,4 +452,21 @@ app.listen(PORT, () => {
   console.log(
     `   📄 /documents → ${path.join(STORAGE_UNC_PATH, "SubOpFolders")}`,
   );
+
+  // Check if video directory exists
+  const videoDir = path.join(STORAGE_UNC_PATH, "SubOpVideos");
+  if (fs.existsSync(videoDir)) {
+    try {
+      const files = fs.readdirSync(videoDir);
+      console.log(`\n🎬 Video directory contains ${files.length} files`);
+      if (files.length > 0) {
+        console.log("   Sample files:", files.slice(0, 3));
+      }
+    } catch (e) {
+      console.log("⚠️ Could not read video directory:", e.message);
+    }
+  } else {
+    console.log(`\n⚠️ Video directory does not exist: ${videoDir}`);
+  }
+  console.log("=".repeat(50) + "\n");
 });

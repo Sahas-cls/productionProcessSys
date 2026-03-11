@@ -54,23 +54,11 @@ const VideoGallery = () => {
 
   const getVideoUrl = (item) => {
     if (item.media_url) {
-      // Remove "SubOpVideos/" prefix if it exists
-      const cleanPath = item.media_url.replace(/^SubOpVideos[\/\\]?/, "");
-
-      // Encode spaces and special characters
-      const encodedPath = cleanPath
-        .split("/")
-        .map(encodeURIComponent)
-        .join("/");
-
-      const finalUrl = `${import.meta.env.VITE_API_URL}/videosTest/${encodedPath}`;
-      console.log("Original media_url:", item.media_url);
-      console.log("Cleaned path:", cleanPath);
-      console.log("Encoded path:", encodedPath);
-      console.log("Final URL:", finalUrl);
-      return finalUrl;
+      // Clean the URL path
+      const cleanPath = item.media_url.replace(/^\//, "");
+      return `${import.meta.env.VITE_API_URL}/api/videos/${cleanPath}`;
     }
-    return null;
+    return "";
   };
 
   const handlePlayVideo = useCallback(
@@ -90,45 +78,6 @@ const VideoGallery = () => {
     },
     [activeVideoId],
   );
-
-  const handleVideoError = useCallback((e, id) => {
-    const video = e.target;
-    const error = video.error;
-
-    console.error("Video error details:", {
-      code: error?.code,
-      message: error?.message,
-      networkState: video.networkState,
-      readyState: video.readyState,
-      currentSrc: video.currentSrc,
-    });
-
-    let errorMessage = "Failed to load video";
-
-    if (error) {
-      switch (error.code) {
-        case 1:
-          errorMessage = "Video loading aborted";
-          break;
-        case 2:
-          errorMessage = "Network error while loading video";
-          break;
-        case 3:
-          errorMessage = "Video decoding failed - file may be corrupted";
-          break;
-        case 4:
-          errorMessage = "Video format not supported or file not found";
-          break;
-        default:
-          errorMessage = error.message || "Unknown video error";
-      }
-    }
-
-    setVideoErrors((prev) => ({
-      ...prev,
-      [id]: errorMessage,
-    }));
-  }, []);
 
   const handleStopVideo = useCallback((id) => {
     const video = videoRefs.current[id];
