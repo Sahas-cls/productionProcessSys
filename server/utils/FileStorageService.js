@@ -3,13 +3,11 @@ const path = require("path");
 const fsSync = require("fs");
 
 const STORAGE_BASE =
-  process.platform === "win32"
-    ? "\\\\192.168.47.127\\operation bullatin asset"
-    : "/mnt/bulletin-assets";
+  process.platform === "win32" ? "Y:" : "/mnt/bulletin-assets";
 
 class LocalSubOpStorage {
   constructor() {
-    this.storageBase = STORAGE_BASE;
+    this.storageBase = STORAGE_BASE;  
   }
 
   /**
@@ -136,7 +134,7 @@ class LocalSubOpStorage {
     try {
       // Don't try to clean up the main storage folders
       if (dirPath === this.storageBase) return;
-      
+
       const files = await fs.readdir(dirPath);
       if (files.length === 0) {
         await fs.rmdir(dirPath);

@@ -54,11 +54,19 @@ const VideoGallery = () => {
 
   const getVideoUrl = (item) => {
     if (item.media_url) {
-      // Clean the URL path
-      const cleanPath = item.media_url.replace(/^\//, "");
-      return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}`;
+      // Remove "SubOpVideos/" prefix if it exists
+      const cleanPath = item.media_url.replace(/^SubOpVideos[\/\\]?/, "");
+
+      // Handle nested folders (like the /17/ in your second example)
+      // The cleanPath will now be either:
+      // - "WhatsApp Video 2026-02-23 at 12.41.11_17_1773202297151_0.mp4"
+      // - "17/WhatsApp Video 2026-02-23 at 12.41.11_17_1773138493685_0.mp4"
+
+      const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${cleanPath}`;
+      console.log("Final URL:", finalUrl);
+      return finalUrl;
     }
-    return "";
+    return null;
   };
 
   const handlePlayVideo = useCallback(
