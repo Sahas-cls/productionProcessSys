@@ -87,7 +87,7 @@ app.get("/api/debug/video-exists/:filename(*)", (req, res) => {
 // Videos route
 // Replace your current /videos route with this enhanced version
 app.use(
-  "/videos",
+  "/videosTest",
   (req, res, next) => {
     const requestedPath = req.path;
     console.log("📽️ Video request received:", requestedPath);
