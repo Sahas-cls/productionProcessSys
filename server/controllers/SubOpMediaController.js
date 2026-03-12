@@ -1686,7 +1686,7 @@ exports.getImages = async (req, res) => {
 
     // Base URL for images
     const baseUrl =
-      process.env.NODE_ENV === "production"
+      process.platform === "linux"
         ? "https://api.guston-vms.site"
         : `http://localhost:${process.env.PORT || 4000}`;
 
