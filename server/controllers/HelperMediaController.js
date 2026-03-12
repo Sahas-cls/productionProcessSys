@@ -51,11 +51,12 @@ exports.getVideos = async (req, res, next) => {
         filename = filename.split(/[\/\\]/).pop();
       }
 
-      // Add local video URL - DON'T encode here, let the browser handle it
+      // Add local video URL - ENCODE the filename properly
       if (filename) {
-        // Use the filename as-is without encoding
-        videoData.video_url = `${baseUrl}/helper-videos/${filename}`;
-        videoData.proxy_url = `/helper-videos/${filename}`;
+        // Encode the filename for URL safety
+        const encodedFilename = encodeURIComponent(filename);
+        videoData.video_url = `${baseUrl}/helper-videos/${encodedFilename}`;
+        videoData.proxy_url = `/helper-videos/${encodedFilename}`;
       }
 
       return videoData;
