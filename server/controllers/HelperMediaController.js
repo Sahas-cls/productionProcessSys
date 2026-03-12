@@ -1,17 +1,20 @@
 const { Style } = require("../models");
 const { Helper } = require("../models");
 const { HelperVideo, HelperImage, User } = require("../models");
-const b2HelperStorage = require("../utils/b2HelperStorage");
+const localStorage = require("../utils/HFileStorageService"); // CHANGED: Import local storage instead of B2
 const ffmpeg = require("fluent-ffmpeg");
 const path = require("path");
 const fs = require("fs");
 require("dotenv").config();
 
-// to get uploaded video according to the specific sub operation
+// ==================== HELPER VIDEO CONTROLLERS ====================
 
+/**
+ * Get videos for a specific helper operation
+ */
 exports.getVideos = async (req, res, next) => {
   const { hOpId } = req.params;
-  console.log("📹 [B2] Fetching videos for hOpId:", hOpId);
+  console.log("📹 [Local Helper] Fetching videos for hOpId:", hOpId);
 
   if (isNaN(hOpId)) {
     return res.status(400).json({
@@ -27,25 +30,21 @@ exports.getVideos = async (req, res, next) => {
         { model: Style, as: "style" },
         { model: Helper, as: "helper_operation" },
       ],
-      order: [["createdAt", "DESC"]], // Newest first
+      order: [["createdAt", "DESC"]],
     });
 
     console.log(`✅ Found ${videos.length} videos for hOpId ${hOpId}`);
 
-    // Transform videos to include proxy URLs for frontend
+    // Transform videos to include local URLs for frontend
     const videosWithUrls = videos.map((video) => {
       const videoData = video.toJSON();
 
-      // Add proxy URL for frontend access
-      if (videoData.media_url) {
-        videoData.video_url_proxy = `/api/b2-files/${videoData.media_url}`;
+      // Add local URL for frontend access (CHANGED: from /api/b2-files/ to /api/local-files/)
+      if (videoData.video_url) {
+        videoData.video_url_proxy = `/api/local-files/${videoData.video_url}`;
       }
 
-      // If you want to keep both URLs for reference
-      videoData.video_url_original = videoData.media_url;
-
-      // Optional: Add direct B2 URL if bucket is public
-      // videoData.video_url_direct = `https://s3.eu-central-003.backblazeb2.com/${process.env.B2_BUCKET_NAME}/${videoData.media_url}`;
+      videoData.video_url_original = videoData.video_url;
 
       return videoData;
     });
@@ -54,8 +53,8 @@ exports.getVideos = async (req, res, next) => {
       status: "success",
       data: videosWithUrls,
       count: videos.length,
-      storage_type: "backblaze_b2",
-      proxy_base: "/api/b2-files/",
+      storage_type: "local",
+      proxy_base: "/api/local-files/",
     });
   } catch (error) {
     console.error("❌ Error while fetching videos:", error);
@@ -63,9 +62,11 @@ exports.getVideos = async (req, res, next) => {
   }
 };
 
+/**
+ * Upload video for helper operation
+ */
 exports.uploadVideos = async (req, res, next) => {
-  // console.log("Helper video uploading 🧧🧧🧧");
-  console.log("📤 [Helper] Video upload request received");
+  console.log("📤 [Local Helper] Video upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 File details:",
@@ -118,6 +119,7 @@ exports.uploadVideos = async (req, res, next) => {
       });
     }
 
+    // Validate style exists
     const styleRecord = await Style.findOne({
       where: { style_no: styleNo },
     });
@@ -131,6 +133,7 @@ exports.uploadVideos = async (req, res, next) => {
 
     const styleIdDb = styleRecord.style_id;
 
+    // Validate helper operation exists
     const helperOperationExists = await Helper.findByPk(hoId);
     if (!helperOperationExists) {
       return res.status(400).json({
@@ -145,6 +148,7 @@ exports.uploadVideos = async (req, res, next) => {
     let finalFilename = "";
     let wasNormalized = false;
 
+    // ==================== VIDEO PROCESSING ====================
     if (isVideo) {
       try {
         const tempDir = path.join(__dirname, "../temp");
@@ -160,6 +164,7 @@ exports.uploadVideos = async (req, res, next) => {
 
         await fs.promises.writeFile(tempInputPath, req.file.buffer);
 
+        // Check for rotation metadata
         const hasRotation = await new Promise((resolve) => {
           ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
             if (err) return resolve(false);
@@ -173,6 +178,7 @@ exports.uploadVideos = async (req, res, next) => {
           });
         });
 
+        // Fix rotation if needed
         if (hasRotation) {
           try {
             await new Promise((resolve, reject) => {
@@ -183,6 +189,7 @@ exports.uploadVideos = async (req, res, next) => {
                 .save(tempOutputPath);
             });
           } catch {
+            // If metadata removal fails, physically rotate
             await new Promise((resolve, reject) => {
               ffmpeg(tempInputPath)
                 .videoFilters("transpose=1")
@@ -199,7 +206,7 @@ exports.uploadVideos = async (req, res, next) => {
           console.log("✅ Video orientation normalized");
         }
 
-        // ================= SIZE CONTROL COMPRESSION =================
+        // ==================== SIZE CONTROL COMPRESSION ====================
         const MAX_SIZE_MB = 95;
         const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
@@ -207,12 +214,8 @@ exports.uploadVideos = async (req, res, next) => {
           ? tempOutputPath
           : tempInputPath;
 
-        const currentBuffer = wasNormalized
-          ? processedBuffer
-          : await fs.promises.readFile(tempInputPath);
-
-        if (isVideo) {
-          console.log("Applying compressions...");
+        if (processedBuffer.length > MAX_SIZE_BYTES) {
+          console.log("🎯 Applying size control compression...");
 
           const duration = await new Promise((resolve) => {
             ffmpeg.ffprobe(compressionSourcePath, (err, metadata) => {
@@ -297,9 +300,11 @@ exports.uploadVideos = async (req, res, next) => {
         }
       } catch (err) {
         console.warn("⚠️ Video processing failed:", err.message);
+        // Continue with original buffer if processing fails
       }
     }
 
+    // ==================== GENERATE FILENAME ====================
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
@@ -328,32 +333,36 @@ exports.uploadVideos = async (req, res, next) => {
     }
 
     console.log(
-      `⬆️ Uploading to B2: ${finalFilename} (${(
+      `⬆️ Saving to local storage: ${finalFilename} (${(
         processedBuffer.length /
         1024 /
         1024
       ).toFixed(2)}MB)`,
     );
 
-    uploadResult = await b2HelperStorage.uploadHelperFile(
+    // ==================== UPLOAD TO LOCAL STORAGE ====================
+    // CHANGED: Using localStorage instead of b2HelperStorage
+    uploadResult = await localStorage.uploadSubOpFile(
       processedBuffer,
       finalFilename,
-      "hVideo",
-      hoId,
+      "video", // This will put it in HelperOpVideos folder
+      hoId, // Helper operation ID (not used for subfolder creation)
     );
 
+    // ==================== SAVE TO DATABASE ====================
+    // CHANGED: Removed b2_file_id from database creation
     dbRecord = await HelperVideo.create({
       helper_id: hoId,
       style_id: styleIdDb,
       original_file_name: req.file.originalname,
-      video_url: uploadResult.filePath,
-      b2_file_id: uploadResult.fileId,
+      video_url: uploadResult.filePath, // Stores relative path like "HelperOpVideos/filename.mp4"
+      // b2_file_id removed
       file_size: req.file.size,
       file_type: req.file.mimetype,
       user_id: req.user?.userId || null,
     });
 
-    // Cleanup
+    // ==================== CLEANUP TEMP FILES ====================
     const filesToDelete = [
       tempInputPath,
       tempOutputPath,
@@ -363,31 +372,57 @@ exports.uploadVideos = async (req, res, next) => {
 
     for (const file of filesToDelete) {
       if (file && fs.existsSync(file)) {
-        await fs.promises.unlink(file);
+        await fs.promises
+          .unlink(file)
+          .catch((err) =>
+            console.log(`⚠️ Could not delete temp file ${file}:`, err.message),
+          );
       }
     }
 
+    // ==================== SUCCESS RESPONSE ====================
     res.status(201).json({
       message: "Helper operation video uploaded successfully",
       success: true,
-      data: dbRecord,
+      data: {
+        helper_video_id: dbRecord.helper_video_id,
+        helper_id: dbRecord.helper_id,
+        video_url: uploadResult.filePath,
+        video_url_proxy: `/api/local-files/${uploadResult.filePath}`,
+        original_file_name: req.file.originalname,
+        file_size: req.file.size,
+        file_type: req.file.mimetype,
+        uploaded_at: dbRecord.createdAt,
+      },
+      storage: {
+        type: "local",
+        path: "Y:/HelperOpVideos",
+      },
     });
   } catch (error) {
     console.error("❌ Unhandled error:", error);
 
-    if (uploadResult?.fileId) {
-      await b2HelperStorage.deleteFile(
-        uploadResult.fileId,
-        uploadResult.filePath,
-      );
+    // ==================== CLEANUP ON ERROR ====================
+    // Cleanup local file if uploaded
+    if (uploadResult?.filePath) {
+      try {
+        await localStorage.deleteFile(null, uploadResult.filePath);
+        console.log("🧹 Cleaned up local file after error");
+      } catch (localError) {
+        console.error("❌ Failed to cleanup local file:", localError.message);
+      }
     }
 
+    // Cleanup database record if created
     if (dbRecord?.helper_video_id) {
       await HelperVideo.destroy({
         where: { helper_video_id: dbRecord.helper_video_id },
-      });
+      }).catch((err) =>
+        console.log("⚠️ Could not delete DB record:", err.message),
+      );
     }
 
+    // Cleanup temp files
     const filesToDelete = [
       tempInputPath,
       tempOutputPath,
@@ -397,17 +432,25 @@ exports.uploadVideos = async (req, res, next) => {
 
     for (const file of filesToDelete) {
       if (file && fs.existsSync(file)) {
-        await fs.promises.unlink(file);
+        await fs.promises
+          .unlink(file)
+          .catch((err) =>
+            console.log(`⚠️ Could not delete temp file ${file}:`, err.message),
+          );
       }
     }
 
     res.status(500).json({
       message: "Failed to upload helper operation video",
       success: false,
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
 
+/**
+ * Delete helper video
+ */
 exports.deleteVideo = async (req, res) => {
   try {
     const { ho_media_id } = req.params;
@@ -426,54 +469,55 @@ exports.deleteVideo = async (req, res) => {
       });
     }
 
-    const B2 = require("backblaze-b2");
-    const b2 = new B2({
-      applicationKeyId: process.env.B2_KEY_ID,
-      applicationKey: process.env.B2_APP_KEY,
+    console.log("🗑️ [Local Helper] Deleting video:", {
+      id: videoRec.helper_video_id,
+      video_url: videoRec.video_url,
     });
 
-    // 🔥 Step 1: Delete from Backblaze if fileId exists
-    if (videoRec.b2_file_id) {
+    // ==================== DELETE FROM LOCAL STORAGE ====================
+    // CHANGED: Using localStorage instead of B2
+    let fileDeleted = false;
+    if (videoRec.video_url) {
       try {
-        await b2.authorize();
-
-        await b2.deleteFileVersion({
-          fileId: videoRec.b2_file_id,
-          fileName: videoRec.video_url,
-        });
-
-        console.log("File deleted from B2 successfully");
-      } catch (b2Error) {
-        if (b2Error?.response?.status === 404) {
-          console.log("File not found in B2. Continuing DB deletion...");
-        } else {
-          console.error("B2 deletion failed:", b2Error);
-          return res.status(500).json({
-            message: "Failed to delete file from storage",
-          });
-        }
+        await localStorage.deleteFile(null, videoRec.video_url);
+        fileDeleted = true;
+        console.log("✅ File deleted from local storage");
+      } catch (localError) {
+        console.error("❌ Local storage deletion error:", localError);
+        // Continue with DB deletion even if file deletion fails
       }
     }
 
-    //  Step 2: Delete from Database
+    // ==================== DELETE FROM DATABASE ====================
     await videoRec.destroy();
+    console.log("✅ Database record deleted");
 
     return res.status(200).json({
       status: "ok",
       message: "Video deleted successfully",
+      details: {
+        recordDeleted: true,
+        fileDeleted: fileDeleted,
+        filename: videoRec.video_url,
+        storageProvider: "local",
+      },
     });
   } catch (error) {
     console.error("Delete video error:", error);
     return res.status(500).json({
       message: "Something went wrong while deleting video",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
 
-// NOTE helper image handling
-// Helper Image Upload Controller
+// ==================== HELPER IMAGE CONTROLLERS ====================
+
+/**
+ * Upload image for helper operation
+ */
 exports.uploadImage = async (req, res, next) => {
-  console.log("📤 [B2 Helper] Image upload request received");
+  console.log("📤 [Local Helper] Image upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 File details:",
@@ -500,10 +544,10 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    const { hOpName, hoId, styleNo, helperId, styleId } = req.body;
-    console.log("req.body, ", req.body);
-    // return;
+    const { hOpName, hoId, styleNo } = req.body;
+    console.log("req.body:", req.body);
 
+    // Find style
     const style = await Style.findOne({ where: { style_no: styleNo } });
 
     if (!style) {
@@ -512,11 +556,11 @@ exports.uploadImage = async (req, res, next) => {
       throw error;
     }
 
-    // Validate required fields for helper operation
+    // Validate required fields
     if (!hoId) {
       console.log("❌ Missing required fields:", { hoId, hOpName, styleNo });
       return res.status(400).json({
-        message: "Missing required fields: hoId is required",
+        message: "Missing required field: hoId is required",
         success: false,
       });
     }
@@ -524,7 +568,7 @@ exports.uploadImage = async (req, res, next) => {
     if (!hOpName) {
       console.log("❌ Missing helper operation name");
       return res.status(400).json({
-        message: "Missing required fields: hOpName is required",
+        message: "Missing required field: hOpName is required",
         success: false,
       });
     }
@@ -532,12 +576,12 @@ exports.uploadImage = async (req, res, next) => {
     if (!styleNo) {
       console.log("❌ Missing style number");
       return res.status(400).json({
-        message: "Missing required fields: styleNo is required",
+        message: "Missing required field: styleNo is required",
         success: false,
       });
     }
 
-    // Generate filename with timestamp
+    // ==================== GENERATE FILENAME ====================
     const ext = path.extname(req.file.originalname).toLowerCase();
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
@@ -549,20 +593,17 @@ exports.uploadImage = async (req, res, next) => {
       now.getSeconds(),
     ).padStart(2, "0")}`;
 
-    // Sanitize operation name for filename
     const sanitizedHOpName = (hOpName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_")
-      .substring(0, 50); // Limit length
+      .substring(0, 50);
 
-    // Generate unique filename
     const uniqueId = `${dateTime}_${Math.random().toString(36).substring(2, 8)}`;
     const filename =
       req.file.generatedName ||
       `${styleNo}_${hoId}_${sanitizedHOpName}_${uniqueId}${ext}`;
 
     console.log("📁 Generated filename:", filename);
-    console.log("📊 File buffer size:", req.file.buffer?.length || 0, "bytes");
 
     // Validate file buffer
     if (!req.file.buffer || req.file.buffer.length === 0) {
@@ -573,56 +614,36 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    // ==================== UPLOAD TO BACKBLAZE B2 ====================
-    console.log("☁️ Uploading to Backblaze B2 (Helper)...");
+    // ==================== UPLOAD TO LOCAL STORAGE ====================
+    console.log("💾 Saving to local storage (Helper)...");
 
     try {
-      // Upload file to B2 using helper storage
-      uploadResult = await b2HelperStorage.uploadHelperFile(
+      // CHANGED: Using localStorage instead of b2HelperStorage
+      uploadResult = await localStorage.uploadSubOpFile(
         req.file.buffer,
         filename,
         "image", // This will put it in HelperOpImages folder
-        hoId, // Helper operation ID for folder organization
+        hoId, // Helper operation ID
       );
 
-      console.log("✅ B2 Helper Upload Successful:", {
+      console.log("✅ Local Helper Upload Successful:", {
         filePath: uploadResult.filePath,
-        fileId: uploadResult.fileId,
         fileName: uploadResult.fileName,
       });
-    } catch (b2Error) {
-      console.error("❌ B2 Helper Upload Failed:", {
-        error: b2Error.message,
-        code: b2Error.code,
-        stack: b2Error.stack?.split("\n")[0],
+    } catch (localError) {
+      console.error("❌ Local Helper Upload Failed:", {
+        error: localError.message,
+        stack: localError.stack?.split("\n")[0],
       });
 
-      let errorMessage = "Failed to upload image to cloud storage";
-      let statusCode = 500;
-
-      if (
-        b2Error.code === "AccessDenied" ||
-        b2Error.code === "InvalidAccessKeyId"
-      ) {
-        errorMessage = "Cloud storage authentication failed";
-        statusCode = 503;
-      } else if (b2Error.code === "NoSuchBucket") {
-        errorMessage = "Cloud storage bucket not found";
-        statusCode = 503;
-      } else if (
-        b2Error.message.includes("ENOTFOUND") ||
-        b2Error.message.includes("ECONNREFUSED")
-      ) {
-        errorMessage = "Cannot connect to cloud storage";
-        statusCode = 503;
-      }
-
-      return res.status(statusCode).json({
-        message: errorMessage,
+      return res.status(500).json({
+        message: "Failed to save image to local storage",
         error:
-          process.env.NODE_ENV === "development" ? b2Error.message : undefined,
+          process.env.NODE_ENV === "development"
+            ? localError.message
+            : undefined,
         success: false,
-        storage: "backblaze_b2",
+        storage: "local",
       });
     }
 
@@ -630,13 +651,13 @@ exports.uploadImage = async (req, res, next) => {
     console.log("💾 Saving to helper_images database...");
 
     try {
-      // Create record in helper_images table
+      // CHANGED: Removed b2_file_id from database creation
       dbRecord = await HelperImage.create({
         helper_id: parseInt(hoId),
         style_id: parseInt(style.style_id),
         original_file_name: req.file.originalname,
-        image_url: uploadResult.filePath,
-        b2_file_id: uploadResult.fileId,
+        image_url: uploadResult.filePath, // Stores relative path like "HelperOpImages/filename.jpg"
+        // b2_file_id removed
         file_size: req.file.size,
         file_type: req.file.mimetype,
         user_id: req.user?.userId || req.user?.user_id || null,
@@ -646,7 +667,6 @@ exports.uploadImage = async (req, res, next) => {
         helper_image_id: dbRecord.helper_image_id,
         helper_id: dbRecord.helper_id,
         image_url: dbRecord.image_url,
-        b2_file_id: dbRecord.b2_file_id,
       });
     } catch (dbError) {
       console.error("❌ Database save failed:", {
@@ -655,17 +675,14 @@ exports.uploadImage = async (req, res, next) => {
         name: dbError.name,
       });
 
-      // Attempt to delete from B2 since DB save failed
-      if (uploadResult && uploadResult.fileId) {
+      // Attempt to delete from local storage since DB save failed
+      if (uploadResult && uploadResult.filePath) {
         try {
-          console.log("🧹 Cleaning up B2 file after DB failure...");
-          await b2HelperStorage.deleteFile(
-            uploadResult.fileId,
-            uploadResult.filePath,
-          );
-          console.log("✅ B2 file cleaned up");
+          console.log("🧹 Cleaning up local file after DB failure...");
+          await localStorage.deleteFile(null, uploadResult.filePath);
+          console.log("✅ Local file cleaned up");
         } catch (cleanupError) {
-          console.error("❌ Failed to clean up B2 file:", cleanupError);
+          console.error("❌ Failed to clean up local file:", cleanupError);
         }
       }
 
@@ -681,26 +698,23 @@ exports.uploadImage = async (req, res, next) => {
     console.log("🎉 Helper image upload completed successfully!");
 
     res.status(201).json({
-      message: "Helper operation image uploaded to cloud storage successfully",
+      message: "Helper operation image uploaded to local storage successfully",
       success: true,
       data: {
         helper_image_id: dbRecord.helper_image_id,
         helper_id: dbRecord.helper_id,
         image_url: uploadResult.filePath,
-        image_url_proxy: `/api/b2-files/${uploadResult.filePath}`,
+        image_url_proxy: `/api/local-files/${uploadResult.filePath}`, // CHANGED: from /api/b2-files/ to /api/local-files/
         file_name: uploadResult.fileName,
         original_filename: req.file.originalname,
         file_size: req.file.size,
         file_type: req.file.mimetype,
         helper_operation_name: hOpName,
         uploaded_at: dbRecord.createdAt,
-        b2_file_id: uploadResult.fileId,
       },
       storage: {
-        type: "backblaze_b2",
-        bucket: process.env.B2_BUCKET_NAME,
-        folder: "HelperOpImages",
-        region: "eu-central-003",
+        type: "local",
+        path: "Y:/HelperOpImages",
       },
     });
   } catch (error) {
@@ -711,13 +725,10 @@ exports.uploadImage = async (req, res, next) => {
     });
 
     // Final cleanup if anything went wrong
-    if (uploadResult && uploadResult.fileId) {
+    if (uploadResult && uploadResult.filePath) {
       try {
-        console.log("🧹 Final cleanup of B2 file...");
-        await b2HelperStorage.deleteFile(
-          uploadResult.fileId,
-          uploadResult.filePath,
-        );
+        console.log("🧹 Final cleanup of local file...");
+        await localStorage.deleteFile(null, uploadResult.filePath);
       } catch (cleanupError) {
         console.error("❌ Final cleanup failed:", cleanupError);
       }
@@ -743,54 +754,15 @@ exports.uploadImage = async (req, res, next) => {
   }
 };
 
-exports.getVideos = async (req, res, next) => {
-  const { hOpId } = req.params;
-  console.log("📹 [B2 Helper] Fetching videos for helper operation ID:", hOpId);
-
-  if (!hOpId || isNaN(hOpId)) {
-    return res.status(400).json({
-      status: "error",
-      message: "Invalid helper operation ID",
-    });
-  }
-
-  try {
-    const videos = await HelperVideo.findAll({
-      where: { helper_id: parseInt(hOpId) },
-      include: [
-        { model: Style, as: "style" },
-        { model: Helper, as: "helper_operation" },
-      ],
-      order: [["createdAt", "DESC"]],
-    });
-
-    console.log(`✅ Found ${videos.length} videos for helper ID ${hOpId}`);
-
-    const videosWithUrls = videos.map((video) => {
-      const videoData = video.toJSON();
-      if (videoData.image_url) {
-        videoData.video_url_proxy = `/api/b2-files/${videoData.image_url}`;
-      }
-      return videoData;
-    });
-
-    res.status(200).json({
-      status: "success",
-      data: videosWithUrls,
-      count: videos.length,
-      storage_type: "backblaze_b2",
-      proxy_base: "/api/b2-files/",
-    });
-  } catch (error) {
-    console.error("❌ Error while fetching helper videos:", error);
-    return next(error);
-  }
-};
-
-// Get images for helper operation
+/**
+ * Get images for helper operation
+ */
 exports.getImages = async (req, res, next) => {
   const { hOpId } = req.params;
-  console.log("🖼️ [B2 Helper] Fetching images for helper operation ID:", hOpId);
+  console.log(
+    "🖼️ [Local Helper] Fetching images for helper operation ID:",
+    hOpId,
+  );
 
   if (!hOpId || isNaN(hOpId)) {
     return res.status(400).json({
@@ -819,7 +791,8 @@ exports.getImages = async (req, res, next) => {
     const imagesWithUrls = images.map((image) => {
       const imageData = image.toJSON();
       if (imageData.image_url) {
-        imageData.image_url_proxy = `/api/b2-files/${imageData.image_url}`;
+        // CHANGED: from /api/b2-files/ to /api/local-files/
+        imageData.image_url_proxy = `/api/local-files/${imageData.image_url}`;
       }
       return imageData;
     });
@@ -828,8 +801,8 @@ exports.getImages = async (req, res, next) => {
       status: "success",
       data: imagesWithUrls,
       count: images.length,
-      storage_type: "backblaze_b2",
-      proxy_base: "/api/b2-files/",
+      storage_type: "local",
+      proxy_base: "/api/local-files/",
     });
   } catch (error) {
     console.error("❌ Error while fetching helper images:", error);
@@ -837,10 +810,12 @@ exports.getImages = async (req, res, next) => {
   }
 };
 
-// Delete helper image
+/**
+ * Delete helper image
+ */
 exports.deleteImage = async (req, res, next) => {
   const { imageId } = req.params;
-  console.log("🗑️ [B2 Helper] Delete image request for ID:", imageId);
+  console.log("🗑️ [Local Helper] Delete image request for ID:", imageId);
 
   if (!imageId || isNaN(imageId)) {
     return res.status(400).json({
@@ -867,25 +842,24 @@ exports.deleteImage = async (req, res, next) => {
       helper_image_id: imageRecord.helper_image_id,
       helper_id: imageRecord.helper_id,
       image_url: imageRecord.image_url,
-      b2_file_id: imageRecord.b2_file_id,
     });
 
-    // Delete from B2 if we have file ID
-    if (imageRecord.b2_file_id && imageRecord.image_url) {
+    // ==================== DELETE FROM LOCAL STORAGE ====================
+    // CHANGED: Using localStorage instead of B2
+    let fileDeleted = false;
+    if (imageRecord.image_url) {
       try {
-        console.log("☁️ Deleting from Backblaze B2...");
-        await b2HelperStorage.deleteFile(
-          imageRecord.b2_file_id,
-          imageRecord.image_url,
-        );
-        console.log("✅ B2 deletion successful");
-      } catch (b2Error) {
-        console.error("❌ B2 deletion failed:", b2Error);
-        // Continue with DB deletion even if B2 fails
+        console.log("🗑️ Deleting from local storage...");
+        await localStorage.deleteFile(null, imageRecord.image_url);
+        fileDeleted = true;
+        console.log("✅ Local file deletion successful");
+      } catch (localError) {
+        console.error("❌ Local file deletion failed:", localError);
+        // Continue with DB deletion even if file deletion fails
       }
     }
 
-    // Delete from database
+    // ==================== DELETE FROM DATABASE ====================
     await imageRecord.destroy();
     console.log("✅ Database record deleted");
 
@@ -895,6 +869,7 @@ exports.deleteImage = async (req, res, next) => {
       data: {
         helper_image_id: imageRecord.helper_image_id,
         deleted: true,
+        file_deleted: fileDeleted,
       },
     });
   } catch (error) {

@@ -26,8 +26,21 @@ const VideoGallery = () => {
   const [loading, setLoading] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [videoErrors, setVideoErrors] = useState({});
+  const [fullscreenElement, setFullscreenElement] = useState(null);
 
   const videoRefs = useRef({});
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setFullscreenElement(document.fullscreenElement);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (location.state?.subOpId) {
@@ -46,35 +59,85 @@ const VideoGallery = () => {
       );
       setVideos(response.data?.data || []);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error fetching videos:", error);
+      Swal.fire({
+        title: "Error",
+        text: "Failed to load videos",
+        icon: "error",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const getVideoUrl = (item) => {
-    if (item.media_url) {
-      // Clean the URL path
-      const cleanPath = item.media_url.replace(/^\//, "");
-      return `${import.meta.env.VITE_API_URL}/api/videos/${cleanPath}`;
-    }
-    return "";
-  };
+  const getVideoUrl = useCallback((item) => {
+    if (!item?.media_url) return null;
+
+    // Extract just the filename from the full path
+    const filename = item.media_url.split(/[\/\\]/).pop();
+
+    if (!filename) return null;
+
+    // Encode the filename properly (spaces become %20, etc.)
+    const encodedFilename = encodeURIComponent(filename);
+
+    // Construct clean URL
+    const finalUrl = `${import.meta.env.VITE_API_URL}/videos/${encodedFilename}`;
+    console.log("Final URL:", finalUrl);
+    return finalUrl;
+  }, []);
 
   const handlePlayVideo = useCallback(
-    (id) => {
-      // Pause the currently active video if different
-      if (
-        activeVideoId &&
-        activeVideoId !== id &&
-        videoRefs.current[activeVideoId]
-      ) {
-        videoRefs.current[activeVideoId].pause();
-      }
+    async (id) => {
+      try {
+        // Stop current video if playing
+        if (
+          activeVideoId &&
+          activeVideoId !== id &&
+          videoRefs.current[activeVideoId]
+        ) {
+          const currentVideo = videoRefs.current[activeVideoId];
+          currentVideo.pause();
+          currentVideo.currentTime = 0;
+        }
 
-      // Set new active video
-      setActiveVideoId(id);
-      setVideoErrors((prev) => ({ ...prev, [id]: null }));
+        // Set new active video
+        setActiveVideoId(id);
+        setVideoErrors((prev) => ({ ...prev, [id]: null }));
+
+        // Get the video element
+        const video = videoRefs.current[id];
+        if (!video) return;
+
+        // Reset any error state
+        setVideoErrors((prev) => ({ ...prev, [id]: null }));
+
+        // Load and play
+        video.load();
+
+        // Attempt to play
+        await video.play();
+      } catch (err) {
+        console.error("Play failed:", err);
+
+        // Handle specific error types
+        if (err.name === "NotSupportedError") {
+          setVideoErrors((prev) => ({
+            ...prev,
+            [id]: "Video format not supported or file is corrupted",
+          }));
+        } else if (err.name === "NotAllowedError") {
+          setVideoErrors((prev) => ({
+            ...prev,
+            [id]: "Autoplay not allowed. Please try clicking play again.",
+          }));
+        } else {
+          setVideoErrors((prev) => ({
+            ...prev,
+            [id]: "Failed to play video. Please try downloading.",
+          }));
+        }
+      }
     },
     [activeVideoId],
   );
@@ -86,9 +149,9 @@ const VideoGallery = () => {
       video.currentTime = 0;
     }
     setActiveVideoId(null);
+    setVideoErrors((prev) => ({ ...prev, [id]: null }));
   }, []);
 
-  // CORRECT FULLSCREEN IMPLEMENTATION
   const toggleFullscreen = useCallback(async (id) => {
     const video = videoRefs.current[id];
     if (!video) return;
@@ -101,17 +164,40 @@ const VideoGallery = () => {
       }
     } catch (err) {
       console.error("Fullscreen error:", err);
+      Swal.fire({
+        title: "Fullscreen Error",
+        text: "Could not toggle fullscreen mode",
+        icon: "error",
+        timer: 2000,
+      });
+    }
+  }, []);
+
+  const togglePlayPause = useCallback((id) => {
+    const video = videoRefs.current[id];
+    if (!video) return;
+
+    if (video.paused) {
+      video.play().catch((err) => {
+        console.error("Play failed:", err);
+        setVideoErrors((prev) => ({
+          ...prev,
+          [id]: "Failed to play video",
+        }));
+      });
+    } else {
+      video.pause();
     }
   }, []);
 
   const getFileName = useCallback((item) => {
     return (
-      item.original_filename || item.media_url?.split("/").pop() || "video"
+      item.original_filename || item.media_url?.split(/[\/\\]/).pop() || "video"
     );
   }, []);
 
   const formatFileSize = useCallback((bytes) => {
-    if (!bytes) return "N/A";
+    if (!bytes || isNaN(bytes)) return "N/A";
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -119,11 +205,16 @@ const VideoGallery = () => {
   }, []);
 
   const formatDate = useCallback((dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+    if (!dateString) return "N/A";
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "Invalid date";
+    }
   }, []);
 
   const handleDownloadVideo = useCallback(
@@ -132,13 +223,21 @@ const VideoGallery = () => {
       const fileName = getFileName(item);
 
       if (videoUrl) {
+        // Create a temporary anchor element
         const link = document.createElement("a");
         link.href = videoUrl;
         link.download = fileName;
         link.target = "_blank";
+        link.rel = "noopener noreferrer";
+
+        // Trigger download
         document.body.appendChild(link);
         link.click();
-        document.body.removeChild(link);
+
+        // Clean up
+        setTimeout(() => {
+          document.body.removeChild(link);
+        }, 100);
       } else {
         Swal.fire({
           title: "Error",
@@ -150,13 +249,21 @@ const VideoGallery = () => {
     [getVideoUrl, getFileName],
   );
 
+  const retryLoadVideo = useCallback(
+    (id) => {
+      setVideoErrors((prev) => ({ ...prev, [id]: null }));
+      handlePlayVideo(id);
+    },
+    [handlePlayVideo],
+  );
+
   return (
     <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6">
       {/* Header */}
       <div className="mb-6">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 mb-4"
+          className="flex items-center gap-2 text-blue-600 hover:text-blue-800 mb-4 transition-colors"
         >
           <FaArrowLeft />
           <span>Go Back</span>
@@ -182,6 +289,12 @@ const VideoGallery = () => {
         <div className="text-center py-20 bg-white rounded-lg shadow">
           <div className="text-6xl mb-4">🎥</div>
           <h3 className="text-xl text-gray-600 mb-2">No videos available</h3>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          >
+            Go Back
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -190,104 +303,142 @@ const VideoGallery = () => {
             const isActive = activeVideoId === item.so_media_id;
             const error = videoErrors[item.so_media_id];
             const videoUrl = getVideoUrl(item);
+            const isInFullscreen =
+              fullscreenElement === videoRefs.current[item.so_media_id];
 
             return (
               <motion.div
                 key={item.so_media_id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-blue-100"
+                transition={{ duration: 0.3 }}
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-200"
               >
                 {/* Video Container */}
-                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
-                  {/* ALWAYS MOUNT THE VIDEO ELEMENT */}
+                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group">
+                  {/* Video Element */}
                   <video
-                    ref={(el) => {
-                      videoRefs.current[item.so_media_id] = el;
-                    }}
-                    src={isActive ? videoUrl : ""} // Only set src when active
-                    className={`w-full h-full object-contain ${isActive ? "block" : "hidden"}`}
+                    ref={(el) => (videoRefs.current[item.so_media_id] = el)}
+                    src={videoUrl}
+                    className={`w-full h-full object-contain transition-opacity duration-300 ${
+                      isActive ? "opacity-100" : "opacity-0"
+                    }`}
                     playsInline
                     preload="metadata"
                     crossOrigin="anonymous"
                     controls={false}
                     onError={(e) => {
-                      console.error("Video error:", e);
+                      console.error("Video error for", fileName, ":", e);
                       setVideoErrors((prev) => ({
                         ...prev,
-                        [item.so_media_id]: "Failed to load video",
+                        [item.so_media_id]: "Failed to load video file",
                       }));
+                      if (isActive) {
+                        setActiveVideoId(null);
+                      }
                     }}
-                    onPlay={() => {
-                      // Browser is playing, just update UI state if needed
-                    }}
-                    onPause={() => {
-                      // Browser paused, just update UI state if needed
-                    }}
+                    onPlay={() => console.log("Playing:", fileName)}
+                    onPause={() => console.log("Paused:", fileName)}
                     onEnded={() => {
-                      // Video ended naturally, no state changes needed
+                      console.log("Ended:", fileName);
+                      setActiveVideoId(null);
+                    }}
+                    onLoadedMetadata={(e) => {
+                      console.log(
+                        "Metadata loaded for:",
+                        fileName,
+                        "Duration:",
+                        e.target.duration,
+                      );
                     }}
                   />
 
-                  {/* Overlay UI */}
-                  {!isActive ? (
+                  {/* Play Overlay (shown when video is not active) */}
+                  {!isActive && !error && (
                     <div
-                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/50 to-gray-100/50 hover:from-blue-100/50 hover:to-gray-200/50"
+                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/80 to-gray-100/80 hover:from-blue-100/80 hover:to-gray-200/80 transition-all duration-300"
                       onClick={() => handlePlayVideo(item.so_media_id)}
                     >
-                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors">
+                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors transform group-hover:scale-110">
                         <FaPlay className="text-blue-600 text-3xl" />
                       </div>
                       <p className="text-blue-700 text-sm mt-3 font-medium">
-                        Click to load & play
+                        Click to play
                       </p>
                       <p className="text-gray-600 text-xs mt-1">
                         {formatFileSize(item.file_size)}
                       </p>
                     </div>
-                  ) : error ? (
+                  )}
+
+                  {/* Error Overlay */}
+                  {error && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
                       <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
                       <p className="text-red-700 text-sm font-medium text-center">
                         {error}
                       </p>
-                      <button
-                        onClick={() => handleDownloadVideo(item)}
-                        className="mt-3 px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
-                      >
-                        <FaDownload size={12} />
-                        Try Downloading
-                      </button>
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={() => retryLoadVideo(item.so_media_id)}
+                          className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 flex items-center gap-2"
+                        >
+                          <FaPlay size={12} />
+                          Retry
+                        </button>
+                        <button
+                          onClick={() => handleDownloadVideo(item)}
+                          className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
+                        >
+                          <FaDownload size={12} />
+                          Download
+                        </button>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="absolute inset-0 bg-transparent pointer-events-none">
-                      {/* Control buttons - positioned but not covering video */}
-                      <div className="absolute top-2 right-2 pointer-events-auto">
+                  )}
+
+                  {/* Video Controls (shown when active and no error) */}
+                  {isActive && !error && (
+                    <div className="absolute inset-0 bg-transparent">
+                      {/* Top controls */}
+                      <div className="absolute top-2 right-2 flex gap-2">
+                        <button
+                          onClick={() => togglePlayPause(item.so_media_id)}
+                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
+                          title={
+                            videoRefs.current[item.so_media_id]?.paused
+                              ? "Play"
+                              : "Pause"
+                          }
+                        >
+                          {videoRefs.current[item.so_media_id]?.paused ? (
+                            <FaPlay size={14} />
+                          ) : (
+                            <FaPause size={14} />
+                          )}
+                        </button>
                         <button
                           onClick={() => toggleFullscreen(item.so_media_id)}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                          title="Fullscreen"
+                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
+                          title={
+                            isInFullscreen ? "Exit Fullscreen" : "Fullscreen"
+                          }
                         >
-                          <FaExpand size={16} />
+                          {isInFullscreen ? (
+                            <FaCompress size={14} />
+                          ) : (
+                            <FaExpand size={14} />
+                          )}
                         </button>
                       </div>
 
-                      <div className="absolute top-2 left-2 pointer-events-auto">
+                      {/* Bottom controls */}
+                      <div className="absolute bottom-2 left-2 right-2">
                         <button
-                          onClick={() => {
-                            const video = videoRefs.current[item.so_media_id];
-                            if (video) {
-                              if (video.paused) {
-                                video.play();
-                              } else {
-                                video.pause();
-                              }
-                            }
-                          }}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                          title="Play/Pause"
+                          onClick={() => handleStopVideo(item.so_media_id)}
+                          className="px-3 py-1 bg-red-600/80 text-white rounded text-sm hover:bg-red-700 transition-colors backdrop-blur-sm"
                         >
-                          <FaPause size={16} />
+                          Stop
                         </button>
                       </div>
                     </div>
@@ -296,33 +447,27 @@ const VideoGallery = () => {
 
                 {/* Video Info */}
                 <div className="p-4">
-                  <h3 className="font-semibold text-gray-800 truncate mb-2">
+                  <h3
+                    className="font-semibold text-gray-800 truncate mb-2"
+                    title={fileName}
+                  >
                     {item.sub_operation_name || fileName}
                   </h3>
 
-                  <div className="text-sm text-gray-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span>File:</span>
-                      <span
-                        className="font-mono text-xs truncate max-w-[120px]"
-                        title={fileName}
-                      >
-                        {fileName}
-                      </span>
-                    </div>
-
+                  <div className="text-sm text-gray-600 space-y-1">
                     <div className="flex justify-between">
                       <span>Size:</span>
-                      <span>{formatFileSize(item.file_size)}</span>
+                      <span className="font-medium">
+                        {formatFileSize(item.file_size)}
+                      </span>
                     </div>
-
                     <div className="flex justify-between">
                       <span>Uploaded:</span>
                       <span>{formatDate(item.createdAt)}</span>
                     </div>
                   </div>
 
-                  {/* Actions */}
+                  {/* Action Buttons */}
                   <div className="mt-4 flex justify-between items-center">
                     <div className="flex flex-wrap gap-2">
                       <button
@@ -333,7 +478,7 @@ const VideoGallery = () => {
                             handlePlayVideo(item.so_media_id);
                           }
                         }}
-                        className={`px-3 py-1 rounded text-sm font-medium flex items-center gap-2 ${
+                        className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors ${
                           isActive
                             ? "bg-red-100 text-red-700 hover:bg-red-200"
                             : "bg-blue-100 text-blue-700 hover:bg-blue-200"
@@ -354,7 +499,8 @@ const VideoGallery = () => {
 
                       <button
                         onClick={() => handleDownloadVideo(item)}
-                        className="px-3 py-1 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2"
+                        className="px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
+                        disabled={!videoUrl}
                       >
                         <FaDownload size={12} />
                         Download
@@ -366,10 +512,12 @@ const VideoGallery = () => {
                         onClick={async () => {
                           const result = await Swal.fire({
                             title: "Delete video?",
-                            text: `Delete "${fileName}"?`,
+                            text: `Are you sure you want to delete "${fileName}"?`,
                             icon: "warning",
                             showCancelButton: true,
-                            confirmButtonText: "Delete",
+                            confirmButtonColor: "#d33",
+                            cancelButtonColor: "#3085d6",
+                            confirmButtonText: "Yes, delete it!",
                             cancelButtonText: "Cancel",
                           });
 
@@ -385,27 +533,31 @@ const VideoGallery = () => {
                               );
 
                               if (response.status === 200) {
-                                Swal.fire({
-                                  title: "Video Delete Successful...",
+                                await Swal.fire({
+                                  title: "Deleted!",
+                                  text: "Video has been deleted successfully.",
                                   icon: "success",
+                                  timer: 2000,
+                                  showConfirmButton: false,
                                 });
                                 fetchVideos();
                               }
                             } catch (error) {
                               console.error("Delete error:", error);
                               Swal.fire({
-                                title: "Video delete failed",
+                                title: "Delete failed",
                                 text:
                                   error.response?.data?.message ||
-                                  "Please try again",
+                                  "Failed to delete video. Please try again.",
                                 icon: "error",
                               });
                             }
                           }
                         }}
-                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                        title="Delete video"
                       >
-                        <FaTrash size={14} />
+                        <FaTrash size={16} />
                       </button>
                     )}
                   </div>

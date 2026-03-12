@@ -44,98 +44,197 @@ app.use((req, res, next) => {
   next();
 });
 
-// ==================== VIDEO SERVING WITH PROPER HANDLING ====================
-app.get("/videos/*", (req, res) => {
-  // Get the filename from the URL path
-  const videoPath = req.params[0] || req.path.replace("/videos/", "");
+// ==================== IMPROVED VIDEO SERVING WITH MULTIPLE PATH HANDLING ====================
+app.get("/videos/:videoUrl(*)", (req, res) => {
+  const videoParam = req.params.videoUrl;
+  console.log("video url ==== ", videoParam);
+  // Log the request
+  console.log(
+    `🎥 Video requested: ${videoParam} at ${new Date().toISOString()}`,
+  );
 
-  console.log("🎥 Video requested:", {
-    originalPath: req.path,
-    videoPath: videoPath,
-    method: req.method,
-  });
+  // Check if filename is provided
+  if (!videoParam) {
+    console.log("❌ No filename provided");
+    return res.status(400).json({ error: "No filename provided" });
+  }
 
   // Security check - prevent directory traversal
-  if (
-    videoPath.includes("..") ||
-    videoPath.includes("\\") ||
-    videoPath.includes("//")
-  ) {
-    console.log("❌ Security violation - path traversal attempt:", videoPath);
+  if (videoParam.includes("..")) {
+    console.log("❌ Security violation - path traversal attempt:", videoParam);
     return res.status(403).json({ error: "Access denied" });
   }
 
   // Decode the filename (handles %20, etc.)
-  const decodedFilename = decodeURIComponent(videoPath);
+  const decodedParam = decodeURIComponent(videoParam);
 
-  // Try both possible locations (videos and SubOpVideos)
+  // Extract just the filename if it contains paths
+  const filename = decodedParam.split(/[\/\\]/).pop();
+
+  console.log(`🔍 Extracted filename: ${filename} from: ${decodedParam}`);
+
+  // Define all possible locations to check (maintaining backward compatibility)
   const possiblePaths = [
-    path.join(STORAGE_UNC_PATH, "SubOpVideos", decodedFilename),
-    path.join(STORAGE_UNC_PATH, "videos", decodedFilename),
+    // Primary location - SubOpVideos folder with just filename
+    path.join(STORAGE_UNC_PATH, "SubOpVideos", filename),
+    // With SubOpVideos prefix in the filename (backward compatibility)
+    path.join(
+      STORAGE_UNC_PATH,
+      "SubOpVideos",
+      decodedParam.replace(/^SubOpVideos[\/\\]?/, ""),
+    ),
+    // Videos folder (legacy)
+    path.join(STORAGE_UNC_PATH, "videos", filename),
+    // Original full path as provided
+    path.join(STORAGE_UNC_PATH, "SubOpVideos", decodedParam),
+    path.join(STORAGE_UNC_PATH, "videos", decodedParam),
   ];
 
-  console.log("🔍 Looking for video in locations:");
+  // Remove duplicates
+  const uniquePaths = [...new Set(possiblePaths)];
+
+  console.log("🔍 Checking multiple locations:");
   let foundPath = null;
+  let foundStats = null;
 
-  for (const checkPath of possiblePaths) {
-    console.log("  Checking:", checkPath);
-    if (fs.existsSync(checkPath)) {
-      foundPath = checkPath;
-      console.log("  ✅ Found at:", checkPath);
-      break;
-    }
-  }
-
-  // If file not found in either location
-  if (!foundPath) {
-    console.log("❌ Video not found in any location");
-
-    // List directory contents for debugging
+  for (const checkPath of uniquePaths) {
+    console.log(`  Checking: ${checkPath}`);
     try {
-      const subOpVideosDir = path.join(STORAGE_UNC_PATH, "SubOpVideos");
-      if (fs.existsSync(subOpVideosDir)) {
-        const files = fs.readdirSync(subOpVideosDir).slice(0, 10);
-        console.log("📁 SubOpVideos contains:", files);
+      if (fs.existsSync(checkPath)) {
+        const stats = fs.statSync(checkPath);
+        if (stats.isFile()) {
+          foundPath = checkPath;
+          foundStats = stats;
+          console.log(`  ✅ Found at: ${checkPath}`);
+          break;
+        }
       }
     } catch (e) {
-      console.log("Could not read directory:", e.message);
+      // Ignore errors for individual path checks
     }
-
-    return res.status(404).json({
-      error: "Video not found",
-      requested: decodedFilename,
-    });
   }
 
-  // Get file stats
+  // If file not found, try case-insensitive search (Windows)
+  if (!foundPath && process.platform === "win32") {
+    console.log("🔍 File not found, trying case-insensitive search...");
+
+    try {
+      const searchDirs = [
+        path.join(STORAGE_UNC_PATH, "SubOpVideos"),
+        path.join(STORAGE_UNC_PATH, "videos"),
+      ];
+
+      for (const searchDir of searchDirs) {
+        if (fs.existsSync(searchDir)) {
+          const files = fs.readdirSync(searchDir);
+          const caseInsensitiveMatch = files.find(
+            (f) => f.toLowerCase() === filename.toLowerCase(),
+          );
+
+          if (caseInsensitiveMatch) {
+            const casePath = path.join(searchDir, caseInsensitiveMatch);
+            const stats = fs.statSync(casePath);
+            if (stats.isFile()) {
+              foundPath = casePath;
+              foundStats = stats;
+              console.log(
+                `  ✅ Found with case-insensitive match: ${casePath}`,
+              );
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log("Error during case-insensitive search:", e.message);
+    }
+  }
+
+  // If still not found, return 404 but with a helpful message (not breaking the frontend)
+  if (!foundPath || !foundStats) {
+    console.log("❌ Video not found in any location");
+
+    // For debugging - list available files (only in development)
+    if (process.env.NODE_ENV !== "production") {
+      try {
+        const videoDir = path.join(STORAGE_UNC_PATH, "SubOpVideos");
+        if (fs.existsSync(videoDir)) {
+          const files = fs.readdirSync(videoDir).slice(0, 10);
+          console.log("📁 Available videos (first 10):", files);
+        }
+      } catch (e) {
+        console.log("Could not read directory:", e.message);
+      }
+    }
+
+    // Instead of returning JSON, return a 404 but let the video element handle it
+    // This prevents frontend errors from breaking the UI
+    res
+      .status(404)
+      .sendFile(
+        path.join(__dirname, "public", "video-not-found.mp4"),
+        (err) => {
+          if (err) {
+            // If placeholder doesn't exist, just send 404
+            res.status(404).end();
+          }
+        },
+      );
+    return;
+  }
+
+  // File found - stream it
   try {
-    const stat = fs.statSync(foundPath);
     console.log("📊 File stats:", {
-      size: stat.size,
-      isFile: stat.isFile(),
-      modified: stat.mtime,
+      size: foundStats.size,
+      isFile: foundStats.isFile(),
+      modified: foundStats.mtime,
+      path: foundPath,
     });
 
     // Set proper headers for video streaming
     res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Content-Length", foundStats.size);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader(
+      "Access-Control-Expose-Headers",
+      "Content-Range, Accept-Ranges",
+    );
     res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("X-Content-Type-Options", "nosniff");
 
     // Handle range requests (for seeking in video)
     const range = req.headers.range;
 
     if (range) {
       console.log("📊 Range request:", range);
+
+      // Parse range header
       const parts = range.replace(/bytes=/, "").split("-");
       const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1;
+      const end = parts[1] ? parseInt(parts[1], 10) : foundStats.size - 1;
+
+      // Validate range
+      if (start >= foundStats.size || end >= foundStats.size) {
+        console.log("❌ Invalid range:", {
+          start,
+          end,
+          fileSize: foundStats.size,
+        });
+        res
+          .status(416)
+          .setHeader("Content-Range", `bytes */${foundStats.size}`)
+          .end();
+        return;
+      }
+
       const chunksize = end - start + 1;
 
+      // Set partial content headers
       res.writeHead(206, {
-        "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+        "Content-Range": `bytes ${start}-${end}/${foundStats.size}`,
         "Content-Length": chunksize,
         "Content-Type": "video/mp4",
         "Accept-Ranges": "bytes",
@@ -143,32 +242,68 @@ app.get("/videos/*", (req, res) => {
         "Cross-Origin-Resource-Policy": "cross-origin",
       });
 
+      // Create read stream for the requested range
       const stream = fs.createReadStream(foundPath, { start, end });
-      stream.pipe(res);
 
+      // Handle stream events
       stream.on("error", (err) => {
-        console.error("Stream error:", err);
+        console.error("❌ Stream error:", err);
         if (!res.headersSent) {
-          res.status(500).json({ error: "Error streaming video" });
+          res.status(500).end();
         }
       });
+
+      stream.on("end", () => {
+        console.log("✅ Range stream completed");
+      });
+
+      // Pipe the stream to response
+      stream.pipe(res);
     } else {
+      // Full file request
       console.log("📊 Full file request");
-      const stream = fs.createReadStream(foundPath);
-      stream.pipe(res);
 
+      // Create read stream for entire file
+      const stream = fs.createReadStream(foundPath);
+
+      // Handle stream events
       stream.on("error", (err) => {
-        console.error("Stream error:", err);
+        console.error("❌ Stream error:", err);
         if (!res.headersSent) {
-          res.status(500).json({ error: "Error streaming video" });
+          res.status(500).end();
         }
       });
+
+      stream.on("end", () => {
+        console.log("✅ Full file stream completed");
+      });
+
+      stream.on("open", () => {
+        console.log("✅ Stream opened successfully");
+      });
+
+      // Pipe the stream to response
+      stream.pipe(res);
     }
   } catch (error) {
     console.error("❌ Error accessing video:", error);
-    res.status(500).json({ error: "Error accessing video file" });
+
+    // Handle specific errors gracefully
+    if (error.code === "ENOENT") {
+      res.status(404).end();
+    } else if (error.code === "EACCES") {
+      res.status(403).end();
+    } else {
+      res.status(500).end();
+    }
   }
 });
+
+// Create a placeholder video for 404s (optional)
+const publicDir = path.join(__dirname, "public");
+if (!fs.existsSync(publicDir)) {
+  fs.mkdirSync(publicDir, { recursive: true });
+}
 
 // ==================== OTHER STATIC ROUTES ====================
 // Images route
@@ -186,6 +321,7 @@ app.use(
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
     },
+    fallthrough: true, // Allow falling through to next middleware if file not found
   }),
 );
 
@@ -204,6 +340,7 @@ app.use(
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
     },
+    fallthrough: true,
   }),
 );
 
@@ -222,6 +359,7 @@ app.use(
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Cache-Control", "public, max-age=86400");
     },
+    fallthrough: true,
   }),
 );
 
@@ -357,21 +495,29 @@ app.get("/api/debug/video/:filename(*)", (req, res) => {
 
   // Add stats if file exists
   if (result.locations.subOpVideos.exists) {
-    const stats = fs.statSync(subOpVideosPath);
-    result.locations.subOpVideos.stats = {
-      size: stats.size,
-      isFile: stats.isFile(),
-      modified: stats.mtime,
-    };
+    try {
+      const stats = fs.statSync(subOpVideosPath);
+      result.locations.subOpVideos.stats = {
+        size: stats.size,
+        isFile: stats.isFile(),
+        modified: stats.mtime,
+      };
+    } catch (e) {
+      result.locations.subOpVideos.error = e.message;
+    }
   }
 
   if (result.locations.videos.exists) {
-    const stats = fs.statSync(videosPath);
-    result.locations.videos.stats = {
-      size: stats.size,
-      isFile: stats.isFile(),
-      modified: stats.mtime,
-    };
+    try {
+      const stats = fs.statSync(videosPath);
+      result.locations.videos.stats = {
+        size: stats.size,
+        isFile: stats.isFile(),
+        modified: stats.mtime,
+      };
+    } catch (e) {
+      result.locations.videos.error = e.message;
+    }
   }
 
   // List directory contents
@@ -404,7 +550,9 @@ if (fs.existsSync(reactBuildPath)) {
       req.url.startsWith("/techpacks/") ||
       req.url.startsWith("/documents/")
     ) {
-      return res.status(404).json({ error: "Not found" });
+      // For video files, we've already handled them above
+      // For other static files, they should be handled by express.static
+      return res.status(404).end();
     }
     res.sendFile(path.join(reactBuildPath, "index.html"));
   });
@@ -426,6 +574,11 @@ app.use((err, req, res, next) => {
     timestamp: new Date().toISOString(),
   });
 
+  // Don't send error details for video requests
+  if (req.path.startsWith("/videos/")) {
+    return res.status(statusCode).end();
+  }
+
   res.status(statusCode).json({
     success: false,
     message: err.message || "Internal server error",
@@ -442,7 +595,9 @@ app.listen(PORT, () => {
   console.log("=".repeat(50));
   console.log("\n📁 Static file paths:");
   console.log(`   📍 Base path: ${STORAGE_UNC_PATH}`);
-  console.log(`   🎥 /videos → ${path.join(STORAGE_UNC_PATH, "SubOpVideos")}`);
+  console.log(
+    `   🎥 /videos → ${path.join(STORAGE_UNC_PATH, "SubOpVideos")} (with fallback to /videos folder)`,
+  );
   console.log(
     `   🖼️  /subop-images → ${path.join(STORAGE_UNC_PATH, "SubOpImages")}`,
   );
