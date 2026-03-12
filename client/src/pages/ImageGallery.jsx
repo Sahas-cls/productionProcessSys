@@ -57,9 +57,7 @@ const ImageGallery = () => {
       if (response.data.success) {
         setImages(response.data.data || []);
         console.log(
-          `✅ Loaded ${
-            response.data.data?.length || 0
-          } images from Backblaze B2`,
+          `✅ Loaded ${response.data.data?.length || 0} images from local storage`,
         );
       } else {
         throw new Error(response.data.message || "Failed to load images");
@@ -87,92 +85,60 @@ const ImageGallery = () => {
 
   // Get the best URL for the image - prefers proxy URL for security
   const getImageUrl = (item) => {
-    const baseUrl = import.meta.env.VITE_API_URL;
-    const apiUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
+    const baseUrl = import.meta.env.VITE_API_URL.replace(/\/$/, "");
 
     console.log(`🔍 Getting URL for image ${item.so_img_id}:`, {
-      proxy_url: item.proxy_url,
-      preview_url: item.preview_url,
-      public_url: item.public_url,
-      direct_url: item.direct_url,
       image_url: item.image_url,
+      original_filename: item.original_filename,
     });
 
-    // Try all possible URL sources
-    const possibleUrls = [];
-
-    // Priority 1: Proxy URL (local API endpoint)
-    if (item.proxy_url) {
-      const proxyUrl = item.proxy_url.startsWith("/")
-        ? `${apiUrl}${item.proxy_url}`
-        : `${apiUrl}/${item.proxy_url}`;
-      possibleUrls.push({ url: proxyUrl, type: "proxy" });
+    // If the backend already returned a full URL, use it
+    if (item.image_url && item.image_url.startsWith("http")) {
+      console.log(`✅ Using existing full URL:`, item.image_url);
+      return item.image_url;
     }
 
-    // Priority 2: Preview URL
-    if (item.preview_url) {
-      const previewUrl = item.preview_url.startsWith("/")
-        ? `${apiUrl}${item.preview_url}`
-        : `${apiUrl}/${item.preview_url}`;
-      possibleUrls.push({ url: previewUrl, type: "preview" });
+    // Extract filename from image_url
+    let filename = item.image_url;
+    if (filename && (filename.includes("/") || filename.includes("\\"))) {
+      filename = filename.split(/[\/\\]/).pop();
     }
 
-    // Priority 3: Public URL (direct B2 link)
-    if (item.public_url) {
-      possibleUrls.push({ url: item.public_url, type: "public" });
+    if (!filename) {
+      // Fallback to original_filename if image_url is empty
+      filename = item.original_filename;
     }
 
-    // Priority 4: Direct URL
-    if (item.direct_url) {
-      possibleUrls.push({ url: item.direct_url, type: "direct" });
+    if (!filename) {
+      console.warn(`⚠️ No filename found for image ${item.so_img_id}`);
+      return "";
     }
 
-    // Priority 5: Legacy image_url
-    if (item.image_url) {
-      // Check if it's already a full URL
-      if (item.image_url.startsWith("http")) {
-        possibleUrls.push({ url: item.image_url, type: "image_url_full" });
-      } else {
-        // Use B2 proxy endpoint
-        const proxyImageUrl = `${apiUrl}/api/b2-files/${item.image_url}`;
-        possibleUrls.push({ url: proxyImageUrl, type: "image_url_proxy" });
-      }
-    }
+    // Encode the filename for URL
+    const encodedFilename = encodeURIComponent(filename);
 
-    // Log all available URLs for debugging
-    if (possibleUrls.length > 0) {
-      console.log(
-        `📋 Available URLs for image ${item.so_img_id}:`,
-        possibleUrls,
-      );
+    // Construct the new local image URL
+    const imageUrl = `${baseUrl}/images/${encodedFilename}`;
 
-      // Try to return the first proxy URL if available
-      const proxyUrl = possibleUrls.find((u) => u.type.includes("proxy"));
-      if (proxyUrl) {
-        console.log(`✅ Using ${proxyUrl.type} URL:`, proxyUrl.url);
-        return proxyUrl.url;
-      }
+    console.log(`✅ Generated local image URL:`, imageUrl);
+    return imageUrl;
+  };
 
-      // Otherwise return the first available URL
-      const selectedUrl = possibleUrls[0];
-      console.log(`✅ Using ${selectedUrl.type} URL:`, selectedUrl.url);
-      return selectedUrl.url;
-    }
-
-    console.warn(`⚠️ No valid URL found for image ${item.so_img_id}`);
-    return "";
+  // Get URL for download (use same as view URL)
+  const getDownloadUrl = (item) => {
+    return getImageUrl(item);
   };
 
   // Get URL for download (direct B2 link)
-  const getDownloadUrl = (item) => {
-    if (item.public_url) {
-      return item.public_url;
-    }
-    if (item.direct_url) {
-      return item.direct_url;
-    }
-    return getImageUrl(item);
-  };
+  // const getDownloadUrl = (item) => {
+  //   if (item.public_url) {
+  //     return item.public_url;
+  //   }
+  //   if (item.direct_url) {
+  //     return item.direct_url;
+  //   }
+  //   return getImageUrl(item);
+  // };
 
   const getFileName = (item) => {
     return (
@@ -404,67 +370,26 @@ const ImageGallery = () => {
                           onError={(e) => {
                             console.error(
                               `❌ Failed to load image: ${imageUrl}`,
-                              e,
                             );
-                            console.error(`❌ Error type:`, e.type);
-                            console.error(
-                              `❌ CORS issue?`,
-                              e.target.crossOrigin,
-                            );
-
-                            // Try to load with a different approach if CORS fails
-                            if (imageUrl.includes("/api/b2-files/")) {
-                              console.log(
-                                "🔄 Attempting alternative loading method...",
+                            e.target.style.display = "none";
+                            const fallback =
+                              e.target.parentElement.querySelector(
+                                ".image-fallback",
                               );
-
-                              // Create a new image element with different CORS settings
-                              const testImg = new Image();
-                              testImg.crossOrigin = "anonymous";
-                              testImg.onload = () => {
-                                console.log("✅ Alternative load succeeded");
-                                e.target.src = imageUrl; // Set the original img src to the loaded URL
-                                e.target.style.display = "block";
-                              };
-                              testImg.onerror = (err) => {
-                                console.error(
-                                  "❌ Alternative load also failed:",
-                                  err,
-                                );
-                                e.target.style.display = "none";
-                                // Show fallback
-                                const fallback =
-                                  e.target.parentElement.querySelector(
-                                    ".image-fallback",
-                                  );
-                                if (fallback) {
-                                  fallback.classList.remove("hidden");
-                                  fallback.innerHTML = `
-            <div class="text-center p-2">
-              <FaImage className="text-2xl text-blue-500 mb-2 mx-auto" />
-              <div class="text-xs text-gray-600">Image failed to load</div>
-              <div class="text-xs text-red-400 mt-1 truncate max-w-full">URL: ${imageUrl}</div>
-              <button 
-                onclick="window.open('${imageUrl}', '_blank')"
-                class="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
-              >
-                Open in new tab
-              </button>
-            </div>
-          `;
-                                }
-                              };
-                              testImg.src = imageUrl + "?t=" + Date.now(); // Add timestamp to bypass cache
-                            } else {
-                              e.target.style.display = "none";
-                              // Show fallback
-                              const fallback =
-                                e.target.parentElement.querySelector(
-                                  ".image-fallback",
-                                );
-                              if (fallback) {
-                                fallback.classList.remove("hidden");
-                              }
+                            if (fallback) {
+                              fallback.classList.remove("hidden");
+                              fallback.innerHTML = `
+      <div class="text-center p-2">
+        <FaImage class="text-4xl text-blue-500 mb-2 mx-auto" />
+        <div class="text-xs text-gray-600">Image failed to load</div>
+        <button 
+          onclick="window.open('${imageUrl}', '_blank')"
+          class="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
+        >
+          Open in new tab
+        </button>
+      </div>
+    `;
                             }
                           }}
                           onLoad={(e) => {
@@ -484,8 +409,8 @@ const ImageGallery = () => {
 
                       {/* Cloud storage indicator */}
                       <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                        <FaCloud className="text-xs" />
-                        <span>B2</span>
+                        <FaImage className="text-xs" />
+                        <span>Local</span>
                       </div>
                     </button>
 
