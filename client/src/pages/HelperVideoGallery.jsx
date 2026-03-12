@@ -54,6 +54,9 @@ const HelperVideoGallery = () => {
       }));
 
       setVideos(transformedData);
+      console.log(
+        `✅ Loaded ${transformedData.length} videos from local storage`,
+      );
     } catch (error) {
       console.error("Error fetching helper operation videos:", error);
       Swal.fire({
@@ -67,12 +70,11 @@ const HelperVideoGallery = () => {
   };
 
   const getVideoUrl = (item) => {
-    if (item?.video_url) {
-      const cleanPath = item.video_url.replace(/^\//, "");
-      const timestamp = new Date().getTime();
-      return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}?t=${timestamp}`;
-    }
-    return null;
+    if (!item?.video_url) return null;
+
+    // The backend now returns the full URL, just use it directly
+    console.log("🎥 Helper video URL:", item.video_url);
+    return item.video_url;
   };
 
   const handlePlayVideo = useCallback(
@@ -169,7 +171,7 @@ const HelperVideoGallery = () => {
     (item) => {
       if (!item) return;
 
-      const videoUrl = getVideoUrl(item)?.split("?")[0];
+      const videoUrl = getVideoUrl(item); // Remove the ?t= part, use clean URL
       const fileName = getFileName(item);
 
       if (videoUrl) {

@@ -35,16 +35,28 @@ exports.getVideos = async (req, res, next) => {
 
     console.log(`✅ Found ${videos.length} videos for hOpId ${hOpId}`);
 
+    // Base URL for constructing full URLs
+    const baseUrl =
+      process.platform === "linux"
+        ? "https://api.guston-vms.site"
+        : `http://localhost:${process.env.PORT || 4000}`;
+
     // Transform videos to include local URLs for frontend
     const videosWithUrls = videos.map((video) => {
       const videoData = video.toJSON();
 
-      // Add local URL for frontend access (CHANGED: from /api/b2-files/ to /api/local-files/)
-      if (videoData.video_url) {
-        videoData.video_url_proxy = `/api/local-files/${videoData.video_url}`;
+      // Extract filename from video_url
+      let filename = videoData.video_url;
+      if (filename && (filename.includes("/") || filename.includes("\\"))) {
+        filename = filename.split(/[\/\\]/).pop();
       }
 
-      videoData.video_url_original = videoData.video_url;
+      // Add local video URL - DON'T encode here, let the browser handle it
+      if (filename) {
+        // Use the filename as-is without encoding
+        videoData.video_url = `${baseUrl}/helper-videos/${filename}`;
+        videoData.proxy_url = `/helper-videos/${filename}`;
+      }
 
       return videoData;
     });
@@ -54,7 +66,7 @@ exports.getVideos = async (req, res, next) => {
       data: videosWithUrls,
       count: videos.length,
       storage_type: "local",
-      proxy_base: "/api/local-files/",
+      message: "Videos fetched successfully from local storage",
     });
   } catch (error) {
     console.error("❌ Error while fetching videos:", error);
@@ -451,63 +463,44 @@ exports.uploadVideos = async (req, res, next) => {
 /**
  * Delete helper video
  */
-exports.deleteVideo = async (req, res) => {
+exports.deleteVideo = async (req, res, next) => {
+  const { videoId } = req.params;
+
   try {
-    const { ho_media_id } = req.params;
+    const video = await HelperVideo.findByPk(videoId);
 
-    if (!ho_media_id) {
-      return res.status(400).json({
-        message: "Missing required parameter: ho_media_id is required",
-      });
-    }
-
-    const videoRec = await HelperVideo.findByPk(ho_media_id);
-
-    if (!videoRec) {
+    if (!video) {
       return res.status(404).json({
-        message: "Video record not found",
+        success: false,
+        message: "Video not found",
       });
     }
 
-    console.log("🗑️ [Local Helper] Deleting video:", {
-      id: videoRec.helper_video_id,
-      video_url: videoRec.video_url,
-    });
+    // Delete the file from local storage
+    if (video.video_url) {
+      let filename = video.video_url;
+      if (filename.includes("/") || filename.includes("\\")) {
+        filename = filename.split(/[\/\\]/).pop();
+      }
 
-    // ==================== DELETE FROM LOCAL STORAGE ====================
-    // CHANGED: Using localStorage instead of B2
-    let fileDeleted = false;
-    if (videoRec.video_url) {
-      try {
-        await localStorage.deleteFile(null, videoRec.video_url);
-        fileDeleted = true;
-        console.log("✅ File deleted from local storage");
-      } catch (localError) {
-        console.error("❌ Local storage deletion error:", localError);
-        // Continue with DB deletion even if file deletion fails
+      const videoPath = path.join(STORAGE_UNC_PATH, "HelperOpVideos", filename);
+
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
+        console.log(`✅ Deleted video file: ${videoPath}`);
       }
     }
 
-    // ==================== DELETE FROM DATABASE ====================
-    await videoRec.destroy();
-    console.log("✅ Database record deleted");
+    // Delete database record
+    await video.destroy();
 
-    return res.status(200).json({
-      status: "ok",
+    res.status(200).json({
+      success: true,
       message: "Video deleted successfully",
-      details: {
-        recordDeleted: true,
-        fileDeleted: fileDeleted,
-        filename: videoRec.video_url,
-        storageProvider: "local",
-      },
     });
   } catch (error) {
-    console.error("Delete video error:", error);
-    return res.status(500).json({
-      message: "Something went wrong while deleting video",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
-    });
+    console.error("Error deleting video:", error);
+    return next(error);
   }
 };
 
@@ -788,12 +781,28 @@ exports.getImages = async (req, res, next) => {
 
     console.log(`✅ Found ${images.length} images for helper ID ${hOpId}`);
 
+    // Base URL for constructing full URLs
+    const baseUrl =
+      process.platform === "linux"
+        ? "https://api.guston-vms.site"
+        : `http://localhost:${process.env.PORT || 4000}`;
+
     const imagesWithUrls = images.map((image) => {
       const imageData = image.toJSON();
-      if (imageData.image_url) {
-        // CHANGED: from /api/b2-files/ to /api/local-files/
-        imageData.image_url_proxy = `/api/local-files/${imageData.image_url}`;
+
+      // Extract filename from image_url
+      let filename = imageData.image_url;
+      if (filename && (filename.includes("/") || filename.includes("\\"))) {
+        filename = filename.split(/[\/\\]/).pop();
       }
+
+      // Add local image URL
+      if (filename) {
+        // Use the /images/ endpoint (same as sub-operation images)
+        imageData.image_url = `${baseUrl}/helper-images/${filename}`;
+        imageData.image_url_proxy = `/helper-images/${filename}`;
+      }
+
       return imageData;
     });
 
@@ -802,7 +811,7 @@ exports.getImages = async (req, res, next) => {
       data: imagesWithUrls,
       count: images.length,
       storage_type: "local",
-      proxy_base: "/api/local-files/",
+      message: "Images fetched successfully from local storage",
     });
   } catch (error) {
     console.error("❌ Error while fetching helper images:", error);

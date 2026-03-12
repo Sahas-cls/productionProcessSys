@@ -57,7 +57,7 @@ const HelperImageGallery = () => {
         }
 
         console.log(
-          `✅ Loaded ${response.data.data?.length || 0} helper images from Backblaze B2`,
+          `✅ Loaded ${response.data.data?.length || 0} helper images from local storage`,
         );
       } else {
         throw new Error(response.data.message || "Failed to load images");
@@ -83,30 +83,44 @@ const HelperImageGallery = () => {
     }
   };
 
-  // Get the best URL for the image - prefers proxy URL for security
+  // Get the best URL for the image - using local storage
   const getImageUrl = (item) => {
-    const baseUrl = import.meta.env.VITE_API_URL;
-    const apiUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
+    const baseUrl = import.meta.env.VITE_API_URL.replace(/\/$/, "");
 
     console.log(`🔍 Getting URL for helper image ${item.helper_image_id}:`, {
       image_url: item.image_url,
       image_url_proxy: item.image_url_proxy,
     });
 
-    // Priority 1: Proxy URL from the API response
+    // Priority 1: Use the full URL from the API response
+    if (item.image_url && item.image_url.startsWith("http")) {
+      console.log(`✅ Using full URL: ${item.image_url}`);
+      return item.image_url;
+    }
+
+    // Priority 2: Use proxy URL from the API response
     if (item.image_url_proxy) {
       const proxyUrl = item.image_url_proxy.startsWith("/")
-        ? `${apiUrl}${item.image_url_proxy}`
-        : `${apiUrl}/${item.image_url_proxy}`;
+        ? `${baseUrl}${item.image_url_proxy}`
+        : `${baseUrl}/${item.image_url_proxy}`;
       console.log(`✅ Using proxy URL: ${proxyUrl}`);
       return proxyUrl;
     }
 
-    // Priority 2: Construct proxy URL from image_url
+    // Priority 3: Construct URL from filename
     if (item.image_url) {
-      const proxyImageUrl = `${apiUrl}/api/b2-files/${item.image_url}`;
-      console.log(`✅ Using constructed proxy URL: ${proxyImageUrl}`);
-      return proxyImageUrl;
+      // Extract filename
+      let filename = item.image_url;
+      if (filename.includes("/") || filename.includes("\\")) {
+        filename = filename.split(/[\/\\]/).pop();
+      }
+
+      if (filename) {
+        const encodedFilename = encodeURIComponent(filename);
+        const constructedUrl = `${baseUrl}/images/${encodedFilename}`;
+        console.log(`✅ Using constructed URL: ${constructedUrl}`);
+        return constructedUrl;
+      }
     }
 
     console.warn(`⚠️ No valid URL found for image ${item.helper_image_id}`);
@@ -185,7 +199,7 @@ const HelperImageGallery = () => {
         await fetchImages(hOpId);
         Swal.fire({
           title: "Deleted!",
-          text: "Image has been deleted from cloud storage.",
+          text: "Image has been deleted from local storage.",
           icon: "success",
           timer: 2000,
           showConfirmButton: false,
@@ -305,7 +319,7 @@ const HelperImageGallery = () => {
             <div className="text-center">
               <BeatLoader color="#3b82f6" size={15} />
               <p className="mt-4 text-gray-600">
-                Loading helper operation images from cloud storage...
+                Loading helper operation images from local storage...
               </p>
             </div>
           </div>
@@ -358,41 +372,26 @@ const HelperImageGallery = () => {
                           onError={(e) => {
                             console.error(
                               `❌ Failed to load helper image: ${imageUrl}`,
-                              e,
                             );
-
-                            // Try alternative loading method
-                            if (imageUrl.includes("/api/b2-files/")) {
-                              const testImg = new Image();
-                              testImg.crossOrigin = "anonymous";
-                              testImg.onload = () => {
-                                console.log("✅ Alternative load succeeded");
-                                e.target.src = imageUrl + "?t=" + Date.now();
-                              };
-                              testImg.onerror = (err) => {
-                                console.error(
-                                  "❌ Alternative load failed:",
-                                  err,
-                                );
-                                e.target.style.display = "none";
-                                const fallback =
-                                  e.target.parentElement.querySelector(
-                                    ".image-fallback",
-                                  );
-                                if (fallback) {
-                                  fallback.classList.remove("hidden");
-                                }
-                              };
-                              testImg.src = imageUrl + "?t=" + Date.now();
-                            } else {
-                              e.target.style.display = "none";
-                              const fallback =
-                                e.target.parentElement.querySelector(
-                                  ".image-fallback",
-                                );
-                              if (fallback) {
-                                fallback.classList.remove("hidden");
-                              }
+                            e.target.style.display = "none";
+                            const fallback =
+                              e.target.parentElement.querySelector(
+                                ".image-fallback",
+                              );
+                            if (fallback) {
+                              fallback.classList.remove("hidden");
+                              fallback.innerHTML = `
+        <div class="text-center p-2">
+          <FaImage class="text-4xl text-blue-500 mb-2 mx-auto" />
+          <div class="text-xs text-gray-600">Image failed to load</div>
+          <button 
+            onclick="window.open('${imageUrl}', '_blank')"
+            class="mt-2 text-xs text-blue-500 hover:text-blue-700 underline"
+          >
+            Open in new tab
+          </button>
+        </div>
+      `;
                             }
                           }}
                         />
@@ -405,10 +404,10 @@ const HelperImageGallery = () => {
                         <span className="text-xs mt-1">Click to view</span>
                       </div>
 
-                      {/* Cloud storage indicator */}
+                      {/* local storage indicator */}
                       <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                        <FaCloud className="text-xs" />
-                        <span>B2</span>
+                        <FaImage className="text-xs" />
+                        <span>Local</span>
                       </div>
 
                       {/* Style indicator */}
