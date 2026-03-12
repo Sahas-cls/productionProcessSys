@@ -44,7 +44,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ==================== IMPROVED VIDEO SERVING WITH MULTIPLE PATH HANDLING ====================
+// ==================== THIS SERVES SUB OPERATION VIDEOS ====================
 app.get("/videos/:videoUrl(*)", (req, res) => {
   const videoParam = req.params.videoUrl;
   console.log("video url ==== ", videoParam);
@@ -296,6 +296,72 @@ app.get("/videos/:videoUrl(*)", (req, res) => {
     } else {
       res.status(500).end();
     }
+  }
+});
+
+// ==================== IMAGE SERVING ENDPOINT ====================
+app.get("/images/:filename(*)", (req, res) => {
+  const filename = req.params.filename;
+
+  console.log(`🖼️ Image requested: ${filename}`);
+
+  if (!filename) {
+    return res.status(400).send("No filename provided");
+  }
+
+  // Security check
+  if (
+    filename.includes("..") ||
+    filename.includes("/") ||
+    filename.includes("\\")
+  ) {
+    return res.status(403).send("Invalid filename");
+  }
+
+  // Build the full path - images are in SubOpImages folder
+  const imagePath = path.join(STORAGE_UNC_PATH, "SubOpImages", filename);
+
+  console.log(`🔍 Looking for image at: ${imagePath}`);
+
+  // Check if file exists
+  if (!fs.existsSync(imagePath)) {
+    console.log(`❌ Image not found: ${imagePath}`);
+    return res.status(404).send("Image not found");
+  }
+
+  // Send the file
+  try {
+    const stat = fs.statSync(imagePath);
+
+    if (!stat.isFile()) {
+      return res.status(400).send("Not a file");
+    }
+
+    // Set proper headers based on file extension
+    const ext = path.extname(filename).toLowerCase();
+    const contentType =
+      {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".bmp": "image/bmp",
+      }[ext] || "application/octet-stream";
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", stat.size);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+
+    // Send the file
+    res.sendFile(imagePath);
+
+    console.log(`✅ Image served: ${filename} (${contentType})`);
+  } catch (error) {
+    console.error("Error serving image:", error);
+    res.status(500).send("Internal server error");
   }
 });
 

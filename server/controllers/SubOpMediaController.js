@@ -1684,17 +1684,33 @@ exports.getImages = async (req, res) => {
 
     console.log(`✅ Found ${images.length} images for subOpId: ${subOpId}`);
 
+    // Base URL for images
+    const baseUrl =
+      process.env.NODE_ENV === "production"
+        ? "https://api.guston-vms.site"
+        : `http://localhost:${process.env.PORT || 4000}`;
+
     const imagesWithUrls = images.map((image) => {
       const imageData = image.toJSON();
 
-      const proxyUrl = `/api/local-files/${imageData.image_url}`;
+      // Extract just the filename from image_url
+      let filename = imageData.image_url;
+      if (filename.includes("/") || filename.includes("\\")) {
+        filename = filename.split(/[\/\\]/).pop();
+      }
+
+      // Encode the filename for URL
+      const encodedFilename = encodeURIComponent(filename);
+
+      // Create the image URL
+      const imageUrl = `${baseUrl}/images/${encodedFilename}`;
 
       return {
         ...imageData,
-        public_url: proxyUrl,
-        proxy_url: proxyUrl,
-        direct_url: proxyUrl,
-        preview_url: proxyUrl,
+        image_url: imageUrl, // Replace with full URL
+        filename: filename,
+        thumbnail_url: imageUrl, // You can create thumbnails later
+        preview_url: imageUrl,
       };
     });
 
@@ -1703,10 +1719,6 @@ exports.getImages = async (req, res) => {
       data: imagesWithUrls,
       count: images.length,
       message: "Images fetched successfully",
-      storage: {
-        type: "local",
-        path: "/mnt/bulletin-assets",
-      },
     });
   } catch (error) {
     console.error("❌ Error fetching images:", error);
