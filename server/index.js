@@ -704,6 +704,7 @@ app.get("/style-images/:filename(*)", (req, res) => {
 
   // Build the full path - images are in SubOpImages folder
   const imagePath = path.join(STORAGE_UNC_PATH, "StyleImages", filename);
+  console.log("actual image path 🛜🛜: ", imagePath);
 
   console.log(`🔍 Looking for image at: ${imagePath}`);
 

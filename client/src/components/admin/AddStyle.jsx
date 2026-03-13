@@ -1009,7 +1009,7 @@ const AddStyle = ({ userRole }) => {
                         {style.style_medias?.[0]?.media_url && (
                           <img
                             // Use the new style-images endpoint instead of b2-files
-                            src={`${apiUrl}/style-images/${encodeURIComponent(style.style_medias[0].media_url)}`}
+                            src={`${apiUrl}/style-images/${style.style_medias[0].media_url.split("/").pop()}`}
                             alt="Style preview"
                             width={60}
                             height={60}
