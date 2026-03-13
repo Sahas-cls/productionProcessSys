@@ -127,9 +127,7 @@ const AddStyle = ({ userRole }) => {
   });
 
   // Handle style edit
-  // Handle style edit
   const handleEditStyle = (style) => {
-    // console.log("editing style: ", style);
     setEditingStyle(style);
     setIsAddStyle(true);
     setIsSubmitting(false);
@@ -145,17 +143,22 @@ const AddStyle = ({ userRole }) => {
     });
     setCurrentCustomer(style.customer_id);
 
-    // Use the helper function here
+    // Get the media array
     const mediaArray = style.style_medias || style.StyleMedia || [];
 
     if (mediaArray.length > 0) {
       mediaArray.forEach((media) => {
-        const fullImageUrl = getImageUrl(media.media_url); // Using helper function
+        // Use the same URL pattern as the table for consistency
+        const filename = media.media_url.split("/").pop();
+        const fullImageUrl = `${apiUrl}/style-images/${filename}`;
 
         if (media.media_type === "front") {
           setFrontPreview(fullImageUrl);
+          // Also store the actual image path for form submission
+          setEditingImgs((prev) => ({ ...prev, frontImage: media.media_url }));
         } else if (media.media_type === "back") {
           setBackPreview(fullImageUrl);
+          setEditingImgs((prev) => ({ ...prev, backImage: media.media_url }));
         }
       });
     }
@@ -209,12 +212,15 @@ const AddStyle = ({ userRole }) => {
       }
       setFrontImage(null);
       setFrontPreview(null);
+      // Clear the stored image path if it was an existing image
+      setEditingImgs((prev) => ({ ...prev, frontImage: "" }));
     } else if (type === "back") {
       if (backPreview && backPreview.startsWith("blob:")) {
         URL.revokeObjectURL(backPreview);
       }
       setBackImage(null);
       setBackPreview(null);
+      setEditingImgs((prev) => ({ ...prev, backImage: "" }));
     }
   };
 
@@ -790,7 +796,6 @@ const AddStyle = ({ userRole }) => {
                     />
                   </motion.label>
 
-                  {/* Front Image Preview */}
                   {/* Front Image Preview */}
                   <AnimatePresence>
                     {frontPreview && (

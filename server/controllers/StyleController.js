@@ -19,78 +19,20 @@ const { v4: uuidv4 } = require("uuid");
 const path = require("path");
 const fs = require("fs");
 require("dotenv").config();
-const b2Storage = require("../utils/b2Storage");
+const localStorage = require("../utils/FileStorageService");
 
-// Import B2 Storage helper
-// const b2Storage = require("../utils/b2Storage");
-
-// Helper function to save image to Backblaze B2
-// Helper function (should be in same file or imported)
-async function saveImageToB2(file, styleNo, imageType, styleId) {
-  try {
-    const fileExtension = path.extname(file.originalname);
-
-    // Generate unique filename
-    const fileName = `${styleNo}_${imageType}_${Date.now()}${fileExtension}`;
-
-    // Upload to B2
-    const uploadResult = await b2Storage.uploadFile(
-      file.buffer,
-      fileName,
-      `styles/${styleId}`, // Optional: keep folder structure
-    );
-
-    if (uploadResult) {
-      console.log(`${imageType} image uploaded: ${uploadResult.filePath}`);
-      return {
-        filePath: uploadResult.filePath,
-        fileId: uploadResult.fileId,
-        fileName: fileName,
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error(`Error saving ${imageType} image:`, error);
-    throw error; // Let the transaction handle rollback
+// Helper function to generate filename
+function generateFileName(styleNo, type) {
+  if (styleNo && type) {
+    // Remove any special characters from styleNo to avoid filesystem issues
+    const sanitizedStyleNo = styleNo.replace(/[^a-zA-Z0-9-_]/g, "_");
+    const name = `${sanitizedStyleNo}_${type}_${Date.now()}`;
+    return name;
   }
+  return null;
 }
 
-// Helper function to delete files from B2
-async function deleteFileFromB2(mediaRecord) {
-  try {
-    // If we have fileId, use it (most reliable)
-    if (mediaRecord.b2_file_id) {
-      console.log(`Deleting B2 file with ID: ${mediaRecord.b2_file_id}`);
-      return await b2Storage.deleteFile(
-        mediaRecord.b2_file_id,
-        mediaRecord.media_url,
-      );
-    }
-    // Otherwise try to delete by path
-    else {
-      console.log(`Deleting B2 file by path: ${mediaRecord.media_url}`);
-      return await b2Storage.deleteFileByPath(mediaRecord.media_url);
-    }
-  } catch (error) {
-    console.error(
-      `Failed to delete B2 file ${mediaRecord.media_url}:`,
-      error.message,
-    );
-
-    // Don't throw error for "file not found" - it might already be deleted
-    if (error.code === "NoSuchKey" || error.code === "NotFound") {
-      console.log(
-        `File ${mediaRecord.media_url} not found (may already be deleted)`,
-      );
-      return { success: true, message: "File not found (already deleted)" };
-    }
-
-    throw error; // Re-throw other errors
-  }
-}
-
-// for get all styles
+// Get all styles
 exports.getStyles = async (req, res, next) => {
   console.log("get style called");
   try {
@@ -118,43 +60,22 @@ exports.getStyles = async (req, res, next) => {
       order: [["createdAt", "DESC"]],
     });
 
-    // If you want to add full URLs to the response
-    const stylesWithUrls = await Promise.all(
-      styles.map(async (style) => {
-        const styleData = style.toJSON();
+    // Add local URLs to the response
+    const stylesWithUrls = styles.map((style) => {
+      const styleData = style.toJSON();
 
-        if (styleData.style_medias && styleData.style_medias.length > 0) {
-          // Add full URLs to each media item
-          styleData.style_medias = await Promise.all(
-            styleData.style_medias.map(async (media) => {
-              try {
-                // Generate signed URL for B2 file
-                const signedUrl = await b2Storage.getSignedUrl(media.media_url);
-                return {
-                  ...media,
-                  media_url_full: signedUrl.downloadUrl,
-                  media_url_signed: signedUrl.signedUrl,
-                };
-              } catch (error) {
-                console.error(
-                  `Error generating URL for media ${media.media_url}:`,
-                  error,
-                );
-                // Return the media without URLs if there's an error
-                return {
-                  ...media,
-                  media_url_full: null,
-                  media_url_signed: null,
-                  error: "Failed to generate URL",
-                };
-              }
-            }),
-          );
-        }
+      if (styleData.style_medias && styleData.style_medias.length > 0) {
+        styleData.style_medias = styleData.style_medias.map((media) => {
+          return {
+            ...media,
+            // Add URL for frontend to access images
+            media_url_full: `/style-images/${path.basename(media.media_url)}`,
+          };
+        });
+      }
 
-        return styleData;
-      }),
-    );
+      return styleData;
+    });
 
     if (styles) {
       res.status(200).json({ status: "success", data: stylesWithUrls });
@@ -164,7 +85,7 @@ exports.getStyles = async (req, res, next) => {
   }
 };
 
-// ... (keep other get functions as they are - getStylesUnique, getPOList, getStylesMo) ...
+// Get unique styles (without media)
 exports.getStylesUnique = async (req, res, next) => {
   console.log("get style called");
   try {
@@ -187,9 +108,7 @@ exports.getStylesUnique = async (req, res, next) => {
       ],
       distinct: true,
     });
-    console.log("styes from backend ============= ", styles);
-    // console.log("styles list:- ", styles);
-    // console.log(styles);
+
     if (styles) {
       res.status(200).json({ status: "success", data: styles });
     }
@@ -198,8 +117,8 @@ exports.getStylesUnique = async (req, res, next) => {
   }
 };
 
+// Get PO list by style ID
 exports.getPOList = async (req, res, next) => {
-  //
   console.log(req.params);
   try {
     const poList = await Style.findAll({
@@ -214,12 +133,10 @@ exports.getPOList = async (req, res, next) => {
   }
 };
 
+// Get styles with operations
 exports.getStylesMo = async (req, res, next) => {
-  //
   console.log("requesting");
   console.log(req.body);
-  // return;
-  // return res.status(200);
   const { styleNo } = req.body;
   try {
     const operations = await Style.findOne({
@@ -252,11 +169,7 @@ exports.getStylesMo = async (req, res, next) => {
   }
 };
 
-// function generateFileName (styleNo, type){
-//   const name =
-// }
-
-// for add new style
+// Add new style
 exports.addStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
@@ -278,7 +191,7 @@ exports.addStyle = async (req, res, next) => {
       poNumber,
     } = req.body;
 
-    // validate style number
+    // Validate style number
     const findStyleNo = await Style.findAll({
       where: { style_no: styleNo, po_number: poNumber },
       transaction: t,
@@ -303,65 +216,64 @@ exports.addStyle = async (req, res, next) => {
       created_by: userId,
     };
 
-    // Step 1: Create style
+    // Create style
     const style = await Style.create(newStyle, { transaction: t });
 
     const styleMediaRecords = [];
 
-    // Step 2: Process images from multer and upload to B2
-    // In your addStyle function, update the file handling section:
+    // Process images from multer and save to local storage
     if (req.files) {
+      // Process front image
       if (req.files["frontImage"]) {
         const file = req.files["frontImage"][0];
+        const fileName =
+          generateFileName(styleNo, "front") + path.extname(file.originalname);
 
-        // Upload to B2 - now returns object with filePath AND fileId
-        const uploadResult = await saveImageToB2(
-          file,
-          styleNo,
-          "front",
-          style.style_id,
+        const uploadResult = await localStorage.uploadStyImage(
+          file.buffer,
+          fileName,
         );
 
+        console.log("upload result for inspect 👀👀", uploadResult);
         if (uploadResult) {
           styleMediaRecords.push({
             style_media_id: uuidv4(),
             style_id: style.style_id,
-            media_url: uploadResult.filePath, // B2 file path
+            media_url: `StyleImages/${fileName}`,
             media_type: "front",
-            b2_file_id: uploadResult.fileId, // Store the fileId from B2
           });
         }
       }
 
+      // Process back image
       if (req.files["backImage"]) {
         const file = req.files["backImage"][0];
+        const fileName =
+          generateFileName(styleNo, "back") + path.extname(file.originalname);
 
-        //TODO Upload to B2 - now returns object with filePath AND fileId
-        const uploadResult = await saveImageToB2(
-          file,
-          styleNo,
-          "back",
-          style.style_id,
+        const uploadResult = await localStorage.uploadStyImage(
+          file.buffer,
+          fileName,
         );
 
+        console.log("upload result for inspect 👀👀", uploadResult);
         if (uploadResult) {
           styleMediaRecords.push({
             style_media_id: uuidv4(),
             style_id: style.style_id,
-            media_url: uploadResult.filePath, // B2 file path
+            media_url: `StyleImages/${fileName}`,
             media_type: "back",
-            b2_file_id: uploadResult.fileId, // Store the fileId from B2
           });
         }
       }
     }
 
-    // Step 3: Save media records
+    // Save media records
     if (styleMediaRecords.length > 0) {
       await StyleMedia.bulkCreate(styleMediaRecords, { transaction: t });
     }
 
-    // Step 4: Commit transaction
+    // Commit transaction
     await t.commit();
 
     res.status(201).json({
@@ -375,17 +287,18 @@ exports.addStyle = async (req, res, next) => {
   }
 };
 
-// for edit existing style
-// const b2Storage = require("../utils/b2Storage"); // Add this import
-
+// Edit existing style
 exports.editStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
-    error.status = 403; // Forbidden
+    error.status = 403;
     return next(error);
   }
 
   console.log("edit route called");
+  console.log("📦 Request body:", req.body);
+  console.log("📦 Request files:", req.files);
+
   const styleId = req.params.id;
   const {
     styleFactory,
@@ -395,9 +308,10 @@ exports.editStyle = async (req, res, next) => {
     poNumber,
     styleName,
     styleDescription,
+    existingImages,
   } = req.body;
 
-  const t = await sequelize.transaction(); // Add transaction for safety
+  const t = await sequelize.transaction();
 
   try {
     // Validate style number - exclude current style from check
@@ -405,7 +319,7 @@ exports.editStyle = async (req, res, next) => {
       where: {
         style_no: styleNo,
         po_number: poNumber,
-        style_id: { [Op.ne]: styleId }, // Exclude current style
+        style_id: { [Op.ne]: styleId },
       },
       transaction: t,
     });
@@ -439,79 +353,228 @@ exports.editStyle = async (req, res, next) => {
     };
     await currentStyle.update(editStyle, { transaction: t });
 
-    // Handle media files if uploaded
-    const files = req.files;
+    // Track newly uploaded files to prevent them from being deleted
+    const newlyUploadedUrls = [];
 
-    // Helper function to handle image update
-    const handleImageUpdate = async (file, imageType) => {
-      // First, check if old media exists
-      const existingMedia = await StyleMedia.findOne({
-        where: {
-          style_id: styleId,
-          media_type: imageType,
-        },
-        transaction: t,
-      });
+    // Process new uploaded files FIRST
+    if (req.files && Object.keys(req.files).length > 0) {
+      console.log("🖼️ Processing uploaded files:", Object.keys(req.files));
 
-      // Delete old file from B2 if exists
-      if (existingMedia && existingMedia.b2_file_id) {
-        try {
-          await b2Storage.deleteFile(
-            existingMedia.b2_file_id,
-            existingMedia.media_url,
-          );
-          console.log(`Deleted old ${imageType} image from B2`);
-        } catch (deleteError) {
-          console.warn(
-            `Could not delete old ${imageType} image:`,
-            deleteError.message,
-          );
-          // Continue anyway - don't fail the whole update
+      // Process front image
+      if (req.files["frontImage"]) {
+        const frontFile = Array.isArray(req.files["frontImage"])
+          ? req.files["frontImage"][0]
+          : req.files["frontImage"];
+
+        console.log("Processing front image:", frontFile.originalname);
+
+        // Check if old media exists
+        const existingMedia = await StyleMedia.findOne({
+          where: {
+            style_id: styleId,
+            media_type: "front",
+          },
+          transaction: t,
+        });
+
+        // Delete old file if exists (but don't delete if it's the same as newly uploaded)
+        if (existingMedia) {
+          try {
+            await localStorage.deleteFile(null, existingMedia.media_url);
+            console.log(
+              `✅ Deleted old front image: ${existingMedia.media_url}`,
+            );
+          } catch (deleteError) {
+            console.warn(
+              `Could not delete old front image:`,
+              deleteError.message,
+            );
+          }
+        }
+
+        // Upload new file
+        const fileName =
+          generateFileName(styleNo, "front") +
+          path.extname(frontFile.originalname);
+        console.log("📤 Uploading new front image:", fileName);
+
+        const uploadResult = await localStorage.uploadStyImage(
+          frontFile.buffer,
+          fileName,
+        );
+
+        if (uploadResult) {
+          const mediaUrl = `StyleImages/${fileName}`;
+          newlyUploadedUrls.push(mediaUrl); // Track this URL
+
+          if (existingMedia) {
+            // Update existing record
+            await existingMedia.update(
+              {
+                media_url: mediaUrl,
+              },
+              { transaction: t },
+            );
+            console.log("✅ Updated front media record");
+          } else {
+            // Create new record
+            await StyleMedia.create(
+              {
+                style_media_id: uuidv4(),
+                style_id: styleId,
+                media_url: mediaUrl,
+                media_type: "front",
+              },
+              { transaction: t },
+            );
+            console.log("✅ Created new front media record");
+          }
         }
       }
 
-      // Upload new file to B2
-      const uploadResult = await saveImageToB2(
-        file,
-        styleNo,
-        imageType,
-        styleId,
-      );
+      // Process back image
+      if (req.files["backImage"]) {
+        const backFile = Array.isArray(req.files["backImage"])
+          ? req.files["backImage"][0]
+          : req.files["backImage"];
 
-      if (uploadResult) {
-        await StyleMedia.upsert(
-          {
-            style_media_id: `${styleId}-${imageType}`,
+        console.log("Processing back image:", backFile.originalname);
+
+        // Check if old media exists
+        const existingMedia = await StyleMedia.findOne({
+          where: {
             style_id: styleId,
-            media_url: uploadResult.filePath,
-            b2_file_id: uploadResult.fileId,
-            media_type: imageType,
+            media_type: "back",
           },
-          { transaction: t },
+          transaction: t,
+        });
+
+        // Delete old file if exists
+        if (existingMedia) {
+          try {
+            await localStorage.deleteFile(null, existingMedia.media_url);
+            console.log(
+              `✅ Deleted old back image: ${existingMedia.media_url}`,
+            );
+          } catch (deleteError) {
+            console.warn(
+              `Could not delete old back image:`,
+              deleteError.message,
+            );
+          }
+        }
+
+        // Upload new file
+        const fileName =
+          generateFileName(styleNo, "back") +
+          path.extname(backFile.originalname);
+        console.log("📤 Uploading new back image:", fileName);
+
+        const uploadResult = await localStorage.uploadStyImage(
+          backFile.buffer,
+          fileName,
         );
 
-        return true;
+        if (uploadResult) {
+          const mediaUrl = `StyleImages/${fileName}`;
+          newlyUploadedUrls.push(mediaUrl); // Track this URL
+
+          if (existingMedia) {
+            // Update existing record
+            await existingMedia.update(
+              {
+                media_url: mediaUrl,
+              },
+              { transaction: t },
+            );
+            console.log("✅ Updated back media record");
+          } else {
+            // Create new record
+            await StyleMedia.create(
+              {
+                style_media_id: uuidv4(),
+                style_id: styleId,
+                media_url: mediaUrl,
+                media_type: "back",
+              },
+              { transaction: t },
+            );
+            console.log("✅ Created new back media record");
+          }
+        }
       }
-
-      return false;
-    };
-
-    // Process front image
-    if (files?.frontImage?.[0]) {
-      const frontFile = files.frontImage[0];
-      await handleImageUpdate(frontFile, "front");
+    } else {
+      console.log("📭 No files uploaded in this request");
     }
 
-    // Process back image
-    if (files?.backImage?.[0]) {
-      const backFile = files.backImage[0];
-      await handleImageUpdate(backFile, "back");
+    // Handle existing images that might have been removed
+    if (existingImages) {
+      console.log("🖼️ Processing existing images:", existingImages);
+
+      let parsedExistingImages;
+      try {
+        parsedExistingImages =
+          typeof existingImages === "string"
+            ? JSON.parse(existingImages)
+            : existingImages;
+      } catch (e) {
+        console.error("Error parsing existingImages:", e);
+        parsedExistingImages = [];
+      }
+
+      // Find all current media for this style
+      const currentMedia = await StyleMedia.findAll({
+        where: { style_id: styleId },
+        transaction: t,
+      });
+
+      console.log(
+        "Current media in DB:",
+        currentMedia.map((m) => ({ url: m.media_url, type: m.media_type })),
+      );
+      console.log("Newly uploaded URLs:", newlyUploadedUrls);
+
+      // Delete media that are not in existingImages AND not newly uploaded
+      for (const media of currentMedia) {
+        const stillExists = parsedExistingImages.some(
+          (img) =>
+            img.path === media.media_url && img.type === media.media_type,
+        );
+
+        // Check if this media is newly uploaded (should NOT be deleted)
+        const isNewlyUploaded = newlyUploadedUrls.includes(media.media_url);
+
+        if (!stillExists && !isNewlyUploaded) {
+          console.log(
+            `🗑️ Removing media that no longer exists: ${media.media_url}`,
+          );
+
+          // Delete file from local storage
+          try {
+            await localStorage.deleteFile(null, media.media_url);
+            console.log(`✅ Deleted file: ${media.media_url}`);
+          } catch (deleteError) {
+            console.warn(
+              `Could not delete file: ${media.media_url}`,
+              deleteError.message,
+            );
+          }
+
+          // Delete database record
+          await media.destroy({ transaction: t });
+          console.log(`✅ Deleted media record for: ${media.media_type}`);
+        } else {
+          console.log(
+            `✅ Keeping media: ${media.media_url} (stillExists: ${stillExists}, isNewlyUploaded: ${isNewlyUploaded})`,
+          );
+        }
+      }
     }
 
     // Commit transaction
     await t.commit();
+    console.log("✅ Update successful - transaction committed");
 
-    console.log("update success");
     res.status(200).json({
       status: "success",
       message: "Style updated successfully",
@@ -519,12 +582,12 @@ exports.editStyle = async (req, res, next) => {
     });
   } catch (error) {
     await t.rollback();
-    console.error("Edit style error:", error);
+    console.error("❌ Edit style error:", error);
     return next(error);
   }
 };
 
-// for delete existing style
+// Delete existing style
 exports.deleteStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
     const error = new Error("You don't have permission to perform this action");
@@ -533,7 +596,7 @@ exports.deleteStyle = async (req, res, next) => {
   }
 
   const styleId = req.params.id;
-  const t = await sequelize.transaction(); // Add transaction
+  const t = await sequelize.transaction();
 
   try {
     // Find style with its media
@@ -560,41 +623,31 @@ exports.deleteStyle = async (req, res, next) => {
       } media files`,
     );
 
-    // 1️⃣ Delete files from B2 storage (if any)
+    // Delete files from local storage
     if (style.style_medias && style.style_medias.length > 0) {
       for (const media of style.style_medias) {
         try {
-          // Use b2_file_id if available (more reliable)
-          if (media.b2_file_id) {
-            console.log(`Deleting B2 file with ID: ${media.b2_file_id}`);
-            await b2Storage.deleteFile(media.b2_file_id, media.media_url);
-          } else {
-            // Fallback: try to delete by file path
-            console.log(`Deleting B2 file by path: ${media.media_url}`);
-            await b2Storage.deleteFileByPath(media.media_url);
-          }
+          await localStorage.deleteFile(null, media.media_url);
           console.log(`✅ Deleted: ${media.media_url}`);
         } catch (deleteError) {
           console.warn(
             `⚠️ Could not delete file ${media.media_url}:`,
             deleteError.message,
           );
-          // Continue deleting other files - don't fail entire operation
-          // File might already be deleted or not exist
         }
       }
     }
 
-    // 2️⃣ Delete media records from database
+    // Delete media records from database
     await StyleMedia.destroy({
       where: { style_id: styleId },
       transaction: t,
     });
 
-    // 3️⃣ Delete style record
+    // Delete style record
     await style.destroy({ transaction: t });
 
-    // 4️⃣ Commit transaction
+    // Commit transaction
     await t.commit();
 
     res.status(200).json({
@@ -609,7 +662,7 @@ exports.deleteStyle = async (req, res, next) => {
   }
 };
 
-// to generate excel file using style details
+// Generate Excel file using style details
 exports.generateExcel = async (req, res, next) => {
   try {
     const styles = await Style.findAll({
@@ -635,11 +688,11 @@ exports.generateExcel = async (req, res, next) => {
     ];
 
     worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true, color: { argb: "FFFFFFFF" } }; // white bold text
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "4472C4" }, // nice blue background
+        fgColor: { argb: "4472C4" },
       };
       cell.alignment = { vertical: "middle", horizontal: "center" };
     });

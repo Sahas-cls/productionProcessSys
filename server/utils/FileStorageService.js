@@ -7,7 +7,7 @@ const STORAGE_BASE =
 
 class LocalSubOpStorage {
   constructor() {
-    this.storageBase = STORAGE_BASE;  
+    this.storageBase = STORAGE_BASE;
   }
 
   /**
@@ -95,9 +95,53 @@ class LocalSubOpStorage {
   /* 
     for upload style images. 
   */
- async uploadStyImage(fileBuffer, fineName, folderType, subOpId){
-  
- }
+  async uploadStyImage(fileBuffer, fileName) {
+    try {
+      if (!fileBuffer || fileBuffer.length === 0) {
+        throw new Error("File buffer is empty");
+      }
+
+      if (!fileName || fileName.trim() === "") {
+        throw new Error("Filename is required");
+      }
+
+      console.log(`📤 Starting local storage upload:`, {
+        fileName,
+        bufferSize: fileBuffer.length,
+      });
+
+      // Use the storage base path (Y: drive or mounted network drive)
+      const styleImagesPath = path.join(this.storageBase, "StyleImages");
+
+      // Ensure the directory exists
+      await this.ensureDir(styleImagesPath);
+
+      // Full file path on the network drive
+      const fullFilePath = path.join(styleImagesPath, fileName);
+
+      // Write file to network drive
+      await fs.writeFile(fullFilePath, fileBuffer);
+
+      // Return relative path from storage base for database storage
+      // This will be something like: "StyleImages/filename.jpg"
+      const relativePath = path
+        .relative(this.storageBase, fullFilePath)
+        .replace(/\\/g, "/");
+
+      console.log(`✅ File saved to network drive: ${fullFilePath}`);
+      console.log(`📁 Relative path for DB: ${relativePath}`);
+
+      return {
+        filePath: relativePath, // Store relative path in database
+        fullPath: fullFilePath, // Full path for internal use
+        fileName: fileName,
+        fileId: null,
+      };
+    } catch (error) {
+      console.error("❌ Network Storage Upload Error:", error);
+      throw error;
+    }
+  }
 
   /**
    * Delete file from local storage
