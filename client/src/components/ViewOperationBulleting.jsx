@@ -36,7 +36,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
         style.operations?.some(
           (op) =>
             op.subOperations?.length?.toString().includes(term) ||
-            op.operation_name?.toLowerCase().includes(term)
+            op.operation_name?.toLowerCase().includes(term),
         )
       );
     });
@@ -67,7 +67,7 @@ const ViewOperationBulletin = ({ onViewBO }) => {
         state: style.style_id,
       });
     },
-    [navigate]
+    [navigate],
   );
 
   if (isLoading) {
@@ -148,8 +148,16 @@ const StyleCard = ({ style, onViewDetails }) => {
   const apiUrl = import.meta.env.VITE_API_URL;
   const getImageUrl = (mediaUrl) => {
     if (!mediaUrl) return null;
-    if (mediaUrl.startsWith("http")) return mediaUrl;
-    return `${apiUrl}/api/b2-files/${mediaUrl}`;
+
+    // If already a full URL (like B2 or CDN)
+    if (mediaUrl.startsWith("http")) {
+      return mediaUrl;
+    }
+
+    // Extract filename if a path is stored
+    const fileName = mediaUrl.split("/").pop();
+
+    return `${apiUrl}/style-images/${fileName}`;
   };
 
   // Calculate total sub-operations across all main operations
@@ -178,13 +186,14 @@ const StyleCard = ({ style, onViewDetails }) => {
         <div className="p-4 flex justify-center">
           <div className="w-32 h-32 rounded border border-gray-200 overflow-hidden">
             <img
+              // `${apiUrl}/style-images/${style.style_medias[0].media_url.split("/").pop()}`
               src={getImageUrl(style.style_medias[0].media_url)}
               alt={style.style_name || "Style image"}
               className="w-full h-full object-cover cursor-pointer"
               onClick={() =>
                 window.open(
                   getImageUrl(style.style_medias[0].media_url),
-                  "_blank"
+                  "_blank",
                 )
               }
             />
