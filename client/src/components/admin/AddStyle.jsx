@@ -56,7 +56,7 @@ const AddStyle = ({ userRole }) => {
           .includes(searchTerm.toLowerCase()) ||
         style.style_description
           ?.toLowerCase()
-          .includes(searchTerm.toLowerCase())
+          .includes(searchTerm.toLowerCase()),
     );
   }, [stylesList, searchTerm]);
 
@@ -93,7 +93,7 @@ const AddStyle = ({ userRole }) => {
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300) // 300ms debounce delay
+      }, 300), // 300ms debounce delay
     );
   };
 
@@ -179,7 +179,7 @@ const AddStyle = ({ userRole }) => {
     try {
       const respons = await axios.delete(
         `${apiUrl}/api/styles/deleteStyle/${styleId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
       refresh();
       swal.fire({
@@ -304,14 +304,14 @@ const AddStyle = ({ userRole }) => {
       .required("Style no is required")
       .matches(
         /^[A-Za-z0-9- /]+$/,
-        "Style number can only contain letters and numbers"
+        "Style number can only contain letters and numbers",
       ),
     styleName: yup
       .string()
       .required("Style name is required")
       .matches(
         /^[A-Za-z0-9- /]+$/,
-        "Style number can only contain letters and numbers"
+        "Style number can only contain letters and numbers",
       ),
   });
 
@@ -381,13 +381,13 @@ const AddStyle = ({ userRole }) => {
           response = await axios.put(
             `${apiUrl}/api/styles/editStyle/${editingStyle.style_id}`,
             formData,
-            config
+            config,
           );
         } else {
           response = await axios.post(
             `${apiUrl}/api/styles/addStyle`,
             formData,
-            config
+            config,
           );
         }
 
@@ -446,7 +446,7 @@ const AddStyle = ({ userRole }) => {
   useEffect(() => {
     if (currentCustomer && seasonsList) {
       const seasons = seasonsList.filter(
-        (season) => season.customer_id == currentCustomer
+        (season) => season.customer_id == currentCustomer,
       );
       setFilteredSeasons(seasons);
     } else {
@@ -1008,18 +1008,18 @@ const AddStyle = ({ userRole }) => {
                       <div className="font-medium text-gray-900 flex items-center gap-x-6">
                         {style.style_medias?.[0]?.media_url && (
                           <img
-                            // Use proxy route with crossOrigin attribute:
-                            src={`${apiUrl}/api/b2-files/${style.style_medias[0].media_url}`}
+                            // Use the new style-images endpoint instead of b2-files
+                            src={`${apiUrl}/style-images/${encodeURIComponent(style.style_medias[0].media_url)}`}
                             alt="Style preview"
                             width={60}
                             height={60}
                             loading="lazy"
-                            crossOrigin="anonymous" // ADD THIS
+                            crossOrigin="anonymous"
                             className="object-cover rounded"
                             onError={(e) => {
                               console.error(
                                 "Failed to load style image:",
-                                e.target.src
+                                e.target.src,
                               );
                               e.target.style.display = "none";
                               // Optional: Add fallback or show placeholder
@@ -1027,19 +1027,19 @@ const AddStyle = ({ userRole }) => {
                               fallback.className =
                                 "w-[60px] h-[60px] bg-gray-200 rounded flex items-center justify-center";
                               fallback.innerHTML = `
-            <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
-            </svg>
-          `;
+        <svg class="w-6 h-6 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd"/>
+        </svg>
+      `;
                               e.target.parentNode.insertBefore(
                                 fallback,
-                                e.target
+                                e.target,
                               );
                             }}
                             onLoad={(e) => {
                               console.log(
                                 "✅ Style image loaded:",
-                                e.target.src
+                                e.target.src,
                               );
                             }}
                           />

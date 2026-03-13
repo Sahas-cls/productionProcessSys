@@ -92,6 +92,13 @@ class LocalSubOpStorage {
     }
   }
 
+  /* 
+    for upload style images. 
+  */
+ async uploadStyImage(fileBuffer, fineName, folderType, subOpId){
+  
+ }
+
   /**
    * Delete file from local storage
    */

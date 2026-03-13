@@ -252,6 +252,10 @@ exports.getStylesMo = async (req, res, next) => {
   }
 };
 
+// function generateFileName (styleNo, type){
+//   const name =
+// }
+
 // for add new style
 exports.addStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
@@ -332,7 +336,7 @@ exports.addStyle = async (req, res, next) => {
       if (req.files["backImage"]) {
         const file = req.files["backImage"][0];
 
-        // Upload to B2 - now returns object with filePath AND fileId
+        //TODO Upload to B2 - now returns object with filePath AND fileId
         const uploadResult = await saveImageToB2(
           file,
           styleNo,
