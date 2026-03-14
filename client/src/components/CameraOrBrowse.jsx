@@ -619,11 +619,15 @@ const CameraOrBrowse = ({
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
       console.log("API URL:", apiUrl);
-
+      const uploadServer = import.meta.env.VITE_UPLOAD_SERVER;
+      // const uploadServer =
+      //   process.platform == "win32"
+      //     ? "http://localhost:4000"
+      //     : "http://159.89.171.53";
       const endpoint =
         operationType === "HelperOperation"
-          ? `${apiUrl}/api/helperOpMedia/uploadVideos`
-          : `${apiUrl}/api/subOperationMedia/uploadVideos`;
+          ? `${uploadServer}/api/helperOpMedia/uploadVideos`
+          : `${uploadServer}/api/subOperationMedia/uploadVideos`;
 
       console.log("Upload endpoint:", endpoint);
 

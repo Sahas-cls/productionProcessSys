@@ -21,18 +21,6 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 exports.uploadVideo = async (req, res, next) => {
   console.log("📤 [Local] Video upload request received");
-  console.log("📋 Request body:", req.body);
-  console.log(
-    "📁 File details:",
-    req.file
-      ? {
-          originalname: req.file.originalname,
-          mimetype: req.file.mimetype,
-          size: req.file.size,
-          bufferSize: req.file.buffer?.length || 0,
-        }
-      : "No file",
-  );
 
   let uploadResult = null;
   let dbRecord = null;
@@ -40,7 +28,6 @@ exports.uploadVideo = async (req, res, next) => {
   let tempOutputPath = null;
 
   try {
-    // Check if file uploaded
     if (!req.file) {
       return res.status(400).json({
         message: "No file uploaded",
@@ -50,27 +37,26 @@ exports.uploadVideo = async (req, res, next) => {
 
     const { styleNo, moId, sopId, sopName, subOpId } = req.body;
 
-    // Validate required fields
     if (!styleNo || !moId || !sopId || !subOpId) {
       return res.status(400).json({
         message: "Missing required fields: styleNo, moId, sopId, subOpId",
         success: false,
-        received: { styleNo, moId, sopId, subOpId },
       });
     }
 
-    // ==================== VALIDATE FOREIGN KEYS ====================
-    // Lookup style_id from styleNo
+    // ================= VALIDATE FOREIGN KEYS =================
+
     const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
+
     if (!styleRecord) {
       return res.status(400).json({
         message: `Style with styleNo "${styleNo}" not found`,
         success: false,
       });
     }
+
     const styleIdDb = styleRecord.style_id;
 
-    // Validate moId exists in Operations table
     const operationExists = await MainOperation.findByPk(moId);
     if (!operationExists) {
       return res.status(400).json({
@@ -79,7 +65,6 @@ exports.uploadVideo = async (req, res, next) => {
       });
     }
 
-    // Validate subOpId exists in SubOperations table
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists) {
       return res.status(400).json({
@@ -88,9 +73,11 @@ exports.uploadVideo = async (req, res, next) => {
       });
     }
 
-    // ==================== VIDEO PROCESSING ====================
+    // ================= VIDEO PROCESSING =================
+
     const isVideo = req.file.mimetype.startsWith("video/");
     const ext = path.extname(req.file.originalname).toLowerCase();
+
     let processedBuffer = req.file.buffer;
     let finalFilename = "";
     let wasNormalized = false;
@@ -99,13 +86,17 @@ exports.uploadVideo = async (req, res, next) => {
     if (isVideo) {
       try {
         const tempDir = path.join(__dirname, "../temp");
-        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
 
         tempInputPath = path.join(tempDir, `input_${Date.now()}${ext}`);
         tempOutputPath = path.join(tempDir, `output_${Date.now()}${ext}`);
+
         await fs.promises.writeFile(tempInputPath, req.file.buffer);
 
-        // Detect rotation metadata and get rotation value
+        // Detect rotation metadata
         const rotationInfo = await new Promise((resolve) => {
           ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
             if (err) return resolve({ hasRotation: false, rotation: 0 });
@@ -115,6 +106,7 @@ exports.uploadVideo = async (req, res, next) => {
             );
 
             let rotation = 0;
+
             if (videoStream?.tags?.rotate) {
               rotation = parseInt(videoStream.tags.rotate);
             } else if (videoStream?.side_data_list) {
@@ -131,121 +123,58 @@ exports.uploadVideo = async (req, res, next) => {
           });
         });
 
-        // ALWAYS physically rotate for web compatibility if rotation detected
         if (rotationInfo.hasRotation) {
-          console.log(
-            `🔄 Detected rotation: ${rotationInfo.rotation}°, applying physical rotation for web compatibility`,
-          );
+          console.log(`🔄 Fixing rotation: ${rotationInfo.rotation}`);
 
-          try {
-            let transposeFilter = "transpose=1";
+          let transposeFilter = "transpose=1";
 
-            if (rotationInfo.rotation === 90) {
-              transposeFilter = "transpose=1";
-            } else if (
-              rotationInfo.rotation === 270 ||
-              rotationInfo.rotation === -90
-            ) {
-              transposeFilter = "transpose=2";
-            } else if (rotationInfo.rotation === 180) {
-              transposeFilter = "transpose=1,transpose=1";
-            }
-
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .videoFilters(transposeFilter)
-                .audioCodec("aac")
-                .videoCodec("libx264")
-                .outputOptions([
-                  "-preset fast",
-                  "-crf 23",
-                  "-movflags +faststart",
-                  "-map_metadata 0",
-                  "-metadata:s:v:0 rotate=0",
-                ])
-                .on("start", (commandLine) => {
-                  console.log("FFmpeg command:", commandLine);
-                })
-                .on("end", () => {
-                  console.log("✅ Video rotated successfully");
-                  resolve();
-                })
-                .on("error", (err) => {
-                  console.error("FFmpeg rotation error:", err);
-                  reject(err);
-                })
-                .save(tempOutputPath);
-            });
-
-            processedBuffer = await fs.promises.readFile(tempOutputPath);
-            req.file.size = processedBuffer.length;
-            wasNormalized = true;
-            rotationApplied = rotationInfo.rotation;
-
-            console.log(`✅ Video successfully rotated and optimized for web`);
-          } catch (rotationError) {
-            console.error(
-              "❌ Rotation failed, falling back to metadata removal only:",
-              rotationError.message,
-            );
-
-            try {
-              await new Promise((resolve, reject) => {
-                ffmpeg(tempInputPath)
-                  .outputOptions([
-                    "-c copy",
-                    "-map_metadata 0",
-                    "-metadata:s:v:0 rotate=0",
-                  ])
-                  .on("end", resolve)
-                  .on("error", reject)
-                  .save(tempOutputPath);
-              });
-
-              processedBuffer = await fs.promises.readFile(tempOutputPath);
-              req.file.size = processedBuffer.length;
-              wasNormalized = true;
-              rotationApplied = "metadata_only";
-              console.log(
-                "⚠️ Removed rotation metadata only (video may still appear rotated in some players)",
-              );
-            } catch (fallbackError) {
-              console.error(
-                "❌ Even metadata removal failed:",
-                fallbackError.message,
-              );
-            }
+          if (rotationInfo.rotation === 90) {
+            transposeFilter = "transpose=1";
+          } else if (
+            rotationInfo.rotation === 270 ||
+            rotationInfo.rotation === -90
+          ) {
+            transposeFilter = "transpose=2";
+          } else if (rotationInfo.rotation === 180) {
+            transposeFilter = "transpose=1,transpose=1";
           }
+
+          await new Promise((resolve, reject) => {
+            ffmpeg(tempInputPath)
+              .videoFilters(transposeFilter)
+              .videoCodec("libx264")
+              .audioCodec("aac")
+              .outputOptions([
+                "-movflags +faststart",
+                "-map_metadata 0",
+                "-metadata:s:v:0 rotate=0",
+              ])
+              .on("end", resolve)
+              .on("error", reject)
+              .save(tempOutputPath);
+          });
+
+          processedBuffer = await fs.promises.readFile(tempOutputPath);
+          req.file.size = processedBuffer.length;
+
+          wasNormalized = true;
+          rotationApplied = rotationInfo.rotation;
         } else {
-          console.log(
-            "✅ No rotation detected, video orientation is web-compatible",
-          );
+          console.log("✅ No rotation detected");
 
-          try {
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .videoCodec("libx264")
-                .audioCodec("aac")
-                .outputOptions([
-                  "-preset fast",
-                  "-crf 23",
-                  "-movflags +faststart",
-                ])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(tempOutputPath);
-            });
+          await new Promise((resolve, reject) => {
+            ffmpeg(tempInputPath)
+              .videoCodec("libx264")
+              .audioCodec("aac")
+              .outputOptions(["-movflags +faststart"])
+              .on("end", resolve)
+              .on("error", reject)
+              .save(tempOutputPath);
+          });
 
-            processedBuffer = await fs.promises.readFile(tempOutputPath);
-            req.file.size = processedBuffer.length;
-            wasNormalized = true;
-            console.log("✅ Video optimized for web playback");
-          } catch (optimizeError) {
-            console.log(
-              "⚠️ Web optimization skipped, using original:",
-              optimizeError.message,
-            );
-          }
+          processedBuffer = await fs.promises.readFile(tempOutputPath);
+          req.file.size = processedBuffer.length;
+          wasNormalized = true;
         }
       } catch (err) {
         console.warn(
@@ -255,118 +184,43 @@ exports.uploadVideo = async (req, res, next) => {
       }
     }
 
-    // ==================== GENERATE FILENAME ====================
+    // ================= GENERATE FILENAME =================
+
     const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}${String(now.getDate()).padStart(2, "0")}_${String(
+      now.getHours(),
+    ).padStart(2, "0")}${String(now.getMinutes()).padStart(
+      2,
+      "0",
+    )}${String(now.getSeconds()).padStart(2, "0")}`;
+
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    const webOptimizedSuffix = wasNormalized ? "_web_optimized" : "";
     finalFilename =
       req.file.generatedName ||
-      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}${webOptimizedSuffix}_${dateTime}${ext}`;
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
     if (!processedBuffer || processedBuffer.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Processed file is empty", success: false });
-    }
-
-    // ==================== SIZE CONTROL ====================
-    const MAX_SIZE_MB = 95;
-    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-
-    if (processedBuffer.length > MAX_SIZE_BYTES) {
-      console.log("🎯 Applying size control compression...");
-
-      const getVideoDuration = () =>
-        new Promise((resolve) => {
-          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-            if (err) return resolve(60);
-            const duration = metadata.format?.duration || 60;
-            resolve(duration);
-          });
-        });
-
-      const duration = await getVideoDuration();
-      const audioBitrate = 128000;
-      const targetSizeBits = MAX_SIZE_BYTES * 8;
-
-      let videoBitrate = Math.floor(targetSizeBits / duration) - audioBitrate;
-      videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000));
-      const bitrateK = Math.floor(videoBitrate / 1000) + "k";
-
-      console.log(`📉 Calculated video bitrate: ${bitrateK}`);
-
-      const sizeControlledPath = path.join(
-        path.dirname(tempOutputPath),
-        `size_control_${Date.now()}.mp4`,
-      );
-
-      await new Promise((resolve, reject) => {
-        ffmpeg(tempInputPath)
-          .videoCodec("libx264")
-          .audioCodec("aac")
-          .outputOptions([
-            "-preset veryfast",
-            "-movflags +faststart",
-            "-vf scale='min(1280,iw)':-2",
-            "-b:v " + bitrateK,
-            "-maxrate " + bitrateK,
-            "-bufsize 2M",
-            "-b:a 128k",
-          ])
-          .on("end", resolve)
-          .on("error", reject)
-          .save(sizeControlledPath);
+      return res.status(400).json({
+        message: "Processed file is empty",
+        success: false,
       });
-
-      let finalBuffer = await fs.promises.readFile(sizeControlledPath);
-
-      if (finalBuffer.length > MAX_SIZE_BYTES) {
-        console.log("🔁 Second compression pass...");
-
-        const reducedBitrate = Math.floor(videoBitrate * 0.8);
-        const reducedBitrateK = Math.floor(reducedBitrate / 1000) + "k";
-
-        const secondPassPath = path.join(
-          path.dirname(tempOutputPath),
-          `second_pass_${Date.now()}.mp4`,
-        );
-
-        await new Promise((resolve, reject) => {
-          ffmpeg(tempInputPath)
-            .videoCodec("libx264")
-            .audioCodec("aac")
-            .outputOptions([
-              "-preset veryfast",
-              "-movflags +faststart",
-              "-vf scale='min(1280,iw)':-2",
-              "-b:v " + reducedBitrateK,
-              "-maxrate " + reducedBitrateK,
-              "-bufsize 2M",
-              "-b:a 128k",
-            ])
-            .on("end", resolve)
-            .on("error", reject)
-            .save(secondPassPath);
-        });
-
-        finalBuffer = await fs.promises.readFile(secondPassPath);
-        await fs.promises.unlink(secondPassPath);
-      }
-
-      processedBuffer = finalBuffer;
-      req.file.size = finalBuffer.length;
-      await fs.promises.unlink(sizeControlledPath);
-
-      console.log(
-        `✅ Final compressed size: ${(processedBuffer.length / (1024 * 1024)).toFixed(2)} MB`,
-      );
     }
 
-    // ==================== UPLOAD TO LOCAL STORAGE ====================
+    console.log(
+      `📦 Final upload size: ${(processedBuffer.length / (1024 * 1024)).toFixed(
+        2,
+      )} MB`,
+    );
+
+    // ================= UPLOAD TO LOCAL STORAGE =================
+
     uploadResult = await localStorage.uploadSubOpFile(
       processedBuffer,
       finalFilename,
@@ -374,7 +228,8 @@ exports.uploadVideo = async (req, res, next) => {
       subOpId,
     );
 
-    // ==================== SAVE TO DATABASE ====================
+    // ================= SAVE TO DATABASE =================
+
     dbRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
@@ -391,19 +246,20 @@ exports.uploadVideo = async (req, res, next) => {
       original_rotation: rotationApplied,
     });
 
-    // ==================== CLEANUP TEMP FILES ====================
+    // ================= CLEAN TEMP FILES =================
+
     try {
       [tempInputPath, tempOutputPath].forEach(async (p) => {
         if (p && fs.existsSync(p)) {
           await fs.promises.unlink(p);
-          console.log(`🧹 Cleaned up temp file: ${p}`);
         }
       });
     } catch (cleanupError) {
-      console.warn("⚠️ Temp file cleanup warning:", cleanupError.message);
+      console.warn("⚠️ Temp cleanup warning:", cleanupError.message);
     }
 
-    // ==================== SUCCESS RESPONSE ====================
+    // ================= RESPONSE =================
+
     res.status(201).json({
       message: "Video uploaded successfully",
       success: true,
@@ -411,62 +267,33 @@ exports.uploadVideo = async (req, res, next) => {
         so_media_id: dbRecord.so_media_id,
         media_url: uploadResult.filePath,
         video_url: uploadResult.filePath,
-        video_url_proxy: `/api/local-files/${uploadResult.filePath}`,
         file_name: uploadResult.fileName,
         original_filename: req.file.originalname,
         file_size: req.file.size,
         file_type: req.file.mimetype,
-        sub_operation_name: dbRecord.sub_operation_name,
         uploaded_at: dbRecord.createdAt,
         orientation_normalized: wasNormalized,
-        rotation_fixed: rotationApplied !== null,
-        web_optimized: true,
-      },
-      storage: {
-        type: "local",
-        path: "/mnt/bulletin-assets",
       },
     });
   } catch (error) {
-    console.error("❌ Unhandled error:", error);
+    console.error("❌ Upload error:", error);
 
-    // Cleanup local file if uploaded
     if (uploadResult?.filePath) {
       try {
         await localStorage.deleteFile(null, uploadResult.filePath);
-        console.log("🧹 Cleaned up local file after error");
-      } catch (localError) {
-        console.error("❌ Failed to cleanup local file:", localError.message);
-      }
+      } catch (err) {}
     }
 
-    // Cleanup database record if created
     if (dbRecord?.so_media_id) {
       try {
         await SubOperationMedia.destroy({
           where: { so_media_id: dbRecord.so_media_id },
         });
-        console.log("🧹 Cleaned up database record after error");
-      } catch (dbError) {
-        console.error("❌ Failed to cleanup database:", dbError.message);
-      }
-    }
-
-    // Cleanup temp files
-    try {
-      [tempInputPath, tempOutputPath].forEach(async (p) => {
-        if (p && fs.existsSync(p)) {
-          await fs.promises.unlink(p);
-          console.log(`🧹 Cleaned up temp file after error: ${p}`);
-        }
-      });
-    } catch (cleanupError) {
-      console.warn("⚠️ Temp file cleanup warning:", cleanupError.message);
+      } catch (err) {}
     }
 
     res.status(500).json({
       message: "Failed to upload video",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
       success: false,
     });
   }
