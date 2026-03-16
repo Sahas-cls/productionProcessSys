@@ -12,6 +12,7 @@ const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const localStorage = require("../utils/FileStorageService");
+const { where } = require("sequelize");
 require("dotenv").config();
 
 // Set the ffmpeg path
@@ -1112,6 +1113,7 @@ exports.deleteTechPack = async (req, res, next) => {
 
 exports.uploadFolder = async (req, res) => {
   console.log("📤 [Local] Folder upload request received", req.body);
+  console.log(`req body: `, req.body, `req params: `, req.params);
 
   try {
     if (!req.files || req.files.length === 0) {
@@ -1122,8 +1124,12 @@ exports.uploadFolder = async (req, res) => {
     }
 
     const { styleId, styleNo, folderName } = req.body;
+    // finding style
+    const findStyle = await Style.findOne({ where: { style_no: styleNo } });
 
-    if (!styleId) {
+    console.log(findStyle.dataValues);
+    // return;
+    if (!findStyle.style_id) {
       return res.status(400).json({
         message: "styleId is required",
         success: false,
@@ -1131,7 +1137,7 @@ exports.uploadFolder = async (req, res) => {
     }
 
     console.log(
-      `📦 Processing ${req.files.length} files for styleId: ${styleId}`,
+      `📦 Processing ${req.files.length} files for styleId: ${findStyle}`,
     );
 
     const uploadResults = [];
@@ -1174,7 +1180,7 @@ exports.uploadFolder = async (req, res) => {
 
         /* ---------------- Save DB ---------------- */
         dbRecord = await SubOperationFolder.create({
-          style_id: styleId,
+          style_id: findStyle.style_id,
           folder_url: uploadResult.filePath,
           file_size: file.size,
           original_filename: file.originalname,

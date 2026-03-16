@@ -703,10 +703,14 @@ exports.getImages = async (req, res, next) => {
  * Delete helper image
  */
 exports.deleteImage = async (req, res, next) => {
-  const { imageId } = req.params;
-  console.log("🗑️ [Local Helper] Delete image request for ID:", imageId);
+  // console.log("deleting image 🗑️");
+  // return;
+  console.log(req.params);
+  // return;
+  const { hOpId } = req.params;
+  console.log("🗑️ [Local Helper] Delete image request for ID:", hOpId);
 
-  if (!imageId || isNaN(imageId)) {
+  if (!hOpId || isNaN(hOpId)) {
     return res.status(400).json({
       message: "Invalid image ID",
       success: false,
@@ -717,7 +721,7 @@ exports.deleteImage = async (req, res, next) => {
 
   try {
     // Find the image record
-    imageRecord = await HelperImage.findByPk(imageId);
+    imageRecord = await HelperImage.findByPk(hOpId);
 
     if (!imageRecord) {
       console.log("❌ Image not found in database");

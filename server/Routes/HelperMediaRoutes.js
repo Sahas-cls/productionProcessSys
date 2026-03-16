@@ -234,6 +234,7 @@ routes.delete("/deleteVideo/:ho_media_id/:deleteVideo", controller.deleteVideo);
 
 // NOTE to handle helper images
 routes.get("/getImages/:hOpId", controller.getImages);
+routes.delete("/deleteImage/:hOpId", controller.deleteImage);
 routes.post(
   "/uploadImages",
   imageUpload.single("image"),
