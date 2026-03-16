@@ -231,7 +231,7 @@ routes.post(
   generateFilenames, // Add filename generation
   controller.uploadVideo,
 );
-routes.delete("/deleteVideo/:so_media_id", controller.deleteVideo);
+routes.delete("/deleteVideo/:so_media_id", controller.deleteSubOperationVideo);
 
 // !=============================== IMAGE ROUTES ===============================
 routes.get("/getImages/:subOpId", controller.getImages);
@@ -239,7 +239,7 @@ routes.post(
   "/uploadImages",
   imageUpload.single("image"),
   handleMulterError,
-  generateFilenames, // Add filename generation - 
+  generateFilenames, // Add filename generation -
   controller.uploadImage,
 );
 routes.delete("/deleteImage/:so_img_id", controller.deleteImage);

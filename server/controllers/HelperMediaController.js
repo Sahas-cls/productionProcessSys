@@ -97,8 +97,6 @@ exports.uploadVideos = async (req, res, next) => {
   let dbRecord = null;
   let tempInputPath = null;
   let tempOutputPath = null;
-  let sizeControlledPath = null;
-  let secondPassPath = null;
 
   try {
     if (!req.file) {
@@ -108,45 +106,26 @@ exports.uploadVideos = async (req, res, next) => {
       });
     }
 
-    const {
-      hOpName,
-      hoId,
-      styleNo,
-      recordingDuration,
-      videoQuality,
-      originalSize,
-      compressedSize,
-    } = req.body;
+    const { hOpName, hoId, styleNo } = req.body;
 
-    if (!hoId) {
+    if (!hoId || !styleNo) {
       return res.status(400).json({
-        message: "Missing required field: hoId",
+        message: "Missing required field(s): hoId or styleNo",
         success: false,
       });
     }
 
-    if (!styleNo) {
-      return res.status(400).json({
-        message: "Missing required field: styleNo",
-        success: false,
-      });
-    }
-
-    // Validate style exists
-    const styleRecord = await Style.findOne({
-      where: { style_no: styleNo },
-    });
-
+    // ================= VALIDATE STYLE =================
+    const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
     if (!styleRecord) {
       return res.status(400).json({
         message: `Style with styleNo "${styleNo}" not found`,
         success: false,
       });
     }
-
     const styleIdDb = styleRecord.style_id;
 
-    // Validate helper operation exists
+    // ================= VALIDATE HELPER OPERATION =================
     const helperOperationExists = await Helper.findByPk(hoId);
     if (!helperOperationExists) {
       return res.status(400).json({
@@ -155,19 +134,17 @@ exports.uploadVideos = async (req, res, next) => {
       });
     }
 
-    const isVideo = req.file.mimetype.startsWith("video/");
-    const ext = path.extname(req.file.originalname).toLowerCase();
+    // ================= VIDEO PROCESSING =================
     let processedBuffer = req.file.buffer;
-    let finalFilename = "";
     let wasNormalized = false;
+    let rotationApplied = null;
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const isVideo = req.file.mimetype.startsWith("video/");
 
-    // ==================== VIDEO PROCESSING ====================
     if (isVideo) {
       try {
         const tempDir = path.join(__dirname, "../temp");
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
+        if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
         tempInputPath = path.join(tempDir, `helper_input_${Date.now()}${ext}`);
         tempOutputPath = path.join(
@@ -177,223 +154,135 @@ exports.uploadVideos = async (req, res, next) => {
 
         await fs.promises.writeFile(tempInputPath, req.file.buffer);
 
-        // Check for rotation metadata
-        const hasRotation = await new Promise((resolve) => {
+        // Detect rotation metadata
+        const rotationInfo = await new Promise((resolve) => {
           ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-            if (err) return resolve(false);
+            if (err) return resolve({ hasRotation: false, rotation: 0 });
             const videoStream = metadata.streams?.find(
               (s) => s.codec_type === "video",
             );
-            const rotate =
-              videoStream?.tags?.rotate ??
-              videoStream?.side_data_list?.[0]?.rotation;
-            resolve(Boolean(rotate));
+            let rotation = 0;
+            if (videoStream?.tags?.rotate)
+              rotation = parseInt(videoStream.tags.rotate);
+            else if (videoStream?.side_data_list) {
+              const rotateData = videoStream.side_data_list.find(
+                (sd) => sd.rotation !== undefined,
+              );
+              if (rotateData) rotation = rotateData.rotation;
+            }
+            resolve({ hasRotation: rotation !== 0, rotation });
           });
         });
 
-        // Fix rotation if needed
-        if (hasRotation) {
-          try {
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .outputOptions(["-map_metadata 0", "-c copy"])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(tempOutputPath);
-            });
-          } catch {
-            // If metadata removal fails, physically rotate
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .videoFilters("transpose=1")
-                .outputOptions(["-map_metadata 0"])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(tempOutputPath);
-            });
-          }
+        if (rotationInfo.hasRotation) {
+          console.log(`🔄 Fixing rotation: ${rotationInfo.rotation}`);
+          let transposeFilter = "transpose=1";
+          if (rotationInfo.rotation === 90) transposeFilter = "transpose=1";
+          else if (
+            rotationInfo.rotation === 270 ||
+            rotationInfo.rotation === -90
+          )
+            transposeFilter = "transpose=2";
+          else if (rotationInfo.rotation === 180)
+            transposeFilter = "transpose=1,transpose=1";
+
+          await new Promise((resolve, reject) => {
+            ffmpeg(tempInputPath)
+              .videoFilters(transposeFilter)
+              .videoCodec("libx264")
+              .audioCodec("aac")
+              .outputOptions([
+                "-movflags +faststart",
+                "-map_metadata 0",
+                "-metadata:s:v:0 rotate=0",
+              ])
+              .on("end", resolve)
+              .on("error", reject)
+              .save(tempOutputPath);
+          });
 
           processedBuffer = await fs.promises.readFile(tempOutputPath);
           req.file.size = processedBuffer.length;
           wasNormalized = true;
-          console.log("✅ Video orientation normalized");
-        }
-
-        // ==================== SIZE CONTROL COMPRESSION ====================
-        const MAX_SIZE_MB = 95;
-        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-
-        const compressionSourcePath = wasNormalized
-          ? tempOutputPath
-          : tempInputPath;
-
-        if (processedBuffer.length > MAX_SIZE_BYTES) {
-          console.log("🎯 Applying size control compression...");
-
-          const duration = await new Promise((resolve) => {
-            ffmpeg.ffprobe(compressionSourcePath, (err, metadata) => {
-              if (err) return resolve(60);
-              resolve(metadata.format?.duration || 60);
-            });
-          });
-
-          const audioBitrate = 128000;
-          const targetSizeBits = MAX_SIZE_BYTES * 8;
-
-          let videoBitrate =
-            Math.floor(targetSizeBits / duration) - audioBitrate;
-
-          videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000));
-          const bitrateK = Math.floor(videoBitrate / 1000) + "k";
-
-          sizeControlledPath = path.join(
-            path.dirname(tempInputPath),
-            `helper_size_${Date.now()}.mp4`,
-          );
-
+          rotationApplied = rotationInfo.rotation;
+        } else {
+          // Even if no rotation, re-encode to ensure standard container
           await new Promise((resolve, reject) => {
-            ffmpeg(compressionSourcePath)
+            ffmpeg(tempInputPath)
               .videoCodec("libx264")
               .audioCodec("aac")
-              .outputOptions([
-                "-preset veryfast",
-                "-movflags +faststart",
-                "-vf scale='min(1280,iw)':-2",
-                "-b:v " + bitrateK,
-                "-maxrate " + bitrateK,
-                "-bufsize 2M",
-                "-b:a 128k",
-              ])
+              .outputOptions(["-movflags +faststart"])
               .on("end", resolve)
               .on("error", reject)
-              .save(sizeControlledPath);
+              .save(tempOutputPath);
           });
-
-          let finalBuffer = await fs.promises.readFile(sizeControlledPath);
-
-          // Second pass if still too big
-          if (finalBuffer.length > MAX_SIZE_BYTES) {
-            console.log("🔁 Second compression pass...");
-
-            const reducedBitrate = Math.floor(videoBitrate * 0.8);
-            const reducedBitrateK = Math.floor(reducedBitrate / 1000) + "k";
-
-            secondPassPath = path.join(
-              path.dirname(tempInputPath),
-              `helper_second_${Date.now()}.mp4`,
-            );
-
-            await new Promise((resolve, reject) => {
-              ffmpeg(sizeControlledPath)
-                .videoCodec("libx264")
-                .audioCodec("aac")
-                .outputOptions([
-                  "-preset veryfast",
-                  "-movflags +faststart",
-                  "-vf scale='min(1280,iw)':-2",
-                  "-b:v " + reducedBitrateK,
-                  "-maxrate " + reducedBitrateK,
-                  "-bufsize 2M",
-                  "-b:a 128k",
-                ])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(secondPassPath);
-            });
-
-            finalBuffer = await fs.promises.readFile(secondPassPath);
-          }
-
-          processedBuffer = finalBuffer;
-          req.file.size = finalBuffer.length;
-
-          console.log(
-            `✅ Final compressed size: ${(processedBuffer.length / 1024 / 1024).toFixed(2)} MB`,
-          );
+          processedBuffer = await fs.promises.readFile(tempOutputPath);
+          req.file.size = processedBuffer.length;
+          wasNormalized = true;
+          console.log("✅ No rotation detected, video re-encoded");
         }
       } catch (err) {
-        console.warn("⚠️ Video processing failed:", err.message);
-        // Continue with original buffer if processing fails
+        console.warn(
+          "⚠️ Video processing failed, using original buffer:",
+          err.message,
+        );
       }
     }
 
-    // ==================== GENERATE FILENAME ====================
-    const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(
-      2,
-      "0",
-    )}${String(now.getSeconds()).padStart(2, "0")}`;
-
-    const sanitizedHOpName = (hOpName || "helper_op")
-      .replace(/[/\\?%*:|"<>]/g, "_")
-      .replace(/\s+/g, "_")
-      .substring(0, 50);
-
-    finalFilename =
-      req.file.generatedName ||
-      `helper_${hoId}_${styleNo}_${sanitizedHOpName}_${dateTime}.mp4`;
-
     if (!processedBuffer || processedBuffer.length === 0) {
       return res.status(400).json({
-        message: "Processed video file is empty",
+        message: "Uploaded video is empty",
         success: false,
       });
     }
 
+    // ================= GENERATE FILENAME =================
+    const now = new Date();
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+    const sanitizedHOpName = (hOpName || "helper_operation")
+      .replace(/[/\\?%*:|"<>]/g, "_")
+      .replace(/\s+/g, "_")
+      .substring(0, 40);
+
+    const finalFilename =
+      req.file.generatedName ||
+      `${styleNo}_${hoId}_${sanitizedHOpName}_${dateTime}${ext}`;
+
     console.log(
-      `⬆️ Saving to local storage: ${finalFilename} (${(
-        processedBuffer.length /
-        1024 /
-        1024
-      ).toFixed(2)}MB)`,
+      `⬆️ Saving to local storage: ${finalFilename} (${(processedBuffer.length / 1024 / 1024).toFixed(2)} MB)`,
     );
 
-    // ==================== UPLOAD TO LOCAL STORAGE ====================
-    // CHANGED: Using localStorage instead of b2HelperStorage
+    // ================= UPLOAD TO LOCAL STORAGE =================
     uploadResult = await localStorage.uploadSubOpFile(
       processedBuffer,
       finalFilename,
-      "video", // This will put it in HelperOpVideos folder
-      hoId, // Helper operation ID (not used for subfolder creation)
+      "video",
+      hoId,
     );
 
-    // ==================== SAVE TO DATABASE ====================
-    // CHANGED: Removed b2_file_id from database creation
+    // ================= SAVE TO DATABASE =================
     dbRecord = await HelperVideo.create({
       helper_id: hoId,
       style_id: styleIdDb,
       original_file_name: req.file.originalname,
-      video_url: uploadResult.filePath, // Stores relative path like "HelperOpVideos/filename.mp4"
-      // b2_file_id removed
+      video_url: uploadResult.filePath,
       file_size: req.file.size,
       file_type: req.file.mimetype,
+      processed_with_ffmpeg: wasNormalized,
+      rotation_fixed: rotationApplied !== null,
+      original_rotation: rotationApplied,
       user_id: req.user?.userId || null,
     });
 
-    // ==================== CLEANUP TEMP FILES ====================
-    const filesToDelete = [
-      tempInputPath,
-      tempOutputPath,
-      sizeControlledPath,
-      secondPassPath,
-    ];
-
-    for (const file of filesToDelete) {
-      if (file && fs.existsSync(file)) {
-        await fs.promises
-          .unlink(file)
-          .catch((err) =>
-            console.log(`⚠️ Could not delete temp file ${file}:`, err.message),
-          );
+    // ================= CLEANUP TEMP FILES =================
+    const tempFiles = [tempInputPath, tempOutputPath];
+    for (const f of tempFiles) {
+      if (f && fs.existsSync(f)) {
+        await fs.promises.unlink(f).catch(() => {});
       }
     }
 
-    // ==================== SUCCESS RESPONSE ====================
+    // ================= SUCCESS RESPONSE =================
     res.status(201).json({
       message: "Helper operation video uploaded successfully",
       success: true,
@@ -403,9 +292,11 @@ exports.uploadVideos = async (req, res, next) => {
         video_url: uploadResult.filePath,
         video_url_proxy: `/api/local-files/${uploadResult.filePath}`,
         original_file_name: req.file.originalname,
+        file_name: uploadResult.fileName,
         file_size: req.file.size,
         file_type: req.file.mimetype,
         uploaded_at: dbRecord.createdAt,
+        orientation_normalized: wasNormalized,
       },
       storage: {
         type: "local",
@@ -413,44 +304,17 @@ exports.uploadVideos = async (req, res, next) => {
       },
     });
   } catch (error) {
-    console.error("❌ Unhandled error:", error);
+    console.error("❌ Upload error:", error);
 
-    // ==================== CLEANUP ON ERROR ====================
-    // Cleanup local file if uploaded
     if (uploadResult?.filePath) {
       try {
         await localStorage.deleteFile(null, uploadResult.filePath);
-        console.log("🧹 Cleaned up local file after error");
-      } catch (localError) {
-        console.error("❌ Failed to cleanup local file:", localError.message);
-      }
+      } catch {}
     }
-
-    // Cleanup database record if created
     if (dbRecord?.helper_video_id) {
       await HelperVideo.destroy({
         where: { helper_video_id: dbRecord.helper_video_id },
-      }).catch((err) =>
-        console.log("⚠️ Could not delete DB record:", err.message),
-      );
-    }
-
-    // Cleanup temp files
-    const filesToDelete = [
-      tempInputPath,
-      tempOutputPath,
-      sizeControlledPath,
-      secondPassPath,
-    ];
-
-    for (const file of filesToDelete) {
-      if (file && fs.existsSync(file)) {
-        await fs.promises
-          .unlink(file)
-          .catch((err) =>
-            console.log(`⚠️ Could not delete temp file ${file}:`, err.message),
-          );
-      }
+      }).catch(() => {});
     }
 
     res.status(500).json({
@@ -465,43 +329,58 @@ exports.uploadVideos = async (req, res, next) => {
  * Delete helper video
  */
 exports.deleteVideo = async (req, res, next) => {
-  const { videoId } = req.params;
+  const { videoId, ho_media_id } = req.params;
+  console.log("video delete request: ", req.params);
+  let videoRecord = null;
 
   try {
-    const video = await HelperVideo.findByPk(videoId);
+    // Fetch the video record
+    videoRecord = await HelperVideo.findByPk(ho_media_id);
 
-    if (!video) {
+    if (!videoRecord) {
       return res.status(404).json({
         success: false,
         message: "Video not found",
       });
     }
 
-    // Delete the file from local storage
-    if (video.video_url) {
-      let filename = video.video_url;
-      if (filename.includes("/") || filename.includes("\\")) {
-        filename = filename.split(/[\/\\]/).pop();
-      }
-
-      const videoPath = path.join(STORAGE_UNC_PATH, "HelperOpVideos", filename);
-
-      if (fs.existsSync(videoPath)) {
-        fs.unlinkSync(videoPath);
-        console.log(`✅ Deleted video file: ${videoPath}`);
+    // Delete the file from local storage using helper function
+    if (videoRecord.video_url) {
+      try {
+        await localStorage.deleteFile(videoRecord.video_url);
+        console.log(
+          `✅ Deleted video file from local storage: ${videoRecord.video_url}`,
+        );
+      } catch (err) {
+        console.warn(
+          `⚠️ Failed to delete video file: ${videoRecord.video_url}`,
+          err.message,
+        );
       }
     }
 
-    // Delete database record
-    await video.destroy();
+    // Delete the database record
+    await videoRecord.destroy();
 
     res.status(200).json({
       success: true,
       message: "Video deleted successfully",
     });
   } catch (error) {
-    console.error("Error deleting video:", error);
-    return next(error);
+    console.error("❌ Error deleting video:", error);
+
+    // Optional: attempt cleanup if database deletion partially failed
+    if (videoRecord?.video_url) {
+      try {
+        await localStorage.deleteFile(videoRecord.video_url);
+      } catch {}
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete video",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
 

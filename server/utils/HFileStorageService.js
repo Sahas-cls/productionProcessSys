@@ -89,7 +89,7 @@ class LocalSubOpStorage {
   /**
    * Delete file from local storage
    */
-  async deleteFile(fileId, filePath) {
+  async deleteFile(filePath) {
     try {
       if (!filePath) {
         console.log("⚠️ No file path provided for deletion");

@@ -203,8 +203,8 @@ exports.uploadVideo = async (req, res, next) => {
       .replace(/\s+/g, "_");
 
     finalFilename =
-      req.file.generatedName ||
-      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+      `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}` ||
+      req.file.generatedName;
 
     if (!processedBuffer || processedBuffer.length === 0) {
       return res.status(400).json({
@@ -347,61 +347,78 @@ exports.getVideos = async (req, res, next) => {
   }
 };
 
-exports.deleteVideo = async (req, res, next) => {
-  try {
-    const { so_media_id } = req.params;
+exports.deleteSubOperationVideo = async (req, res, next) => {
+  const { so_media_id } = req.params;
+  console.log(req.params);
+  // return;
+  let videoRecord = null;
+  let fileDeleted = false;
 
+  try {
     if (!so_media_id) {
       return res.status(400).json({
-        message: "Missing required parameter: so_media_id is required",
+        success: false,
+        message: "Missing required parameter: so_media_id",
       });
     }
 
-    const videoRecord = await SubOperationMedia.findByPk(so_media_id);
+    // Fetch the sub-operation video record
+    videoRecord = await SubOperationMedia.findByPk(so_media_id);
 
     if (!videoRecord) {
       return res.status(404).json({
+        success: false,
         message: "Video record not found",
       });
     }
 
-    const filename = videoRecord.media_url || videoRecord.video_url;
-
-    // Delete from local storage
-    let fileDeleted = false;
-    if (filename) {
+    // Determine the file path
+    const filePath = videoRecord.media_url;
+    console.log("file path: ", filePath);
+    // return;
+    // Delete the file from local storage
+    if (filePath) {
       try {
-        await localStorage.deleteFile(null, filename);
+        await localStorage.deleteFile(filePath);
         fileDeleted = true;
-        console.log("✅ File deleted from local storage");
-      } catch (localError) {
-        console.error("❌ Local storage deletion error:", localError);
+        console.log(`✅ Sub-operation video file deleted: ${filePath}`);
+      } catch (err) {
+        console.warn(
+          `⚠️ Failed to delete file from local storage: ${filePath}`,
+          err.message,
+        );
       }
     }
 
     // Delete the database record
-    await SubOperationMedia.destroy({
-      where: { so_media_id: so_media_id },
-    });
+    await videoRecord.destroy();
 
     res.status(200).json({
-      message: "Video deleted successfully",
+      success: true,
+      message: "Sub-operation video deleted successfully",
       details: {
         recordDeleted: true,
-        fileDeleted: fileDeleted,
-        filename: filename,
+        fileDeleted,
+        filePath,
         storageProvider: "Local Storage",
       },
     });
   } catch (error) {
-    console.error("Delete error:", error);
+    console.error("❌ Sub-operation video delete error:", error);
+
+    // Optional: attempt cleanup if deletion partially failed
+    if (videoRecord?.media_url || videoRecord?.video_url) {
+      try {
+        await localStorage.deleteFile(
+          videoRecord.media_url || videoRecord.video_url,
+        );
+      } catch {}
+    }
 
     res.status(500).json({
-      message: "Server error during deletion",
-      error:
-        process.env.NODE_ENV === "development"
-          ? error.message
-          : "Internal server error",
+      success: false,
+      message: "Failed to delete sub-operation video",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 };
