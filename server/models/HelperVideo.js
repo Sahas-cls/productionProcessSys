@@ -57,6 +57,11 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "SET NULL",
         onUpdate: "CASCADE",
       },
+      status: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        defaultValue: "Pending",
+      },
     },
     { tableName: "helper_videos", timestamps: true },
   );

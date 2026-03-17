@@ -21,6 +21,8 @@ const storage = multer.diskStorage({
   },
 });
 
+const MStorage = multer.memoryStorage(); // use to upload images & folder documents
+
 // ==================== FILE FILTERS ====================
 
 const videoFilterFunction = (req, file, cb) => {
@@ -81,49 +83,9 @@ const generateFilenames = (req, res, next) => {
   next();
 };
 
-// ==================== VIDEO UPLOAD CONFIG ====================
-// const videoUpload = multer({
-//   storage: storage,
-//   limits: {
-//     fileSize: 500 * 1024 * 1024, // 100MB
-//     files: 1,
-//   },
-//   fileFilter: (req, file, cb) => {
-//     // Check if it's a video file - handle MIME types with codec parameters
-//     const cleanMimeType = file.mimetype.split(";")[0]; // Remove codec part
-//     if (!cleanMimeType.startsWith("video/")) {
-//       return cb(new Error("Only video files are allowed"), false);
-//     }
-
-//     // Check file extension
-//     const allowedExtensions = [
-//       ".mp4",
-//       ".avi",
-//       ".mov",
-//       ".mkv",
-//       ".webm",
-//       ".wmv",
-//       ".flv",
-//       ".m4v",
-//     ];
-//     const fileExtension = path.extname(file.originalname).toLowerCase();
-
-//     if (!allowedExtensions.includes(fileExtension)) {
-//       return cb(
-//         new Error(
-//           `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`,
-//         ),
-//         false,
-//       );
-//     }
-
-//     cb(null, true);
-//   },
-// });
-
 // ==================== IMAGE UPLOAD CONFIG ====================
 const imageUpload = multer({
-  storage: storage,
+  storage: MStorage,
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB limit for images
     files: 1, // Limit to 1 file
@@ -161,7 +123,7 @@ const imageUpload = multer({
 
 // ==================== FOLDER/DOCUMENTS UPLOAD CONFIG ====================
 const folderUpload = multer({
-  storage: storage,
+  storage: MStorage,
   limits: {
     fileSize: 20 * 1024 * 1024, // 20MB limit per file
     files: 10, // Maximum 10 files per upload

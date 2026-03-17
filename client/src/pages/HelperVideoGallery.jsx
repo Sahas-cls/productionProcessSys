@@ -13,6 +13,7 @@ import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
+import { FaClockRotateLeft } from "react-icons/fa6";
 
 const HelperVideoGallery = () => {
   const { hOpId } = useParams();
@@ -360,7 +361,7 @@ const HelperVideoGallery = () => {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-fr">
           {videos.map((item) => {
             // Use helper_video_id as the unique identifier
             const mediaId = item?.helper_video_id;
@@ -380,193 +381,242 @@ const HelperVideoGallery = () => {
               item.helper_operation?.operation_name || "N/A";
             const styleName = item.style?.style_name || "N/A";
 
+            // Check if status is not "Success" (show pending card)
+            const isPending = item.status !== "Success";
+
             return (
               <motion.div
                 key={mediaId}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-green-100"
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border-2 border-green-100 h-full flex flex-col"
               >
-                {/* Video Container */}
-                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
-                  {/* Render video only when active */}
-                  {renderVideoElement(item, isActive, videoUrl)}
-
-                  {/* Loading Indicator */}
-                  {isActive && isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
-                    </div>
-                  )}
-
-                  {/* Overlay UI for inactive state */}
-                  {!isActive && !error && (
-                    <div
-                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-green-50/50 to-gray-100/50 hover:from-green-100/50 hover:to-gray-200/50"
-                      onClick={() => handlePlayVideo(mediaId)}
-                    >
-                      <div className="bg-green-600/20 hover:bg-green-600/30 rounded-full p-4 transition-colors">
-                        <FaPlay className="text-green-600 text-3xl" />
+                {isPending ? (
+                  // Pending State - Clock Icon Card
+                  <div className="flex-1 flex flex-col">
+                    <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 h-40 sm:h-44 md:h-48 lg:h-52 group flex flex-col">
+                      {/* Top div - 3/4 */}
+                      <div className="flex-[3] flex items-center justify-center relative">
+                        <div className="absolute flex justify-center items-center animate-pulse [animation-duration:4s]">
+                          <FaClockRotateLeft className="text-3xl sm:text-4xl md:text-5xl text-yellow-700/30" />
+                        </div>
                       </div>
-                      <p className="text-green-700 text-sm mt-3 font-medium">
-                        Click to play video
-                      </p>
-                      <p className="text-gray-600 text-xs mt-1">
-                        {formatFileSize(item.file_size)}
-                      </p>
-                    </div>
-                  )}
 
-                  {/* Error State */}
-                  {error && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
-                      <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
-                      <p className="text-red-700 text-sm font-medium text-center">
-                        {error}
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={() => handlePlayVideo(mediaId)}
-                          className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
-                        >
-                          <FaPlay size={12} />
-                          Retry
-                        </button>
-                        <button
-                          onClick={() => handleDownloadVideo(item)}
-                          className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 flex items-center gap-2"
-                        >
-                          <FaDownload size={12} />
-                          Download
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                      {/* Bottom div - 1/4 */}
+                      <div className="flex-[0] p-1 sm:p-2 bg-white border-t-2 border-black/10 flex items-start justify-between">
+                        <h3 className="text-[10px] text-xs text-left font-semibold line-clamp-2 text-black/60 max-w-[70%] sm:max-w-[80%]">
+                          Video being processed as a background job, please
+                          check in a while
+                        </h3>
 
-                  {/* Controls for active video */}
-                  {isActive && !error && !isLoading && (
-                    <div className="absolute inset-0 bg-transparent pointer-events-none">
-                      <div className="absolute top-2 right-2 pointer-events-auto flex gap-2">
-                        <button
-                          onClick={() => toggleFullscreen(mediaId)}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                          title="Fullscreen"
-                        >
-                          <FaExpand size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleStopVideo(mediaId)}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
-                          title="Stop"
-                        >
-                          <FaPause size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Video Info */}
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-800 truncate mb-2">
-                    {item.helper_operation?.operation_name || fileName}
-                  </h3>
-
-                  <div className="text-sm text-gray-600 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Operation:</span>
-                      <span className="font-medium text-gray-800">
-                        {operationName}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span>Helper:</span>
-                      <span className="font-medium text-gray-800">
-                        {helperName}
-                      </span>
-                    </div>
-
-                    {styleName !== "N/A" && (
-                      <div className="flex justify-between">
-                        <span>Style:</span>
-                        <span className="font-medium text-gray-800">
-                          {styleName}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between">
-                      <span>File:</span>
-                      <span
-                        className="font-mono text-xs truncate max-w-[120px]"
-                        title={fileName}
-                      >
-                        {fileName}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span>Size:</span>
-                      <span>{formatFileSize(item.file_size)}</span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span>Uploaded:</span>
-                      <span>{formatDate(item.createdAt)}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="mt-4 flex justify-between items-center">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
-                          if (isActive) {
-                            handleStopVideo(mediaId);
-                          } else {
-                            handlePlayVideo(mediaId);
-                          }
-                        }}
-                        className={`px-3 py-1 rounded text-sm font-medium flex items-center gap-2 ${
-                          isActive
-                            ? "bg-red-100 text-red-700 hover:bg-red-200"
-                            : "bg-green-100 text-green-700 hover:bg-green-200"
-                        }`}
-                      >
-                        {isActive ? (
-                          <>
-                            <FaPause size={12} />
-                            Stop
-                          </>
-                        ) : (
-                          <>
-                            <FaPlay size={12} />
-                            Play
-                          </>
+                        {(userRole === "Admin" ||
+                          userRole === "SuperAdmin") && (
+                          <button
+                            onClick={() => handleDeleteVideo(item)}
+                            className="p-1 sm:p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                            title="Delete video"
+                          >
+                            <FaTrash size={14} className="sm:w-4 sm:h-4" />
+                          </button>
                         )}
-                      </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Success State - Actual Video Card
+                  <div className="flex-1 flex flex-col">
+                    {/* Video Container */}
+                    <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 h-40 sm:h-44 md:h-48 lg:h-52 group">
+                      {/* Render video element */}
+                      {renderVideoElement(item, isActive, videoUrl)}
 
-                      <button
-                        onClick={() => handleDownloadVideo(item)}
-                        className="px-3 py-1 rounded text-sm font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-2"
-                      >
-                        <FaDownload size={12} />
-                        Download
-                      </button>
+                      {/* Loading Indicator */}
+                      {isActive && isLoading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                          <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 border-4 border-white border-t-transparent"></div>
+                        </div>
+                      )}
+
+                      {/* Overlay UI for inactive state */}
+                      {!isActive && !error && (
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-green-50/50 to-gray-100/50 hover:from-green-100/50 hover:to-gray-200/50"
+                          onClick={() => handlePlayVideo(mediaId)}
+                        >
+                          <div className="bg-green-600/20 hover:bg-green-600/30 rounded-full p-2 sm:p-3 md:p-4 transition-colors">
+                            <FaPlay className="text-green-600 text-xl sm:text-2xl md:text-3xl" />
+                          </div>
+                          <p className="text-green-700 text-xs sm:text-sm mt-1 sm:mt-2 md:mt-3 font-medium">
+                            Click to play video
+                          </p>
+                          <p className="text-gray-600 text-[10px] sm:text-xs mt-0.5 sm:mt-1">
+                            {formatFileSize(item.file_size)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Error State */}
+                      {error && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-2 sm:p-4 bg-red-50">
+                          <FaExclamationTriangle className="text-red-500 text-2xl sm:text-3xl mb-1 sm:mb-2" />
+                          <p className="text-red-700 text-xs sm:text-sm font-medium text-center">
+                            {error}
+                          </p>
+                          <div className="flex gap-1 sm:gap-2 mt-2 sm:mt-3">
+                            <button
+                              onClick={() => handlePlayVideo(mediaId)}
+                              className="px-2 sm:px-3 py-0.5 sm:py-1 bg-red-100 text-red-700 rounded text-[10px] sm:text-sm hover:bg-red-200 flex items-center gap-1 sm:gap-2"
+                            >
+                              <FaPlay size={10} className="sm:w-3 sm:h-3" />
+                              Retry
+                            </button>
+                            <button
+                              onClick={() => handleDownloadVideo(item)}
+                              className="px-2 sm:px-3 py-0.5 sm:py-1 bg-blue-100 text-blue-700 rounded text-[10px] sm:text-sm hover:bg-blue-200 flex items-center gap-1 sm:gap-2"
+                            >
+                              <FaDownload size={10} className="sm:w-3 sm:h-3" />
+                              Download
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Controls for active video */}
+                      {isActive && !error && !isLoading && (
+                        <div className="absolute inset-0 bg-transparent pointer-events-none">
+                          <div className="absolute top-1 sm:top-2 right-1 sm:right-2 pointer-events-auto flex gap-1 sm:gap-2">
+                            <button
+                              onClick={() => toggleFullscreen(mediaId)}
+                              className="p-1 sm:p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                              title="Fullscreen"
+                            >
+                              <FaExpand size={12} className="sm:w-4 sm:h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleStopVideo(mediaId)}
+                              className="p-1 sm:p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors"
+                              title="Stop"
+                            >
+                              <FaPause size={12} className="sm:w-4 sm:h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {(userRole === "Admin" || userRole === "SuperAdmin") && (
-                      <button
-                        onClick={() => handleDeleteVideo(item)}
-                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                        title="Delete videodfs"
-                      >
-                        <FaTrash size={14} />
-                      </button>
-                    )}
+                    {/* Video Info */}
+                    <div className="p-2 sm:p-3 md:p-4 flex-1 flex flex-col">
+                      <h3 className="font-semibold text-gray-800 text-sm sm:text-base truncate mb-1 sm:mb-2">
+                        {item.helper_operation?.operation_name || fileName}
+                      </h3>
+
+                      <div className="text-[10px] sm:text-xs text-gray-600 space-y-1 sm:space-y-2 mb-2 sm:mb-4">
+                        <div className="flex justify-between">
+                          <span>Operation:</span>
+                          <span className="font-medium text-gray-800">
+                            {operationName}
+                          </span>
+                        </div>
+
+                        {/* <div className="flex justify-between">
+                          <span>Helper:</span>
+                          <span className="font-medium text-gray-800">
+                            {helperName}
+                          </span>
+                        </div> */}
+
+                        {/* {styleName !== "N/A" && (
+                          <div className="flex justify-between">
+                            <span>Style:</span>
+                            <span className="font-medium text-gray-800">
+                              {styleName}
+                            </span>
+                          </div>
+                        )} */}
+
+                        <div className="flex justify-between">
+                          <span>File:</span>
+                          <span
+                            className="font-mono text-[8px] sm:text-xs truncate max-w-[80px] sm:max-w-[120px]"
+                            title={fileName}
+                          >
+                            {fileName}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span>Size:</span>
+                          <span className="font-medium">
+                            {formatFileSize(item.file_size)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-between">
+                          <span>Uploaded:</span>
+                          <span className="font-medium">
+                            {formatDate(item.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Actions - pushed to bottom */}
+                      <div className="mt-auto">
+                        <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap gap-1 sm:gap-2">
+                            <button
+                              onClick={() => {
+                                if (isActive) {
+                                  handleStopVideo(mediaId);
+                                } else {
+                                  handlePlayVideo(mediaId);
+                                }
+                              }}
+                              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs font-medium flex items-center gap-1 sm:gap-2 ${
+                                isActive
+                                  ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                  : "bg-green-100 text-green-700 hover:bg-green-200"
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <FaPause
+                                    size={10}
+                                    className="sm:w-3 sm:h-3"
+                                  />
+                                  <span className="hidden xs:inline">Stop</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FaPlay size={10} className="sm:w-3 sm:h-3" />
+                                  <span className="hidden xs:inline">Play</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => handleDownloadVideo(item)}
+                              className="px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1 sm:gap-2"
+                            >
+                              <FaDownload size={10} className="sm:w-3 sm:h-3" />
+                              <span className="hidden xs:inline">Download</span>
+                            </button>
+                          </div>
+
+                          {(userRole === "Admin" ||
+                            userRole === "SuperAdmin") && (
+                            <button
+                              onClick={() => handleDeleteVideo(item)}
+                              className="p-1 sm:p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                              title="Delete video"
+                            >
+                              <FaTrash size={14} className="sm:w-4 sm:h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             );
           })}

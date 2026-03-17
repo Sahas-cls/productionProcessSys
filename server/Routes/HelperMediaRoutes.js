@@ -2,62 +2,36 @@ const express = require("express");
 const routes = express.Router();
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const controller = require("../controllers/HelperMediaController");
 const authMiddleware = require("../middlewares/AuthUser");
 
-// Use memory storage for all uploads (CORRECT for B2)
-const storage = multer.memoryStorage();
-
-// ==================== FILENAME GENERATION MIDDLEWARE ====================
-// This adds generated filenames to req.files for consistent naming
-const generateFilenames = (req, res, next) => {
-  if (req.files || req.file) {
-    const files = req.files || [req.file].filter(Boolean);
-    const subOpId = req.body.subOpId || "unknown";
-    const timestamp = Date.now();
-
-    files.forEach((file, index) => {
-      if (file) {
-        const originalName = file.originalname;
-        const ext = path.extname(originalName);
-        const baseName = path.basename(originalName, ext);
-
-        // Generate unique filename
-        const uniqueName = `${baseName}_${subOpId}_${timestamp}_${index}${ext}`;
-        file.generatedName = uniqueName;
-        file.originalName = originalName;
-
-        // Also store file type for B2 folder organization
-        if (file.mimetype.startsWith("video/")) {
-          file.mediaType = "video";
-        } else if (file.mimetype.startsWith("image/")) {
-          file.mediaType = "image";
-        } else if (file.fieldname === "techPack") {
-          file.mediaType = "techpack";
-        } else if (file.fieldname === "documents") {
-          file.mediaType = "document";
-        }
-      }
-    });
-  }
-  next();
-};
-
-// ==================== VIDEO UPLOAD CONFIG ====================
-const videoUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 100MB
-    files: 1,
+// ==================== VIDEO DISK STORAGE ====================
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, "../uploads/videos");
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+    cb(null, uploadDir);
   },
-  fileFilter: (req, file, cb) => {
-    // Check if it's a video file - handle MIME types with codec parameters
-    const cleanMimeType = file.mimetype.split(";")[0]; // Remove codec part
-    if (!cleanMimeType.startsWith("video/")) {
-      return cb(new Error("Only video files are allowed"), false);
-    }
+  filename: (req, file, cb) => {
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext);
+    const subOpId = req.body.subOpId || "unknown";
+    const uniqueName = `${baseName}_${subOpId}_${timestamp}${ext}`;
+    file.generatedName = uniqueName; // preserve for controller
+    cb(null, uniqueName);
+  },
+});
 
-    // Check file extension
+const videoUpload = multer({
+  storage: videoStorage,
+  limits: { fileSize: 500 * 1024 * 1024, files: 1 }, // 500MB
+  fileFilter: (req, file, cb) => {
+    const cleanMimeType = file.mimetype.split(";")[0];
+    if (!cleanMimeType.startsWith("video/"))
+      return cb(new Error("Only video files are allowed"), false);
+
     const allowedExtensions = [
       ".mp4",
       ".avi",
@@ -68,12 +42,12 @@ const videoUpload = multer({
       ".flv",
       ".m4v",
     ];
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-
-    if (!allowedExtensions.includes(fileExtension)) {
+    if (
+      !allowedExtensions.includes(path.extname(file.originalname).toLowerCase())
+    ) {
       return cb(
         new Error(
-          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`,
+          `Unsupported video type. Allowed: ${allowedExtensions.join(", ")}`,
         ),
         false,
       );
@@ -83,54 +57,29 @@ const videoUpload = multer({
   },
 });
 
-// ==================== IMAGE UPLOAD CONFIG ====================
+// ==================== MEMORY STORAGE FOR IMAGES/DOCUMENTS ====================
+const memoryStorage = multer.memoryStorage();
+
+// Images
 const imageUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit for images
-    files: 1, // Limit to 1 file
-  },
+  storage: memoryStorage,
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
-    // Check if it's an image file
-    if (!file.mimetype.startsWith("image/")) {
-      return cb(new Error("Only image files are allowed"), false);
-    }
-
-    // Check file extension
-    const allowedExtensions = [
-      ".jpg",
-      ".jpeg",
-      ".png",
-      ".webp",
-      ".gif",
-      ".bmp",
-      ".tiff",
-    ];
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-
-    if (!allowedExtensions.includes(fileExtension)) {
-      return cb(
-        new Error(
-          `Unsupported image type. Allowed: ${allowedExtensions.join(", ")}`,
-        ),
-        false,
-      );
-    }
-
+    if (!file.mimetype.startsWith("image/"))
+      return cb(new Error("Only image files allowed"), false);
+    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"];
+    if (!allowed.includes(path.extname(file.originalname).toLowerCase()))
+      return cb(new Error("Unsupported image type"), false);
     cb(null, true);
   },
 });
 
-// ==================== FOLDER/DOCUMENTS UPLOAD CONFIG ====================
+// Documents
 const folderUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 20 * 1024 * 1024, // 20MB limit per file
-    files: 10, // Maximum 10 files per upload
-  },
+  storage: memoryStorage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 10 },
   fileFilter: (req, file, cb) => {
-    // Check file extension for documents
-    const allowedExtensions = [
+    const allowedExt = [
       ".pdf",
       ".doc",
       ".docx",
@@ -146,8 +95,7 @@ const folderUpload = multer({
       ".rar",
       ".ods",
     ];
-
-    const allowedMimeTypes = [
+    const allowedMime = [
       "application/pdf",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -164,83 +112,82 @@ const folderUpload = multer({
       "application/vnd.oasis.opendocument.spreadsheet",
     ];
 
-    const fileExtension = path.extname(file.originalname).toLowerCase();
-    const isValidExtension = allowedExtensions.includes(fileExtension);
-    const isValidMimeType = allowedMimeTypes.includes(file.mimetype);
-
-    if (!isValidExtension && !isValidMimeType) {
-      return cb(
-        new Error(
-          `Unsupported file type: ${
-            file.originalname
-          }. Allowed: ${allowedExtensions.join(", ")}`,
-        ),
-        false,
-      );
+    if (
+      !allowedExt.includes(path.extname(file.originalname).toLowerCase()) &&
+      !allowedMime.includes(file.mimetype)
+    ) {
+      return cb(new Error("Unsupported file type"), false);
     }
-
     cb(null, true);
   },
 });
 
-// ==================== ERROR HANDLING MIDDLEWARE ====================
-const handleMulterError = (error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({
-        success: false,
-        message:
-          "File too large. Maximum size is: " +
-          (error.field === "video"
-            ? "500MB"
-            : error.field === "image"
-              ? "50MB"
-              : "20MB"),
-      });
-    }
-    if (error.code === "LIMIT_FILE_COUNT") {
-      return res.status(400).json({
-        success: false,
-        message: "Too many files. Maximum is 10 files per upload",
-      });
-    }
-    if (error.code === "LIMIT_UNEXPECTED_FILE") {
-      return res.status(400).json({
-        success: false,
-        message: "Unexpected file field. Check field name",
-      });
-    }
-  } else if (error) {
-    // This catches the fileFilter errors
-    return res.status(400).json({
-      success: false,
-      message: error.message,
+// ==================== FILENAME GENERATION MIDDLEWARE ====================
+const generateFilenames = (req, res, next) => {
+  if (req.file || req.files) {
+    const files = req.files || [req.file].filter(Boolean);
+    const subOpId = req.body.subOpId || "unknown";
+    const timestamp = Date.now();
+
+    files.forEach((file, index) => {
+      if (file) {
+        const ext = path.extname(file.originalname);
+        const base = path.basename(file.originalname, ext);
+        file.generatedName =
+          file.generatedName ||
+          `${base}_${subOpId}_${timestamp}_${index}${ext}`;
+        if (file.mimetype.startsWith("video/")) file.mediaType = "video";
+        else if (file.mimetype.startsWith("image/")) file.mediaType = "image";
+        else if (file.fieldname === "techPack") file.mediaType = "techpack";
+        else if (file.fieldname === "documents") file.mediaType = "document";
+      }
     });
   }
   next();
 };
 
-// NOTE to handle helper videos
+// ==================== ERROR HANDLER ====================
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE")
+      return res
+        .status(400)
+        .json({ success: false, message: "File too large" });
+    if (err.code === "LIMIT_FILE_COUNT")
+      return res
+        .status(400)
+        .json({ success: false, message: "Too many files" });
+    if (err.code === "LIMIT_UNEXPECTED_FILE")
+      return res
+        .status(400)
+        .json({ success: false, message: "Unexpected file field" });
+  } else if (err)
+    return res.status(400).json({ success: false, message: err.message });
+  next();
+};
+
+// ==================== ROUTES ====================
+// Videos
 routes.get("/getVideos/:hOpId", controller.getVideos);
 routes.post(
   "/uploadVideos",
   authMiddleware,
   videoUpload.single("video"),
   handleMulterError,
-  generateFilenames, // Add filename generation
+  generateFilenames,
   controller.uploadVideos,
 );
 routes.delete("/deleteVideo/:ho_media_id/:deleteVideo", controller.deleteVideo);
 
-// NOTE to handle helper images
+// Images
 routes.get("/getImages/:hOpId", controller.getImages);
-routes.delete("/deleteImage/:hOpId", controller.deleteImage);
 routes.post(
   "/uploadImages",
   imageUpload.single("image"),
   handleMulterError,
-  generateFilenames, // Add filename generation
+  generateFilenames,
   controller.uploadImage,
 );
+routes.delete("/deleteImage/:hOpId", controller.deleteImage);
 
 module.exports = routes;
