@@ -13,12 +13,13 @@ const fsPromises = require("fs").promises;
 const ffmpeg = require("fluent-ffmpeg");
 const localStorage = require("../utils/FileStorageService");
 
-// Set ffmpeg paths
+// Set ffmpeg & ffprobe paths explicitly
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 ffmpeg.setFfprobePath("/usr/bin/ffprobe");
 
-// ==================== HELPERS ====================
+// ==================== HELPER FUNCTIONS ====================
 
+// Check if file exists and >1KB
 function isValidFile(filePath) {
   try {
     const stats = fs.statSync(filePath);
@@ -28,53 +29,39 @@ function isValidFile(filePath) {
   }
 }
 
-// Remux MP4
-async function remuxMp4(inputPath) {
+// ==================== FFmpeg: PAD VIDEO FOR BROWSER ====================
+async function padVideoForBrowser(
+  inputPath,
+  targetWidth = 1920,
+  targetHeight = 1080,
+) {
   const ext = path.extname(inputPath);
-  const outputPath = inputPath.replace(ext, "_remuxed.mp4");
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .outputOptions(["-c copy", "-movflags +faststart"])
-      .on("error", reject)
-      .on("end", () => resolve(outputPath))
-      .save(outputPath);
-  });
-}
+  const outputPath = inputPath.replace(ext, "_padded.mp4");
 
-// Get video rotation
-async function getVideoRotation(filePath) {
-  return new Promise((resolve) => {
-    ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) return resolve(0);
-      const stream = metadata.streams.find((s) => s.codec_type === "video");
-      const rotation = stream?.tags?.rotate
-        ? parseInt(stream.tags.rotate, 10)
-        : 0;
-      resolve(rotation || 0);
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => {
+      if (err) return reject(err);
+
+      const videoStream = metadata.streams.find(
+        (s) => s.codec_type === "video",
+      );
+      if (!videoStream) return reject(new Error("No video stream found"));
+
+      const { width, height } = videoStream;
+
+      // Calculate scale and pad
+      const scaleFilter = `scale=w=${targetWidth}:h=${targetHeight}:force_original_aspect_ratio=decrease`;
+      const padFilter = `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:color=black`;
+
+      ffmpeg(inputPath)
+        .videoCodec("libx264")
+        .audioCodec("aac")
+        .outputOptions(["-preset veryfast", "-movflags +faststart"])
+        .videoFilters([scaleFilter, padFilter])
+        .on("error", reject)
+        .on("end", () => resolve(outputPath))
+        .save(outputPath);
     });
-  });
-}
-
-// ==================== FIX PORTRAIT/LETTERBOX ====================
-async function fixAspectRatio(inputPath) {
-  const ext = path.extname(inputPath);
-  const outputPath = inputPath.replace(ext, "_boxed.mp4");
-
-  return new Promise((resolve, reject) => {
-    ffmpeg(inputPath)
-      .videoCodec("libx264")
-      .audioCodec("aac")
-      .outputOptions([
-        "-preset veryfast",
-        "-movflags +faststart",
-        "-pix_fmt yuv420p",
-      ])
-      .videoFilter(
-        "scale='if(gt(iw/ih,16/9),1920,-2)':'if(gt(iw/ih,16/9),-2,1080)',pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black",
-      )
-      .on("error", reject)
-      .on("end", () => resolve(outputPath))
-      .save(outputPath);
   });
 }
 
@@ -83,18 +70,20 @@ exports.uploadVideo = async (req, res, next) => {
   console.log("📤 Video upload request received");
 
   try {
-    if (!req.file)
+    if (!req.file) {
       return res
         .status(400)
         .json({ success: false, message: "No file uploaded" });
+    }
 
     const { styleNo, moId, sopId, sopName, subOpId } = req.body;
-    if (!styleNo || !moId || !sopId || !subOpId)
+    if (!styleNo || !moId || !sopId || !subOpId) {
       return res
         .status(400)
         .json({ success: false, message: "Missing required fields" });
+    }
 
-    // ================= VALIDATE FK =================
+    // ================= VALIDATE FOREIGN KEYS =================
     const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
     if (!styleRecord)
       return res
@@ -130,7 +119,7 @@ exports.uploadVideo = async (req, res, next) => {
     // ================= READ FILE AS BUFFER =================
     const fileBuffer = await fsPromises.readFile(req.file.path);
 
-    // ================= UPLOAD LOCAL =================
+    // ================= UPLOAD TO LOCAL STORAGE =================
     const uploadResult = await localStorage.uploadSubOpFile(
       fileBuffer,
       finalFilename,
@@ -138,62 +127,59 @@ exports.uploadVideo = async (req, res, next) => {
       subOpId,
     );
 
-    // cleanup temp
+    // Cleanup temp uploaded file
     await fsPromises.unlink(req.file.path);
 
     if (
       !fs.existsSync(uploadResult.fullPath) ||
       !isValidFile(uploadResult.fullPath)
-    )
+    ) {
       return res
         .status(400)
         .json({
           success: false,
           message: "Uploaded file is too small or corrupted",
         });
+    }
 
-    // ================= FIX VIDEO =================
+    // ================= PAD VIDEO FOR BROWSER =================
     let finalPath = uploadResult.fullPath;
     try {
-      const remuxedPath = await remuxMp4(finalPath);
-      if (isValidFile(remuxedPath)) finalPath = remuxedPath;
-
-      finalPath = await fixAspectRatio(finalPath);
+      const paddedPath = await padVideoForBrowser(finalPath);
+      if (isValidFile(paddedPath)) finalPath = paddedPath;
     } catch (err) {
       console.warn(
-        "⚠️ Video processing failed, using original file",
+        "⚠️ Video padding failed, using original file:",
         err.message,
       );
     }
 
     const fileSize = fs.statSync(finalPath).size;
 
-    // ================= CREATE DB =================
+    // ================= CREATE DB RECORD =================
     const mediaRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
       sub_operation_id: subOpId,
       sub_operation_name: sopName || null,
-      media_url: uploadResult.filePath,
+      media_url: uploadResult.filePath, // original relative path
       video_url: uploadResult.filePath,
       file_size: fileSize,
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
       processed_with_ffmpeg: true,
-      rotation_fixed: true,
-      original_rotation: await getVideoRotation(uploadResult.fullPath),
+      rotation_fixed: false, // rotation is irrelevant now
+      original_rotation: 0,
       status: "success",
     });
 
     console.log(`✅ Video uploaded successfully: ${finalFilename}`);
-    return res
-      .status(201)
-      .json({
-        success: true,
-        message: "Video uploaded successfully",
-        data: mediaRecord,
-      });
+    return res.status(201).json({
+      success: true,
+      message: "Video uploaded successfully",
+      data: mediaRecord,
+    });
   } catch (error) {
     console.error("❌ Upload error:", error);
     return res
