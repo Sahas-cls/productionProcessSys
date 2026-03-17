@@ -8,15 +8,10 @@ const {
   MainOperation,
 } = require("../models");
 const path = require("path");
-const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
+const fsPromises = require("fs").promises;
+const ffmpeg = require("fluent-ffmpeg");
 const localStorage = require("../utils/FileStorageService");
-// const {
-//   SubOperationMedia,
-//   SubOperation,
-//   Style,
-//   MainOperation,
-// } = require("../models");
 
 // Set ffmpeg & ffprobe paths explicitly
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
@@ -24,24 +19,35 @@ ffmpeg.setFfprobePath("/usr/bin/ffprobe");
 
 // ==================== HELPER FUNCTIONS ====================
 
-// Check file size > 10KB (basic corruption check)
+// Check if file exists and is >1KB
 function isValidFile(filePath) {
   try {
     const stats = fs.statSync(filePath);
-    return stats.size > 10 * 1024;
+    return stats.size > 1024;
   } catch {
     return false;
   }
 }
 
-// Get video rotation (returns 0 if unknown)
+// Remux MP4 to fix moov atom for browser
+async function remuxMp4(inputPath) {
+  const ext = path.extname(inputPath);
+  const outputPath = inputPath.replace(ext, "_remuxed.mp4");
+
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions(["-c copy", "-movflags +faststart"])
+      .on("error", reject)
+      .on("end", () => resolve(outputPath))
+      .save(outputPath);
+  });
+}
+
+// Get rotation metadata
 async function getVideoRotation(filePath) {
   return new Promise((resolve) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) {
-        console.warn("⚠️ Failed to read rotation metadata:", err.message);
-        return resolve(0);
-      }
+      if (err) return resolve(0);
       const stream = metadata.streams.find((s) => s.codec_type === "video");
       const rotation = stream?.tags?.rotate
         ? parseInt(stream.tags.rotate, 10)
@@ -51,57 +57,43 @@ async function getVideoRotation(filePath) {
   });
 }
 
-// Remux MP4 to fix moov atom for browser streaming
-async function remuxMp4(inputPath) {
-  return new Promise((resolve, reject) => {
-    const ext = path.extname(inputPath);
-    const outputPath = inputPath.replace(ext, "_remux.mp4");
+// Fix video rotation
+async function fixVideoRotation(inputPath, rotation) {
+  const ext = path.extname(inputPath);
+  const outputPath = inputPath.replace(ext, "_fixed.mp4");
 
-    ffmpeg(inputPath)
-      .outputOptions(["-c copy", "-movflags +faststart"])
+  let command = ffmpeg(inputPath).outputOptions([
+    "-c:v libx264",
+    "-c:a aac",
+    "-movflags +faststart",
+    "-preset veryfast",
+  ]);
+
+  if (rotation && rotation !== 0) {
+    let filter = "";
+    switch (rotation) {
+      case 90:
+        filter = "transpose=1";
+        break;
+      case 180:
+        filter = "transpose=2,transpose=2";
+        break;
+      case 270:
+        filter = "transpose=2";
+        break;
+    }
+    if (filter) command = command.videoFilter(filter);
+  }
+
+  return new Promise((resolve, reject) => {
+    command
       .on("error", reject)
       .on("end", () => resolve(outputPath))
       .save(outputPath);
   });
 }
 
-// Fix rotation + re-encode for browser
-async function fixVideoRotation(inputPath, rotation = 0) {
-  return new Promise((resolve, reject) => {
-    const ext = path.extname(inputPath);
-    const outputPath = inputPath.replace(ext, "_fixed.mp4");
-
-    let command = ffmpeg(inputPath)
-      .outputOptions([
-        "-c:v libx264",
-        "-c:a aac",
-        "-movflags +faststart",
-        "-preset veryfast",
-      ])
-      .on("error", reject)
-      .on("end", () => resolve(outputPath));
-
-    if (rotation && rotation !== 0) {
-      let filter = "";
-      switch (rotation) {
-        case 90:
-          filter = "transpose=1";
-          break;
-        case 180:
-          filter = "transpose=2,transpose=2";
-          break;
-        case 270:
-          filter = "transpose=2";
-          break;
-      }
-      if (filter) command = command.videoFilter(filter);
-    }
-
-    command.save(outputPath);
-  });
-}
-
-// ==================== VIDEO UPLOAD CONTROLLER ====================
+// ==================== CONTROLLER ====================
 exports.uploadVideo = async (req, res, next) => {
   console.log("📤 Video upload request received");
 
@@ -134,12 +126,10 @@ exports.uploadVideo = async (req, res, next) => {
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Sub-operation ${subOpId} not found`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Sub-operation ${subOpId} not found`,
+      });
 
     const styleIdDb = styleRecord.style_id;
 
@@ -152,35 +142,36 @@ exports.uploadVideo = async (req, res, next) => {
       .replace(/\s+/g, "_");
     const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
+    // ================= READ FILE AS BUFFER =================
+    const fileBuffer = await fsPromises.readFile(req.file.path);
+
     // ================= UPLOAD TO LOCAL STORAGE =================
     const uploadResult = await localStorage.uploadSubOpFile(
-      req.file.path,
+      fileBuffer,
       finalFilename,
       "video",
       subOpId,
     );
 
+    // Cleanup temp uploaded file
+    await fsPromises.unlink(req.file.path);
+
     if (
       !fs.existsSync(uploadResult.fullPath) ||
       !isValidFile(uploadResult.fullPath)
     ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Uploaded file is too small or corrupted",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded file is too small or corrupted",
+      });
     }
 
     // ================= FIX MP4 FOR BROWSER =================
     let finalPath = uploadResult.fullPath;
-
     try {
-      // First, remux to fix moov atom
       const remuxedPath = await remuxMp4(finalPath);
       if (isValidFile(remuxedPath)) finalPath = remuxedPath;
 
-      // Then, fix rotation if needed
       const rotation = await getVideoRotation(finalPath);
       if (rotation && rotation !== 0) {
         const fixedPath = await fixVideoRotation(finalPath, rotation);
@@ -214,13 +205,11 @@ exports.uploadVideo = async (req, res, next) => {
     });
 
     console.log(`✅ Video uploaded successfully: ${finalFilename}`);
-    return res
-      .status(201)
-      .json({
-        success: true,
-        message: "Video uploaded successfully",
-        data: mediaRecord,
-      });
+    return res.status(201).json({
+      success: true,
+      message: "Video uploaded successfully",
+      data: mediaRecord,
+    });
   } catch (error) {
     console.error("❌ Upload error:", error);
     return res
