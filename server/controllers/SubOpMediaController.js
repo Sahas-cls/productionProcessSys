@@ -20,6 +20,8 @@ const execPromise = util.promisify(exec);
 
 // Set the ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
+ffmpeg.setFfprobePath("/usr/bin/ffprobe");
 
 // ==================== VIDEO CONTROLLERS ====================
 let processingQueue = [];
