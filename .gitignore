@@ -1,0 +1,24 @@
+# Node modules
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary folders
+temp/
+tempUploads/
+
+# Videos, large binaries
+*.mp4
+*.mov
+*.avi
+*.mkv
+
+# Production mirror folder (if any)
+productionProcessSys-mirror/
