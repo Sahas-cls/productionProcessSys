@@ -13,6 +13,7 @@ const storage = multer.diskStorage({
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     cb(null, tempDir);
   },
+
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext);
@@ -54,7 +55,7 @@ const videoFilterFunction = (req, file, cb) => {
 };
 
 const videoUpload = multer({
-  MStorage,
+  storage,
   limits: { fileSize: 500 * 1024 * 1024, files: 1 }, // 500MB
   fileFilter: videoFilterFunction,
 });

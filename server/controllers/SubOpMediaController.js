@@ -15,6 +15,8 @@ const localStorage = require("../utils/FileStorageService");
 const { where } = require("sequelize");
 require("dotenv").config();
 const { exec } = require("child_process");
+const util = require("util");
+const execPromise = util.promisify(exec);
 
 // Set the ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
@@ -23,58 +25,69 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 let processingQueue = [];
 let isProcessing = false;
 
-async function processNext() {
-  if (isProcessing || processingQueue.length === 0) return;
-
-  isProcessing = true;
-  const job = processingQueue.shift();
-
+async function getVideoRotation(inputPath) {
   try {
-    await job();
+    const cmd = `ffprobe -v error -select_streams v:0 -show_entries stream_tags=rotate -of default=nw=1:nk=1 "${inputPath}"`;
+    const { stdout } = await execPromise(cmd);
+    const rotation = parseInt(stdout.trim()) || 0;
+    return rotation;
   } catch (err) {
-    console.error("Queue job failed:", err);
+    console.warn("⚠️ Failed to read rotation metadata:", err.message);
+    return 0;
   }
-
-  isProcessing = false;
-  processNext();
 }
 
-async function fixVideoRotationMetadata(inputPath, outputPath) {
-  return new Promise((resolve, reject) => {
-    // Ensure output directory exists
-    const outDir = path.dirname(outputPath);
-    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+// Helper: fix rotation if needed (lightweight)
+async function fixVideoRotationIfNeeded(inputPath, rotation) {
+  if (rotation === 0) return inputPath; // no rotation, nothing to do
 
-    // MP4Box command: copy video streams, reset rotation metadata
-    const cmd = `MP4Box -add "${inputPath}"#video:rotate=0 -add "${inputPath}"#audio "${outputPath}" -new`;
+  const outputPath = path.join(
+    path.dirname(inputPath),
+    `rotated_${path.basename(inputPath)}`,
+  );
 
-    exec(cmd, (err, stdout, stderr) => {
-      if (err) {
-        console.error("❌ MP4Box rotation fix error:", stderr || err.message);
-        return reject(err);
-      }
-      console.log("✅ Rotation metadata fixed:", outputPath);
-      resolve(outputPath);
-    });
-  });
+  // transpose mapping for ffmpeg
+  let transposeValue = "";
+  switch (rotation) {
+    case 90:
+      transposeValue = "transpose=1";
+      break;
+    case 180:
+      transposeValue = "transpose=2,transpose=2"; // two 90° rotations
+      break;
+    case 270:
+      transposeValue = "transpose=2"; // 270 clockwise ≈ 90 ccw
+      break;
+    default:
+      transposeValue = "";
+  }
+
+  if (transposeValue) {
+    const ffmpegCmd = `ffmpeg -i "${inputPath}" -vf "${transposeValue}" -c:a copy -y "${outputPath}"`;
+    await execPromise(ffmpegCmd);
+    fs.unlinkSync(inputPath); // remove original
+    fs.renameSync(outputPath, inputPath);
+  }
+
+  return inputPath;
 }
 
 // ==================== VIDEO CONTROLLERS ====================
 exports.uploadVideo = async (req, res, next) => {
-  console.log("📤 [Local] Video upload request received");
+  console.log("📤 Video upload request received");
 
   try {
     if (!req.file) {
       return res
         .status(400)
-        .json({ message: "No file uploaded", success: false });
+        .json({ success: false, message: "No file uploaded" });
     }
 
     const { styleNo, moId, sopId, sopName, subOpId } = req.body;
     if (!styleNo || !moId || !sopId || !subOpId) {
       return res.status(400).json({
-        message: "Missing required fields: styleNo, moId, sopId, subOpId",
         success: false,
+        message: "Missing required fields: styleNo, moId, sopId, subOpId",
       });
     }
 
@@ -83,34 +96,29 @@ exports.uploadVideo = async (req, res, next) => {
     if (!styleRecord)
       return res
         .status(400)
-        .json({ message: `Style ${styleNo} not found`, success: false });
+        .json({ success: false, message: `Style ${styleNo} not found` });
 
     const operationExists = await MainOperation.findByPk(moId);
     if (!operationExists)
       return res
         .status(400)
-        .json({ message: `Operation ${moId} not found`, success: false });
+        .json({ success: false, message: `Operation ${moId} not found` });
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists)
-      return res.status(400).json({
-        message: `Sub-operation ${subOpId} not found`,
-        success: false,
-      });
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: `Sub-operation ${subOpId} not found`,
+        });
 
     const styleIdDb = styleRecord.style_id;
 
     // ================= FILE INFO =================
     const ext = path.extname(req.file.originalname).toLowerCase();
     const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
-      now.getSeconds(),
-    ).padStart(2, "0")}`;
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
 
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
@@ -118,27 +126,22 @@ exports.uploadVideo = async (req, res, next) => {
 
     const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
-    // ================= UPLOAD USING HELPER =================
+    // ================= UPLOAD USING YOUR HELPER =================
+    // This will save directly to disk without using memory
     const uploadResult = await localStorage.uploadSubOpFile(
-      req.file.buffer,
+      req.file.path, // multer keeps small buffer, for bigger files use diskStorage
       finalFilename,
       "video",
       subOpId,
     );
 
-    // ================= FIX ROTATION =================
-    const fixedOutputPath = path.join(
-      path.dirname(uploadResult.fullPath),
-      `rotated_${finalFilename}`,
-    );
+    // ================= DETECT ROTATION =================
+    const rotation = await getVideoRotation(uploadResult.fullPath);
 
+    // ================= FIX ROTATION IF NEEDED =================
     try {
-      await fixVideoRotationMetadata(uploadResult.fullPath, fixedOutputPath);
-
-      // Replace original file with fixed one
-      fs.unlinkSync(uploadResult.fullPath);
-      fs.renameSync(fixedOutputPath, uploadResult.fullPath);
-    } catch (rotationError) {
+      await fixVideoRotationIfNeeded(uploadResult.fullPath, rotation);
+    } catch (err) {
       console.warn("⚠️ Rotation fix failed, proceeding with original file");
     }
 
@@ -154,25 +157,26 @@ exports.uploadVideo = async (req, res, next) => {
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
-      processed_with_ffmpeg: false,
-      rotation_fixed: true,
-      original_rotation: 0,
+      processed_with_ffmpeg: rotation !== 0,
+      rotation_fixed: rotation !== 0,
+      original_rotation: rotation,
       status: "success",
     });
 
-    console.log("✅ Video uploaded and rotation fixed:", finalFilename);
-
-    res.status(201).json({
-      message: "Video uploaded successfully",
-      success: true,
-      data: mediaRecord,
-    });
+    console.log(`✅ Video uploaded successfully: ${finalFilename}`);
+    res
+      .status(201)
+      .json({
+        success: true,
+        message: "Video uploaded successfully",
+        data: mediaRecord,
+      });
   } catch (error) {
     console.error("❌ Upload error:", error);
-    res.status(500).json({
-      message: "Failed to upload video",
-      success: false,
-    });
+    res.status(500).json({ success: false, message: "Failed to upload video" });
+  } finally {
+    // Start next queued job if you have a queue
+    if (typeof processNext === "function") processNext();
   }
 };
 
