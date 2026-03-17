@@ -259,7 +259,7 @@ const VideoGallery = () => {
   );
 
   return (
-    <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6">
+    <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6 gird">
       {/* Header */}
       <div className="mb-6">
         <button
@@ -298,7 +298,7 @@ const VideoGallery = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-fr">
           {videos.map((item) => {
             const fileName = getFileName(item);
             const isActive = activeVideoId === item.so_media_id;
@@ -313,28 +313,84 @@ const VideoGallery = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-200"
+                className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-200 h-full flex flex-col"
               >
                 {/* Video Container */}
                 {item.status === "Pending" ? (
-                  <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group flex flex-col">
-                    {/* Main content area - takes remaining space */}
-                    <div className="flex-1 flex items-center justify-center relative">
-                      <div className="absolute flex justify-center items-center">
-                        <FaClockRotateLeft className="text-5xl text-yellow-700/30" />
+                  <div className="flex-1 flex flex-col">
+                    <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group flex flex-col h-full">
+                      {/* Main content area - takes remaining space */}
+                      <div className="flex-1 flex items-center justify-center relative">
+                        <div className="absolute flex justify-center items-center animate-pulse [animation-duration:4s]">
+                          <FaClockRotateLeft className="text-5xl text-yellow-700/30" />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Bottom div - takes 1/4 of parent height */}
-                    <div className="h-1/4 p-4 bg-blue-300/20 border-t-2 border-black/10 flex items-center justify-center">
-                      <h3 className="text-center">
-                        Video being processing as a background job, please check
-                        in while
-                      </h3>
+                      {/* Bottom div - fixed height for consistency */}
+                      <div className="h-40 p-2 bg-white border-t-2 border-black/10 flex items-start justify-center">
+                        <h3 className="text-2xs text-left font-semibold line-clamp-2 text-black/60">
+                          Video being processed as a background job, please
+                          check in a while
+                        </h3>
+
+                        <div className="">
+                          <button
+                            onClick={async () => {
+                              const result = await Swal.fire({
+                                title: "Delete video?",
+                                text: `Are you sure you want to delete "${fileName}"?`,
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonColor: "#d33",
+                                cancelButtonColor: "#3085d6",
+                                confirmButtonText: "Yes, delete it!",
+                                cancelButtonText: "Cancel",
+                              });
+
+                              if (result.isConfirmed) {
+                                try {
+                                  if (isActive) {
+                                    handleStopVideo(item.so_media_id);
+                                  }
+
+                                  const response = await axios.delete(
+                                    `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
+                                    { withCredentials: true },
+                                  );
+
+                                  if (response.status === 200) {
+                                    await Swal.fire({
+                                      title: "Deleted!",
+                                      text: "Video has been deleted successfully.",
+                                      icon: "success",
+                                      timer: 2000,
+                                      showConfirmButton: false,
+                                    });
+                                    fetchVideos();
+                                  }
+                                } catch (error) {
+                                  console.error("Delete error:", error);
+                                  Swal.fire({
+                                    title: "Delete failed",
+                                    text:
+                                      error.response?.data?.message ||
+                                      "Failed to delete video. Please try again.",
+                                    icon: "error",
+                                  });
+                                }
+                              }
+                            }}
+                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                            title="Delete video"
+                          >
+                            <FaTrash size={16} />
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="">
+                  <div className="flex-1 flex flex-col">
                     <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group">
                       {/* Video Element */}
                       <video
@@ -466,8 +522,9 @@ const VideoGallery = () => {
                         </div>
                       )}
                     </div>
-                    {/* Video Info */}
-                    <div className="p-4">
+
+                    {/* Video Info - flex column with auto margins */}
+                    <div className="p-4 flex-1 flex flex-col">
                       <h3
                         className="font-semibold text-gray-800 truncate mb-2"
                         title={fileName}
@@ -475,7 +532,7 @@ const VideoGallery = () => {
                         {item.sub_operation_name || fileName}
                       </h3>
 
-                      <div className="text-sm text-gray-600 space-y-1">
+                      <div className="text-sm text-gray-600 space-y-1 mb-4">
                         <div className="flex justify-between">
                           <span>Size:</span>
                           <span className="font-medium">
@@ -488,100 +545,102 @@ const VideoGallery = () => {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div className="mt-4 flex justify-between items-center">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => {
-                              if (isActive) {
-                                handleStopVideo(item.so_media_id);
-                              } else {
-                                handlePlayVideo(item.so_media_id);
-                              }
-                            }}
-                            className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors ${
-                              isActive
-                                ? "bg-red-100 text-red-700 hover:bg-red-200"
-                                : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                            }`}
-                          >
-                            {isActive ? (
-                              <>
-                                <FaPause size={12} />
-                                Stop
-                              </>
-                            ) : (
-                              <>
-                                <FaPlay size={12} />
-                                Play
-                              </>
-                            )}
-                          </button>
-
-                          <button
-                            onClick={() => handleDownloadVideo(item)}
-                            className="px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
-                            disabled={!videoUrl}
-                          >
-                            <FaDownload size={12} />
-                            Download
-                          </button>
-                        </div>
-
-                        {(userRole === "Admin" ||
-                          userRole === "SuperAdmin") && (
-                          <button
-                            onClick={async () => {
-                              const result = await Swal.fire({
-                                title: "Delete video?",
-                                text: `Are you sure you want to delete "${fileName}"?`,
-                                icon: "warning",
-                                showCancelButton: true,
-                                confirmButtonColor: "#d33",
-                                cancelButtonColor: "#3085d6",
-                                confirmButtonText: "Yes, delete it!",
-                                cancelButtonText: "Cancel",
-                              });
-
-                              if (result.isConfirmed) {
-                                try {
-                                  if (isActive) {
-                                    handleStopVideo(item.so_media_id);
-                                  }
-
-                                  const response = await axios.delete(
-                                    `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
-                                    { withCredentials: true },
-                                  );
-
-                                  if (response.status === 200) {
-                                    await Swal.fire({
-                                      title: "Deleted!",
-                                      text: "Video has been deleted successfully.",
-                                      icon: "success",
-                                      timer: 2000,
-                                      showConfirmButton: false,
-                                    });
-                                    fetchVideos();
-                                  }
-                                } catch (error) {
-                                  console.error("Delete error:", error);
-                                  Swal.fire({
-                                    title: "Delete failed",
-                                    text:
-                                      error.response?.data?.message ||
-                                      "Failed to delete video. Please try again.",
-                                    icon: "error",
-                                  });
+                      {/* Action Buttons - pushed to bottom */}
+                      <div className="mt-auto">
+                        <div className="flex justify-between items-center">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() => {
+                                if (isActive) {
+                                  handleStopVideo(item.so_media_id);
+                                } else {
+                                  handlePlayVideo(item.so_media_id);
                                 }
-                              }
-                            }}
-                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                            title="Delete video"
-                          >
-                            <FaTrash size={16} />
-                          </button>
-                        )}
+                              }}
+                              className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors ${
+                                isActive
+                                  ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                              }`}
+                            >
+                              {isActive ? (
+                                <>
+                                  <FaPause size={12} />
+                                  Stop
+                                </>
+                              ) : (
+                                <>
+                                  <FaPlay size={12} />
+                                  Play
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => handleDownloadVideo(item)}
+                              className="px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
+                              disabled={!videoUrl}
+                            >
+                              <FaDownload size={12} />
+                              Download
+                            </button>
+                          </div>
+
+                          {(userRole === "Admin" ||
+                            userRole === "SuperAdmin") && (
+                            <button
+                              onClick={async () => {
+                                const result = await Swal.fire({
+                                  title: "Delete video?",
+                                  text: `Are you sure you want to delete "${fileName}"?`,
+                                  icon: "warning",
+                                  showCancelButton: true,
+                                  confirmButtonColor: "#d33",
+                                  cancelButtonColor: "#3085d6",
+                                  confirmButtonText: "Yes, delete it!",
+                                  cancelButtonText: "Cancel",
+                                });
+
+                                if (result.isConfirmed) {
+                                  try {
+                                    if (isActive) {
+                                      handleStopVideo(item.so_media_id);
+                                    }
+
+                                    const response = await axios.delete(
+                                      `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
+                                      { withCredentials: true },
+                                    );
+
+                                    if (response.status === 200) {
+                                      await Swal.fire({
+                                        title: "Deleted!",
+                                        text: "Video has been deleted successfully.",
+                                        icon: "success",
+                                        timer: 2000,
+                                        showConfirmButton: false,
+                                      });
+                                      fetchVideos();
+                                    }
+                                  } catch (error) {
+                                    console.error("Delete error:", error);
+                                    Swal.fire({
+                                      title: "Delete failed",
+                                      text:
+                                        error.response?.data?.message ||
+                                        "Failed to delete video. Please try again.",
+                                      icon: "error",
+                                    });
+                                  }
+                                }
+                              }}
+                              className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                              title="Delete video"
+                            >
+                              <FaTrash size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

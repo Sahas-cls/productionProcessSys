@@ -62,8 +62,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      status: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        defaultValue: "Pending",
+      },
     },
-    { tableName: "suboperation_media", timestamps: true }
+    { tableName: "suboperation_media", timestamps: true },
   );
 
   SubOperationMedia.associate = (models) => {
