@@ -39,35 +39,31 @@ async function getVideoRotation(inputPath) {
 
 // Helper: fix rotation if needed (lightweight)
 async function fixVideoRotationIfNeeded(inputPath, rotation) {
-  if (rotation === 0) return inputPath; // no rotation, nothing to do
+  if (rotation === 0) return inputPath; // no rotation, skip
 
   const outputPath = path.join(
     path.dirname(inputPath),
     `rotated_${path.basename(inputPath)}`,
   );
 
-  // transpose mapping for ffmpeg
-  let transposeValue = "";
+  let vfFilter = "";
   switch (rotation) {
     case 90:
-      transposeValue = "transpose=1";
+      vfFilter = "transpose=1";
       break;
     case 180:
-      transposeValue = "transpose=2,transpose=2"; // two 90° rotations
+      vfFilter = "transpose=2,transpose=2";
       break;
     case 270:
-      transposeValue = "transpose=2"; // 270 clockwise ≈ 90 ccw
+      vfFilter = "transpose=2";
       break;
-    default:
-      transposeValue = "";
   }
 
-  if (transposeValue) {
-    const ffmpegCmd = `ffmpeg -i "${inputPath}" -vf "${transposeValue}" -c:a copy -y "${outputPath}"`;
-    await execPromise(ffmpegCmd);
-    fs.unlinkSync(inputPath); // remove original
-    fs.renameSync(outputPath, inputPath);
-  }
+  const ffmpegCmd = `ffmpeg -i "${inputPath}" -c:v libx264 -preset veryfast -crf 23 -vf "${vfFilter}" -c:a aac -b:a 128k -y "${outputPath}"`;
+  await execPromise(ffmpegCmd);
+
+  fs.unlinkSync(inputPath); // remove original
+  fs.renameSync(outputPath, inputPath);
 
   return inputPath;
 }
@@ -106,12 +102,10 @@ exports.uploadVideo = async (req, res, next) => {
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Sub-operation ${subOpId} not found`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Sub-operation ${subOpId} not found`,
+      });
 
     const styleIdDb = styleRecord.style_id;
 
@@ -164,13 +158,11 @@ exports.uploadVideo = async (req, res, next) => {
     });
 
     console.log(`✅ Video uploaded successfully: ${finalFilename}`);
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Video uploaded successfully",
-        data: mediaRecord,
-      });
+    res.status(201).json({
+      success: true,
+      message: "Video uploaded successfully",
+      data: mediaRecord,
+    });
   } catch (error) {
     console.error("❌ Upload error:", error);
     res.status(500).json({ success: false, message: "Failed to upload video" });
