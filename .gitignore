@@ -14,6 +14,11 @@ Thumbs.db
 temp/
 tempUploads/
 
+# Environment variables
+.env
+.env.local
+.env.*.local
+
 # Videos, large binaries
 *.mp4
 *.mov
