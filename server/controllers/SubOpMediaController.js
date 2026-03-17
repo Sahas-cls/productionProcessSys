@@ -9,80 +9,70 @@ const {
 } = require("../models");
 const path = require("path");
 const ffmpeg = require("fluent-ffmpeg");
-const ffmpegPath = require("ffmpeg-static");
 const fs = require("fs");
 const localStorage = require("../utils/FileStorageService");
-const { where } = require("sequelize");
-require("dotenv").config();
-const { exec } = require("child_process");
-const util = require("util");
-const execPromise = util.promisify(exec);
 
-// Set the ffmpeg path
-// ffmpeg.setFfmpegPath(ffmpegPath);
+// Set ffmpeg & ffprobe paths explicitly
 ffmpeg.setFfmpegPath("/usr/bin/ffmpeg");
 ffmpeg.setFfprobePath("/usr/bin/ffprobe");
 
-// ==================== VIDEO CONTROLLERS ====================
-let processingQueue = [];
-let isProcessing = false;
+// ==================== HELPER FUNCTIONS ====================
 
+// Get video rotation (returns 0 if unknown)
 async function getVideoRotation(filePath) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     ffmpeg.ffprobe(filePath, (err, metadata) => {
-      if (err) return reject(err);
-      const streams = metadata.streams || [];
-      const videoStream = streams.find((s) => s.codec_type === "video");
-      if (!videoStream) return resolve(0);
-
-      const rotate = videoStream.tags?.rotate
-        ? parseInt(videoStream.tags.rotate, 10)
+      if (err) {
+        console.warn("⚠️ Failed to read rotation metadata:", err.message);
+        return resolve(0);
+      }
+      const stream = metadata.streams.find((s) => s.codec_type === "video");
+      const rotation = stream?.tags?.rotate
+        ? parseInt(stream.tags.rotate, 10)
         : 0;
-      resolve(rotate);
+      resolve(rotation);
     });
   });
 }
 
-// Helper: fix rotation if needed (lightweight)
-async function fixVideoRotationIfNeeded(inputPath, rotation) {
+// Fix rotation + ensure browser compatibility
+async function fixVideoForBrowser(inputPath, rotation = 0) {
   return new Promise((resolve, reject) => {
     const ext = path.extname(inputPath);
-    const fixedPath = inputPath.replace(ext, "_fixed.mp4");
+    const outputPath = inputPath.replace(ext, "_fixed.mp4");
 
     let command = ffmpeg(inputPath)
       .outputOptions([
-        "-c:v libx264", // H.264 video codec
-        "-c:a aac", // AAC audio codec
-        "-movflags +faststart", // allow streaming from start
-        "-preset veryfast", // encoding speed
+        "-c:v libx264",
+        "-c:a aac",
+        "-movflags +faststart", // place moov atom at start
+        "-preset veryfast",
       ])
-      .on("error", (err) => reject(err))
-      .on("end", () => {
-        resolve(fixedPath);
-      });
+      .on("error", reject)
+      .on("end", () => resolve(outputPath));
 
+    // Apply rotation if needed
     if (rotation && rotation !== 0) {
-      // Apply rotation metadata fix
-      let transposeOption = "";
+      let filter = "";
       switch (rotation) {
         case 90:
-          transposeOption = "transpose=1";
+          filter = "transpose=1";
           break;
         case 180:
-          transposeOption = "transpose=2,transpose=2";
+          filter = "transpose=2,transpose=2";
           break;
         case 270:
-          transposeOption = "transpose=2";
+          filter = "transpose=2";
           break;
       }
-      if (transposeOption) command = command.videoFilter(transposeOption);
+      if (filter) command = command.videoFilter(filter);
     }
 
-    command.save(fixedPath);
+    command.save(outputPath);
   });
 }
 
-// ==================== VIDEO CONTROLLERS ====================
+// ==================== VIDEO UPLOAD CONTROLLER ====================
 exports.uploadVideo = async (req, res, next) => {
   console.log("📤 Video upload request received");
 
@@ -115,12 +105,10 @@ exports.uploadVideo = async (req, res, next) => {
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Sub-operation ${subOpId} not found`,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Sub-operation ${subOpId} not found`,
+      });
 
     const styleIdDb = styleRecord.style_id;
 
@@ -131,10 +119,9 @@ exports.uploadVideo = async (req, res, next) => {
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
-
     const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
-    // ================= UPLOAD USING LOCAL STORAGE =================
+    // ================= UPLOAD TO LOCAL STORAGE =================
     const uploadResult = await localStorage.uploadSubOpFile(
       req.file.path,
       finalFilename,
@@ -142,31 +129,37 @@ exports.uploadVideo = async (req, res, next) => {
       subOpId,
     );
 
-    // ================= DETECT ROTATION =================
-    const rotation = await getVideoRotation(uploadResult.fullPath);
+    // ================= CHECK FILE EXISTS =================
+    if (!fs.existsSync(uploadResult.fullPath)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Uploaded file not found" });
+    }
 
-    // ================= FIX ROTATION & ENCODE =================
+    // ================= FIX FOR BROWSER =================
+    const rotation = await getVideoRotation(uploadResult.fullPath);
     let finalPath = uploadResult.fullPath;
     try {
-      const fixedPath = await fixVideoRotationIfNeeded(
+      const fixedPath = await fixVideoForBrowser(
         uploadResult.fullPath,
         rotation,
       );
       const fixedSize = fs.statSync(fixedPath).size;
-      if (fixedSize > 1024) finalPath = fixedPath; // use only if not empty
+      if (fixedSize > 1024) finalPath = fixedPath; // only use if valid
     } catch (err) {
-      console.warn("⚠️ Rotation fix failed, using original file", err.message);
+      console.warn(
+        "⚠️ Rotation/browser fix failed, using original file",
+        err.message,
+      );
     }
 
     const fileSize = fs.statSync(finalPath).size;
     if (fileSize < 1024) {
       fs.unlinkSync(finalPath);
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Uploaded video is too small or corrupted",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded video is too small or corrupted",
+      });
     }
 
     // ================= CREATE DB RECORD =================
@@ -188,19 +181,14 @@ exports.uploadVideo = async (req, res, next) => {
     });
 
     console.log(`✅ Video uploaded successfully: ${finalFilename}`);
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "Video uploaded successfully",
-        data: mediaRecord,
-      });
+    res.status(201).json({
+      success: true,
+      message: "Video uploaded successfully",
+      data: mediaRecord,
+    });
   } catch (error) {
     console.error("❌ Upload error:", error);
     res.status(500).json({ success: false, message: "Failed to upload video" });
-  } finally {
-    // next job in queue if any
-    if (typeof processNext === "function") processNext();
   }
 };
 
