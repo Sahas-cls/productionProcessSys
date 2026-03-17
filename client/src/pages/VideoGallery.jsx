@@ -258,6 +258,55 @@ const VideoGallery = () => {
     [handlePlayVideo],
   );
 
+  const handleDeleteVideo = useCallback(
+    async (item, isActive, fileName) => {
+      const result = await Swal.fire({
+        title: "Delete video?",
+        text: `Are you sure you want to delete "${fileName}"?`,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Yes, delete it!",
+        cancelButtonText: "Cancel",
+      });
+
+      if (result.isConfirmed) {
+        try {
+          if (isActive) {
+            handleStopVideo(item.so_media_id);
+          }
+
+          const response = await axios.delete(
+            `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
+            { withCredentials: true },
+          );
+
+          if (response.status === 200) {
+            await Swal.fire({
+              title: "Deleted!",
+              text: "Video has been deleted successfully.",
+              icon: "success",
+              timer: 2000,
+              showConfirmButton: false,
+            });
+            fetchVideos();
+          }
+        } catch (error) {
+          console.error("Delete error:", error);
+          Swal.fire({
+            title: "Delete failed",
+            text:
+              error.response?.data?.message ||
+              "Failed to delete video. Please try again.",
+            icon: "error",
+          });
+        }
+      }
+    },
+    [backendUrl, handleStopVideo, fetchVideos],
+  );
+
   return (
     <div className="px-4 md:px-6 min-h-screen bg-gray-50 py-6 gird">
       {/* Header */}
@@ -327,63 +376,25 @@ const VideoGallery = () => {
                       </div>
 
                       {/* Bottom div - fixed height with responsive padding */}
-                      <div className="md:h-4 sm:h-8 p-1 sm:p-2 bg-white border-t-2 border-black/10 flex items-start justify-between">
+                      <div className="h-16 sm:h-20 p-1 sm:p-2 bg-white border-t-2 border-black/10 flex items-start justify-between">
                         <h3 className="text-[10px] sm:text-xs text-left font-semibold line-clamp-2 text-black/60 max-w-[70%] sm:max-w-[80%]">
                           Video being processed as a background job, please
                           check in a while
                         </h3>
 
-                        <button
-                          onClick={async () => {
-                            const result = await Swal.fire({
-                              title: "Delete video?",
-                              text: `Are you sure you want to delete "${fileName}"?`,
-                              icon: "warning",
-                              showCancelButton: true,
-                              confirmButtonColor: "#d33",
-                              cancelButtonColor: "#3085d6",
-                              confirmButtonText: "Yes, delete it!",
-                              cancelButtonText: "Cancel",
-                            });
-
-                            if (result.isConfirmed) {
-                              try {
-                                if (isActive) {
-                                  handleStopVideo(item.so_media_id);
-                                }
-
-                                const response = await axios.delete(
-                                  `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
-                                  { withCredentials: true },
-                                );
-
-                                if (response.status === 200) {
-                                  await Swal.fire({
-                                    title: "Deleted!",
-                                    text: "Video has been deleted successfully.",
-                                    icon: "success",
-                                    timer: 2000,
-                                    showConfirmButton: false,
-                                  });
-                                  fetchVideos();
-                                }
-                              } catch (error) {
-                                console.error("Delete error:", error);
-                                Swal.fire({
-                                  title: "Delete failed",
-                                  text:
-                                    error.response?.data?.message ||
-                                    "Failed to delete video. Please try again.",
-                                  icon: "error",
-                                });
-                              }
-                            }
-                          }}
-                          className="p-1 sm:p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                          title="Delete video"
-                        >
-                          <FaTrash size={14} className="sm:w-4 sm:h-4" />
-                        </button>
+                        {(userRole === "Admin" ||
+                          userRole === "SuperAdmin") && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteVideo(item, isActive, fileName);
+                            }}
+                            className="p-1 sm:p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                            title="Delete video"
+                          >
+                            <FaTrash size={14} className="sm:w-4 sm:h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -602,8 +613,9 @@ const VideoGallery = () => {
                           {(userRole === "Admin" ||
                             userRole === "SuperAdmin") && (
                             <button
-                              onClick={async () => {
-                                // Delete logic (keep as is)
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteVideo(item, isActive, fileName);
                               }}
                               className="p-1 sm:p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
                               title="Delete video"
