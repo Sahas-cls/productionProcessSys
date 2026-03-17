@@ -62,31 +62,28 @@ async function fixVideoRotation(inputPath, rotation) {
   const ext = path.extname(inputPath);
   const outputPath = inputPath.replace(ext, "_fixed.mp4");
 
-  let command = ffmpeg(inputPath).outputOptions([
-    "-c:v libx264",
-    "-c:a aac",
-    "-movflags +faststart",
-    "-preset veryfast",
-  ]);
+  let filter = "";
 
-  if (rotation && rotation !== 0) {
-    let filter = "";
-    switch (rotation) {
-      case 90:
-        filter = "transpose=1";
-        break;
-      case 180:
-        filter = "transpose=2,transpose=2";
-        break;
-      case 270:
-        filter = "transpose=2";
-        break;
-    }
-    if (filter) command = command.videoFilter(filter);
+  switch (rotation) {
+    case 90:
+      filter = "transpose=1"; // clockwise
+      break;
+    case 180:
+      filter = "hflip,vflip"; // 180 degrees
+      break;
+    case 270:
+      filter = "transpose=2"; // counter-clockwise
+      break;
+    default:
+      return inputPath; // no rotation needed
   }
 
   return new Promise((resolve, reject) => {
-    command
+    ffmpeg(inputPath)
+      .videoCodec("libx264")
+      .audioCodec("aac")
+      .outputOptions(["-preset veryfast", "-movflags +faststart"])
+      .videoFilter(filter)
       .on("error", reject)
       .on("end", () => resolve(outputPath))
       .save(outputPath);
