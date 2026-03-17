@@ -19,12 +19,8 @@ require("dotenv").config();
 ffmpeg.setFfmpegPath(ffmpegPath);
 
 // ==================== VIDEO CONTROLLERS ====================
-
 exports.uploadVideo = async (req, res, next) => {
   console.log("📤 [Local] Video upload request received");
-
-  let uploadResult = null;
-  let dbRecord = null;
 
   try {
     if (!req.file) {
@@ -34,7 +30,6 @@ exports.uploadVideo = async (req, res, next) => {
     }
 
     const { styleNo, moId, sopId, sopName, subOpId } = req.body;
-
     if (!styleNo || !moId || !sopId || !subOpId) {
       return res.status(400).json({
         message: "Missing required fields: styleNo, moId, sopId, subOpId",
@@ -48,7 +43,6 @@ exports.uploadVideo = async (req, res, next) => {
       return res
         .status(400)
         .json({ message: `Style ${styleNo} not found`, success: false });
-    const styleIdDb = styleRecord.style_id;
 
     const operationExists = await MainOperation.findByPk(moId);
     if (!operationExists)
@@ -58,152 +52,167 @@ exports.uploadVideo = async (req, res, next) => {
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
     if (!subOperationExists)
-      return res
-        .status(400)
-        .json({
-          message: `Sub-operation ${subOpId} not found`,
-          success: false,
-        });
+      return res.status(400).json({
+        message: `Sub-operation ${subOpId} not found`,
+        success: false,
+      });
 
-    // ================= SETUP TEMP PATHS =================
+    const styleIdDb = styleRecord.style_id;
+
+    // ================= TEMP PATH =================
     const ext = path.extname(req.file.originalname).toLowerCase();
     const tempDir = path.join(__dirname, "../temp");
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
     const tempInputPath = path.join(tempDir, `input_${Date.now()}${ext}`);
-    const tempOutputPath = path.join(tempDir, `output_${Date.now()}${ext}`);
+    fs.renameSync(req.file.path, tempInputPath); // move uploaded file to temp folder
 
-    // Move uploaded file to tempInputPath (already on disk with diskStorage)
-    fs.renameSync(req.file.path, tempInputPath);
-
-    // ================= DETECT ROTATION =================
-    const rotationInfo = await new Promise((resolve) => {
-      ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-        if (err) return resolve({ hasRotation: false, rotation: 0 });
-
-        const videoStream = metadata.streams?.find(
-          (s) => s.codec_type === "video",
-        );
-        let rotation = 0;
-
-        if (videoStream?.tags?.rotate)
-          rotation = parseInt(videoStream.tags.rotate);
-        else if (videoStream?.side_data_list) {
-          const rotateData = videoStream.side_data_list.find(
-            (sd) => sd.rotation !== undefined,
-          );
-          if (rotateData) rotation = rotateData.rotation;
-        }
-
-        resolve({ hasRotation: rotation !== 0, rotation });
-      });
-    });
-
-    // ================= PROCESS VIDEO =================
-    const ffmpegPromise = new Promise((resolve, reject) => {
-      let command = ffmpeg(tempInputPath)
-        .videoCodec("libx264")
-        .audioCodec("aac")
-        .outputOptions(["-movflags +faststart"])
-        .on("end", resolve)
-        .on("error", reject)
-        .save(tempOutputPath);
-
-      if (rotationInfo.hasRotation) {
-        console.log(`🔄 Fixing rotation: ${rotationInfo.rotation}`);
-        let transposeFilter = "transpose=1";
-
-        if (rotationInfo.rotation === 90) transposeFilter = "transpose=1";
-        else if (rotationInfo.rotation === 270 || rotationInfo.rotation === -90)
-          transposeFilter = "transpose=2";
-        else if (rotationInfo.rotation === 180)
-          transposeFilter = "transpose=1,transpose=1";
-
-        command = ffmpeg(tempInputPath)
-          .videoFilters(transposeFilter)
-          .videoCodec("libx264")
-          .audioCodec("aac")
-          .outputOptions([
-            "-movflags +faststart",
-            "-map_metadata 0",
-            "-metadata:s:v:0 rotate=0",
-          ])
-          .on("end", resolve)
-          .on("error", reject)
-          .save(tempOutputPath);
-      }
-    });
-
-    await ffmpegPromise;
-
-    // ================= UPLOAD =================
-    const processedFileBuffer = fs.readFileSync(tempOutputPath);
-    const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
-
-    const sanitizedSopName = (sopName || "unknown")
-      .replace(/[/\\?%*:|"<>]/g, "_")
-      .replace(/\s+/g, "_");
-    const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
-
-    uploadResult = await localStorage.uploadSubOpFile(
-      processedFileBuffer,
-      finalFilename,
-      "video",
-      subOpId,
-    );
-
-    // ================= SAVE TO DATABASE =================
-    dbRecord = await SubOperationMedia.create({
+    // ================= CREATE DB RECORD IMMEDIATELY =================
+    const mediaRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
       sub_operation_id: subOpId,
       sub_operation_name: sopName || null,
-      media_url: uploadResult.filePath,
-      video_url: uploadResult.filePath,
-      file_size: processedFileBuffer.length,
+      media_url: "processing",
+      video_url: null,
+      file_size: null,
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
       processed_with_ffmpeg: true,
-      rotation_fixed: rotationInfo.hasRotation,
-      original_rotation: rotationInfo.rotation,
+      rotation_fixed: false,
+      original_rotation: 0,
+      status: "processing", // mark as processing
     });
 
-    // ================= CLEANUP =================
-    [tempInputPath, tempOutputPath].forEach((p) => {
-      if (fs.existsSync(p)) fs.unlinkSync(p);
-    });
-
-    // ================= RESPONSE =================
+    // ================= RESPOND IMMEDIATELY =================
     res.status(201).json({
-      message: "Video uploaded successfully",
+      message: "Video upload received, processing in background",
       success: true,
       data: {
-        so_media_id: dbRecord.so_media_id,
-        media_url: uploadResult.filePath,
-        video_url: uploadResult.filePath,
-        file_name: uploadResult.fileName,
-        original_filename: req.file.originalname,
-        file_size: processedFileBuffer.length,
-        file_type: req.file.mimetype,
-        uploaded_at: dbRecord.createdAt,
-        orientation_normalized: true,
+        so_media_id: mediaRecord.so_media_id,
+        status: mediaRecord.status,
       },
     });
+
+    // ================= BACKGROUND PROCESSING =================
+    (async () => {
+      try {
+        // Detect rotation
+        const rotationInfo = await new Promise((resolve) => {
+          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
+            if (err) return resolve({ hasRotation: false, rotation: 0 });
+            const videoStream = metadata.streams?.find(
+              (s) => s.codec_type === "video",
+            );
+            let rotation = 0;
+
+            if (videoStream?.tags?.rotate)
+              rotation = parseInt(videoStream.tags.rotate);
+            else if (videoStream?.side_data_list) {
+              const rotateData = videoStream.side_data_list.find(
+                (sd) => sd.rotation !== undefined,
+              );
+              if (rotateData) rotation = rotateData.rotation;
+            }
+
+            resolve({ hasRotation: rotation !== 0, rotation });
+          });
+        });
+
+        const tempOutputPath = path.join(tempDir, `output_${Date.now()}${ext}`);
+
+        // FFmpeg processing
+        await new Promise((resolve, reject) => {
+          let command = ffmpeg(tempInputPath)
+            .videoCodec("libx264")
+            .audioCodec("aac")
+            .outputOptions(["-movflags +faststart"])
+            .on("end", resolve)
+            .on("error", reject)
+            .save(tempOutputPath);
+
+          if (rotationInfo.hasRotation) {
+            let transposeFilter = "transpose=1";
+            if (rotationInfo.rotation === 90) transposeFilter = "transpose=1";
+            else if (
+              rotationInfo.rotation === 270 ||
+              rotationInfo.rotation === -90
+            )
+              transposeFilter = "transpose=2";
+            else if (rotationInfo.rotation === 180)
+              transposeFilter = "transpose=1,transpose=1";
+
+            command = ffmpeg(tempInputPath)
+              .videoFilters(transposeFilter)
+              .videoCodec("libx264")
+              .audioCodec("aac")
+              .outputOptions([
+                "-movflags +faststart",
+                "-map_metadata 0",
+                "-metadata:s:v:0 rotate=0",
+              ])
+              .on("end", resolve)
+              .on("error", reject)
+              .save(tempOutputPath);
+          }
+        });
+
+        const processedBuffer = fs.readFileSync(tempOutputPath);
+
+        // Generate final filename
+        const now = new Date();
+        const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+        const sanitizedSopName = (sopName || "unknown")
+          .replace(/[/\\?%*:|"<>]/g, "_")
+          .replace(/\s+/g, "_");
+        const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
+
+        // Upload to local storage
+        const uploadResult = await localStorage.uploadSubOpFile(
+          processedBuffer,
+          finalFilename,
+          "video",
+          subOpId,
+        );
+
+        // Update DB record with final info
+        await SubOperationMedia.update(
+          {
+            status: "success",
+            media_url: uploadResult.filePath,
+            video_url: uploadResult.filePath,
+            file_size: processedBuffer.length,
+            rotation_fixed: rotationInfo.hasRotation,
+            original_rotation: rotationInfo.rotation,
+          },
+          { where: { so_media_id: mediaRecord.so_media_id } },
+        );
+
+        // Cleanup temp files
+        [tempInputPath, tempOutputPath].forEach((p) => {
+          if (fs.existsSync(p)) fs.unlinkSync(p);
+        });
+
+        console.log(
+          "✅ Background video processing finished for",
+          finalFilename,
+        );
+      } catch (bgError) {
+        console.error("❌ Background processing error:", bgError);
+        // Update record to failed
+        await SubOperationMedia.update(
+          { status: "failed" },
+          { where: { so_media_id: mediaRecord.so_media_id } },
+        );
+      }
+    })();
   } catch (error) {
     console.error("❌ Upload error:", error);
-
-    if (uploadResult?.filePath)
-      await localStorage.deleteFile(null, uploadResult.filePath);
-    if (dbRecord?.so_media_id)
-      await SubOperationMedia.destroy({
-        where: { so_media_id: dbRecord.so_media_id },
-      });
-
     res.status(500).json({ message: "Failed to upload video", success: false });
   }
 };
+
 // this is test comment
 exports.getVideos = async (req, res, next) => {
   const { subOpId } = req.params;

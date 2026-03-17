@@ -14,6 +14,7 @@ import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 import Swal from "sweetalert2";
 import { motion } from "framer-motion";
+import { FaClockRotateLeft } from "react-icons/fa6";
 
 const VideoGallery = () => {
   const location = useLocation();
@@ -27,7 +28,7 @@ const VideoGallery = () => {
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [videoErrors, setVideoErrors] = useState({});
   const [fullscreenElement, setFullscreenElement] = useState(null);
-
+  console.log("videos: ", videos);
   const videoRefs = useRef({});
 
   // Listen for fullscreen changes
@@ -315,253 +316,276 @@ const VideoGallery = () => {
                 className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-200"
               >
                 {/* Video Container */}
-                <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group">
-                  {/* Video Element */}
-                  <video
-                    ref={(el) => (videoRefs.current[item.so_media_id] = el)}
-                    src={videoUrl}
-                    className={`w-full h-full object-contain transition-opacity duration-300 ${
-                      isActive ? "opacity-100" : "opacity-0"
-                    }`}
-                    playsInline
-                    preload="metadata"
-                    crossOrigin="anonymous"
-                    controls={false}
-                    onError={(e) => {
-                      console.error("Video error for", fileName, ":", e);
-                      setVideoErrors((prev) => ({
-                        ...prev,
-                        [item.so_media_id]: "Failed to load video file",
-                      }));
-                      if (isActive) {
-                        setActiveVideoId(null);
-                      }
-                    }}
-                    onPlay={() => console.log("Playing:", fileName)}
-                    onPause={() => console.log("Paused:", fileName)}
-                    onEnded={() => {
-                      console.log("Ended:", fileName);
-                      setActiveVideoId(null);
-                    }}
-                    onLoadedMetadata={(e) => {
-                      console.log(
-                        "Metadata loaded for:",
-                        fileName,
-                        "Duration:",
-                        e.target.duration,
-                      );
-                    }}
-                  />
-
-                  {/* Play Overlay (shown when video is not active) */}
-                  {!isActive && !error && (
-                    <div
-                      className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/80 to-gray-100/80 hover:from-blue-100/80 hover:to-gray-200/80 transition-all duration-300"
-                      onClick={() => handlePlayVideo(item.so_media_id)}
-                    >
-                      <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors transform group-hover:scale-110">
-                        <FaPlay className="text-blue-600 text-3xl" />
-                      </div>
-                      <p className="text-blue-700 text-sm mt-3 font-medium">
-                        Click to play
-                      </p>
-                      <p className="text-gray-600 text-xs mt-1">
-                        {formatFileSize(item.file_size)}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Error Overlay */}
-                  {error && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
-                      <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
-                      <p className="text-red-700 text-sm font-medium text-center">
-                        {error}
-                      </p>
-                      <div className="flex gap-2 mt-3">
-                        <button
-                          onClick={() => retryLoadVideo(item.so_media_id)}
-                          className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 flex items-center gap-2"
-                        >
-                          <FaPlay size={12} />
-                          Retry
-                        </button>
-                        <button
-                          onClick={() => handleDownloadVideo(item)}
-                          className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
-                        >
-                          <FaDownload size={12} />
-                          Download
-                        </button>
+                {item.status === "Pending" ? (
+                  <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group flex flex-col">
+                    {/* Main content area - takes remaining space */}
+                    <div className="flex-1 flex items-center justify-center relative">
+                      <div className="absolute flex justify-center items-center">
+                        <FaClockRotateLeft className="text-5xl text-yellow-700/30" />
                       </div>
                     </div>
-                  )}
 
-                  {/* Video Controls (shown when active and no error) */}
-                  {isActive && !error && (
-                    <div className="absolute inset-0 bg-transparent">
-                      {/* Top controls */}
-                      <div className="absolute top-2 right-2 flex gap-2">
-                        <button
-                          onClick={() => togglePlayPause(item.so_media_id)}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
-                          title={
-                            videoRefs.current[item.so_media_id]?.paused
-                              ? "Play"
-                              : "Pause"
-                          }
-                        >
-                          {videoRefs.current[item.so_media_id]?.paused ? (
-                            <FaPlay size={14} />
-                          ) : (
-                            <FaPause size={14} />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => toggleFullscreen(item.so_media_id)}
-                          className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
-                          title={
-                            isInFullscreen ? "Exit Fullscreen" : "Fullscreen"
-                          }
-                        >
-                          {isInFullscreen ? (
-                            <FaCompress size={14} />
-                          ) : (
-                            <FaExpand size={14} />
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Bottom controls */}
-                      <div className="absolute bottom-2 left-2 right-2">
-                        <button
-                          onClick={() => handleStopVideo(item.so_media_id)}
-                          className="px-3 py-1 bg-red-600/80 text-white rounded text-sm hover:bg-red-700 transition-colors backdrop-blur-sm"
-                        >
-                          Stop
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Video Info */}
-                <div className="p-4">
-                  <h3
-                    className="font-semibold text-gray-800 truncate mb-2"
-                    title={fileName}
-                  >
-                    {item.sub_operation_name || fileName}
-                  </h3>
-
-                  <div className="text-sm text-gray-600 space-y-1">
-                    <div className="flex justify-between">
-                      <span>Size:</span>
-                      <span className="font-medium">
-                        {formatFileSize(item.file_size)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Uploaded:</span>
-                      <span>{formatDate(item.createdAt)}</span>
+                    {/* Bottom div - takes 1/4 of parent height */}
+                    <div className="h-1/4 p-4 bg-blue-300/20 border-t-2 border-black/10 flex items-center justify-center">
+                      <h3 className="text-center">
+                        Video being processing as a background job, please check
+                        in while
+                      </h3>
                     </div>
                   </div>
-
-                  {/* Action Buttons */}
-                  <div className="mt-4 flex justify-between items-center">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => {
+                ) : (
+                  <div className="">
+                    <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video group">
+                      {/* Video Element */}
+                      <video
+                        ref={(el) => (videoRefs.current[item.so_media_id] = el)}
+                        src={videoUrl}
+                        className={`w-full h-full object-contain transition-opacity duration-300 ${
+                          isActive ? "opacity-100" : "opacity-0"
+                        }`}
+                        playsInline
+                        preload="metadata"
+                        crossOrigin="anonymous"
+                        controls={false}
+                        onError={(e) => {
+                          console.error("Video error for", fileName, ":", e);
+                          setVideoErrors((prev) => ({
+                            ...prev,
+                            [item.so_media_id]: "Failed to load video file",
+                          }));
                           if (isActive) {
-                            handleStopVideo(item.so_media_id);
-                          } else {
-                            handlePlayVideo(item.so_media_id);
+                            setActiveVideoId(null);
                           }
                         }}
-                        className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors ${
-                          isActive
-                            ? "bg-red-100 text-red-700 hover:bg-red-200"
-                            : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                        }`}
-                      >
-                        {isActive ? (
-                          <>
-                            <FaPause size={12} />
-                            Stop
-                          </>
-                        ) : (
-                          <>
-                            <FaPlay size={12} />
-                            Play
-                          </>
-                        )}
-                      </button>
+                        onPlay={() => console.log("Playing:", fileName)}
+                        onPause={() => console.log("Paused:", fileName)}
+                        onEnded={() => {
+                          console.log("Ended:", fileName);
+                          setActiveVideoId(null);
+                        }}
+                        onLoadedMetadata={(e) => {
+                          console.log(
+                            "Metadata loaded for:",
+                            fileName,
+                            "Duration:",
+                            e.target.duration,
+                          );
+                        }}
+                      />
 
-                      <button
-                        onClick={() => handleDownloadVideo(item)}
-                        className="px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
-                        disabled={!videoUrl}
-                      >
-                        <FaDownload size={12} />
-                        Download
-                      </button>
+                      {/* Play Overlay (shown when video is not active) */}
+                      {!isActive && !error && (
+                        <div
+                          className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-blue-50/80 to-gray-100/80 hover:from-blue-100/80 hover:to-gray-200/80 transition-all duration-300"
+                          onClick={() => handlePlayVideo(item.so_media_id)}
+                        >
+                          <div className="bg-blue-600/20 hover:bg-blue-600/30 rounded-full p-4 transition-colors transform group-hover:scale-110">
+                            <FaPlay className="text-blue-600 text-3xl" />
+                          </div>
+                          <p className="text-blue-700 text-sm mt-3 font-medium">
+                            Click to play
+                          </p>
+                          <p className="text-gray-600 text-xs mt-1">
+                            {formatFileSize(item.file_size)}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Error Overlay */}
+                      {error && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
+                          <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
+                          <p className="text-red-700 text-sm font-medium text-center">
+                            {error}
+                          </p>
+                          <div className="flex gap-2 mt-3">
+                            <button
+                              onClick={() => retryLoadVideo(item.so_media_id)}
+                              className="px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm hover:bg-blue-200 flex items-center gap-2"
+                            >
+                              <FaPlay size={12} />
+                              Retry
+                            </button>
+                            <button
+                              onClick={() => handleDownloadVideo(item)}
+                              className="px-3 py-1 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 flex items-center gap-2"
+                            >
+                              <FaDownload size={12} />
+                              Download
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Video Controls (shown when active and no error) */}
+                      {isActive && !error && (
+                        <div className="absolute inset-0 bg-transparent">
+                          {/* Top controls */}
+                          <div className="absolute top-2 right-2 flex gap-2">
+                            <button
+                              onClick={() => togglePlayPause(item.so_media_id)}
+                              className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
+                              title={
+                                videoRefs.current[item.so_media_id]?.paused
+                                  ? "Play"
+                                  : "Pause"
+                              }
+                            >
+                              {videoRefs.current[item.so_media_id]?.paused ? (
+                                <FaPlay size={14} />
+                              ) : (
+                                <FaPause size={14} />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => toggleFullscreen(item.so_media_id)}
+                              className="p-2 bg-black/50 text-white rounded-full hover:bg-black/70 transition-colors backdrop-blur-sm"
+                              title={
+                                isInFullscreen
+                                  ? "Exit Fullscreen"
+                                  : "Fullscreen"
+                              }
+                            >
+                              {isInFullscreen ? (
+                                <FaCompress size={14} />
+                              ) : (
+                                <FaExpand size={14} />
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Bottom controls */}
+                          <div className="absolute bottom-2 left-2 right-2">
+                            <button
+                              onClick={() => handleStopVideo(item.so_media_id)}
+                              className="px-3 py-1 bg-red-600/80 text-white rounded text-sm hover:bg-red-700 transition-colors backdrop-blur-sm"
+                            >
+                              Stop
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
+                    {/* Video Info */}
+                    <div className="p-4">
+                      <h3
+                        className="font-semibold text-gray-800 truncate mb-2"
+                        title={fileName}
+                      >
+                        {item.sub_operation_name || fileName}
+                      </h3>
 
-                    {(userRole === "Admin" || userRole === "SuperAdmin") && (
-                      <button
-                        onClick={async () => {
-                          const result = await Swal.fire({
-                            title: "Delete video?",
-                            text: `Are you sure you want to delete "${fileName}"?`,
-                            icon: "warning",
-                            showCancelButton: true,
-                            confirmButtonColor: "#d33",
-                            cancelButtonColor: "#3085d6",
-                            confirmButtonText: "Yes, delete it!",
-                            cancelButtonText: "Cancel",
-                          });
+                      <div className="text-sm text-gray-600 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Size:</span>
+                          <span className="font-medium">
+                            {formatFileSize(item.file_size)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Uploaded:</span>
+                          <span>{formatDate(item.createdAt)}</span>
+                        </div>
+                      </div>
 
-                          if (result.isConfirmed) {
-                            try {
+                      {/* Action Buttons */}
+                      <div className="mt-4 flex justify-between items-center">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
                               if (isActive) {
                                 handleStopVideo(item.so_media_id);
+                              } else {
+                                handlePlayVideo(item.so_media_id);
                               }
+                            }}
+                            className={`px-3 py-1.5 rounded text-sm font-medium flex items-center gap-2 transition-colors ${
+                              isActive
+                                ? "bg-red-100 text-red-700 hover:bg-red-200"
+                                : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                            }`}
+                          >
+                            {isActive ? (
+                              <>
+                                <FaPause size={12} />
+                                Stop
+                              </>
+                            ) : (
+                              <>
+                                <FaPlay size={12} />
+                                Play
+                              </>
+                            )}
+                          </button>
 
-                              const response = await axios.delete(
-                                `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
-                                { withCredentials: true },
-                              );
+                          <button
+                            onClick={() => handleDownloadVideo(item)}
+                            className="px-3 py-1.5 rounded text-sm font-medium bg-green-100 text-green-700 hover:bg-green-200 flex items-center gap-2 transition-colors"
+                            disabled={!videoUrl}
+                          >
+                            <FaDownload size={12} />
+                            Download
+                          </button>
+                        </div>
 
-                              if (response.status === 200) {
-                                await Swal.fire({
-                                  title: "Deleted!",
-                                  text: "Video has been deleted successfully.",
-                                  icon: "success",
-                                  timer: 2000,
-                                  showConfirmButton: false,
-                                });
-                                fetchVideos();
-                              }
-                            } catch (error) {
-                              console.error("Delete error:", error);
-                              Swal.fire({
-                                title: "Delete failed",
-                                text:
-                                  error.response?.data?.message ||
-                                  "Failed to delete video. Please try again.",
-                                icon: "error",
+                        {(userRole === "Admin" ||
+                          userRole === "SuperAdmin") && (
+                          <button
+                            onClick={async () => {
+                              const result = await Swal.fire({
+                                title: "Delete video?",
+                                text: `Are you sure you want to delete "${fileName}"?`,
+                                icon: "warning",
+                                showCancelButton: true,
+                                confirmButtonColor: "#d33",
+                                cancelButtonColor: "#3085d6",
+                                confirmButtonText: "Yes, delete it!",
+                                cancelButtonText: "Cancel",
                               });
-                            }
-                          }
-                        }}
-                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                        title="Delete video"
-                      >
-                        <FaTrash size={16} />
-                      </button>
-                    )}
+
+                              if (result.isConfirmed) {
+                                try {
+                                  if (isActive) {
+                                    handleStopVideo(item.so_media_id);
+                                  }
+
+                                  const response = await axios.delete(
+                                    `${backendUrl}/api/subOperationMedia/deleteVideo/${item.so_media_id}`,
+                                    { withCredentials: true },
+                                  );
+
+                                  if (response.status === 200) {
+                                    await Swal.fire({
+                                      title: "Deleted!",
+                                      text: "Video has been deleted successfully.",
+                                      icon: "success",
+                                      timer: 2000,
+                                      showConfirmButton: false,
+                                    });
+                                    fetchVideos();
+                                  }
+                                } catch (error) {
+                                  console.error("Delete error:", error);
+                                  Swal.fire({
+                                    title: "Delete failed",
+                                    text:
+                                      error.response?.data?.message ||
+                                      "Failed to delete video. Please try again.",
+                                    icon: "error",
+                                  });
+                                }
+                              }
+                            }}
+                            className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                            title="Delete video"
+                          >
+                            <FaTrash size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </motion.div>
             );
           })}
