@@ -2,14 +2,62 @@ const express = require("express");
 const routes = express.Router();
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const controller = require("../controllers/SubOpMediaController");
 const authMiddleware = require("../middlewares/AuthUser");
 
-// Use memory storage for all uploads (CORRECT for B2)
-const storage = multer.memoryStorage();
+// ==================== STORAGE CONFIG ====================
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const tempDir = path.join(__dirname, "../tempUploads");
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    cb(null, tempDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const baseName = path.basename(file.originalname, ext);
+    const uniqueName = `${baseName}_${Date.now()}${ext}`;
+    cb(null, uniqueName);
+  },
+});
+
+// ==================== FILE FILTERS ====================
+
+const videoFilterFunction = (req, file, cb) => {
+  const cleanMimeType = file.mimetype.split(";")[0]; // remove codec info
+  if (!cleanMimeType.startsWith("video/"))
+    return cb(new Error("Only video files are allowed"), false);
+
+  const allowedExtensions = [
+    ".mp4",
+    ".avi",
+    ".mov",
+    ".mkv",
+    ".webm",
+    ".wmv",
+    ".flv",
+    ".m4v",
+  ];
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+
+  if (!allowedExtensions.includes(fileExtension))
+    return cb(
+      new Error(
+        `Unsupported video type. Allowed: ${allowedExtensions.join(", ")}`,
+      ),
+      false,
+    );
+
+  cb(null, true);
+};
+
+const videoUpload = multer({
+  storage,
+  limits: { fileSize: 500 * 1024 * 1024, files: 1 }, // 500MB
+  fileFilter: videoFilterFunction,
+});
 
 // ==================== FILENAME GENERATION MIDDLEWARE ====================
-// This adds generated filenames to req.files for consistent naming
 const generateFilenames = (req, res, next) => {
   if (req.files || req.file) {
     const files = req.files || [req.file].filter(Boolean);
@@ -17,71 +65,61 @@ const generateFilenames = (req, res, next) => {
     const timestamp = Date.now();
 
     files.forEach((file, index) => {
-      if (file) {
-        const originalName = file.originalname;
-        const ext = path.extname(originalName);
-        const baseName = path.basename(originalName, ext);
+      const ext = path.extname(file.originalname);
+      const baseName = path.basename(file.originalname, ext);
+      const uniqueName = `${baseName}_${subOpId}_${timestamp}_${index}${ext}`;
 
-        // Generate unique filename
-        const uniqueName = `${baseName}_${subOpId}_${timestamp}_${index}${ext}`;
-        file.generatedName = uniqueName;
-        file.originalName = originalName;
+      file.generatedName = uniqueName;
+      file.originalName = file.originalname;
 
-        // Also store file type for B2 folder organization
-        if (file.mimetype.startsWith("video/")) {
-          file.mediaType = "video";
-        } else if (file.mimetype.startsWith("image/")) {
-          file.mediaType = "image";
-        } else if (file.fieldname === "techPack") {
-          file.mediaType = "techpack";
-        } else if (file.fieldname === "documents") {
-          file.mediaType = "document";
-        }
-      }
+      if (file.mimetype.startsWith("video/")) file.mediaType = "video";
+      else if (file.mimetype.startsWith("image/")) file.mediaType = "image";
+      else if (file.fieldname === "techPack") file.mediaType = "techpack";
+      else if (file.fieldname === "documents") file.mediaType = "document";
     });
   }
   next();
 };
 
 // ==================== VIDEO UPLOAD CONFIG ====================
-const videoUpload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 500 * 1024 * 1024, // 100MB
-    files: 1,
-  },
-  fileFilter: (req, file, cb) => {
-    // Check if it's a video file - handle MIME types with codec parameters
-    const cleanMimeType = file.mimetype.split(";")[0]; // Remove codec part
-    if (!cleanMimeType.startsWith("video/")) {
-      return cb(new Error("Only video files are allowed"), false);
-    }
+// const videoUpload = multer({
+//   storage: storage,
+//   limits: {
+//     fileSize: 500 * 1024 * 1024, // 100MB
+//     files: 1,
+//   },
+//   fileFilter: (req, file, cb) => {
+//     // Check if it's a video file - handle MIME types with codec parameters
+//     const cleanMimeType = file.mimetype.split(";")[0]; // Remove codec part
+//     if (!cleanMimeType.startsWith("video/")) {
+//       return cb(new Error("Only video files are allowed"), false);
+//     }
 
-    // Check file extension
-    const allowedExtensions = [
-      ".mp4",
-      ".avi",
-      ".mov",
-      ".mkv",
-      ".webm",
-      ".wmv",
-      ".flv",
-      ".m4v",
-    ];
-    const fileExtension = path.extname(file.originalname).toLowerCase();
+//     // Check file extension
+//     const allowedExtensions = [
+//       ".mp4",
+//       ".avi",
+//       ".mov",
+//       ".mkv",
+//       ".webm",
+//       ".wmv",
+//       ".flv",
+//       ".m4v",
+//     ];
+//     const fileExtension = path.extname(file.originalname).toLowerCase();
 
-    if (!allowedExtensions.includes(fileExtension)) {
-      return cb(
-        new Error(
-          `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`,
-        ),
-        false,
-      );
-    }
+//     if (!allowedExtensions.includes(fileExtension)) {
+//       return cb(
+//         new Error(
+//           `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`,
+//         ),
+//         false,
+//       );
+//     }
 
-    cb(null, true);
-  },
-});
+//     cb(null, true);
+//   },
+// });
 
 // ==================== IMAGE UPLOAD CONFIG ====================
 const imageUpload = multer({
@@ -186,36 +224,31 @@ const folderUpload = multer({
 // ==================== ERROR HANDLING MIDDLEWARE ====================
 const handleMulterError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
+    if (error.code === "LIMIT_FILE_SIZE")
       return res.status(400).json({
         success: false,
-        message:
-          "File too large. Maximum size is: " +
-          (error.field === "video"
+        message: `File too large. Maximum size is ${
+          error.field === "video"
             ? "500MB"
             : error.field === "image"
               ? "50MB"
-              : "20MB"),
+              : "20MB"
+        }`,
       });
-    }
-    if (error.code === "LIMIT_FILE_COUNT") {
+
+    if (error.code === "LIMIT_FILE_COUNT")
       return res.status(400).json({
         success: false,
-        message: "Too many files. Maximum is 10 files per upload",
+        message: "Too many files. Maximum is 10 per upload",
       });
-    }
-    if (error.code === "LIMIT_UNEXPECTED_FILE") {
+
+    if (error.code === "LIMIT_UNEXPECTED_FILE")
       return res.status(400).json({
         success: false,
         message: "Unexpected file field. Check field name",
       });
-    }
   } else if (error) {
-    // This catches the fileFilter errors
-    return res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    return res.status(400).json({ success: false, message: error.message });
   }
   next();
 };
@@ -228,7 +261,7 @@ routes.post(
   authMiddleware,
   videoUpload.single("video"),
   handleMulterError,
-  generateFilenames, // Add filename generation
+  generateFilenames,
   controller.uploadVideo,
 );
 routes.delete("/deleteVideo/:so_media_id", controller.deleteSubOperationVideo);
