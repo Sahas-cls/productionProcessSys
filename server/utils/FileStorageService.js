@@ -220,6 +220,61 @@ class LocalSubOpStorage {
     }
   }
 
+  async moveSubOpFile(tempPath, fileName, folderType) {
+    try {
+      let folderPath;
+
+      switch (folderType) {
+        case "video":
+          folderPath = path.join(this.storageBase, "SubOpVideos");
+          break;
+        case "image":
+          folderPath = path.join(this.storageBase, "SubOpImages");
+          break;
+        case "techpack":
+          folderPath = path.join(this.storageBase, "SubOpTechPacks");
+          break;
+        case "document":
+          folderPath = path.join(this.storageBase, "SubOpFolders");
+          break;
+        default:
+          folderPath = path.join(this.storageBase, "SubOpFiles");
+      }
+
+      await this.ensureDir(folderPath);
+
+      const finalPath = path.join(folderPath, fileName);
+
+      try {
+        // 🚀 FAST PATH (same disk)
+        await fs.rename(tempPath, finalPath);
+      } catch (err) {
+        if (err.code === "EXDEV") {
+          console.log("⚠️ Cross-device move detected → using copy");
+
+          // 🐢 SLOW PATH (different disk / network)
+          await fs.copyFile(tempPath, finalPath);
+          await fs.unlink(tempPath);
+        } else {
+          throw err;
+        }
+      }
+
+      const relativePath = path
+        .relative(this.storageBase, finalPath)
+        .replace(/\\/g, "/");
+
+      return {
+        filePath: relativePath,
+        fullPath: finalPath,
+        fileName,
+      };
+    } catch (error) {
+      console.error("❌ Move error:", error);
+      throw error;
+    }
+  }
+
   /**
    * Get MIME type from filename
    */

@@ -87,11 +87,7 @@ exports.uploadVideo = async (req, res) => {
     }
 
     // ================= VALIDATE FOREIGN KEYS =================
-
-    const styleRecord = await Style.findOne({
-      where: { style_no: styleNo },
-    });
-
+    const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
     if (!styleRecord) {
       return res.status(400).json({
         success: false,
@@ -118,18 +114,11 @@ exports.uploadVideo = async (req, res) => {
     const styleIdDb = styleRecord.style_id;
 
     // ================= FILE NAME =================
-
     const ext = path.extname(req.file.originalname).toLowerCase();
-
     const now = new Date();
-
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
-      2,
-      "0",
-    )}${String(now.getDate()).padStart(
-      2,
-      "0",
-    )}_${String(now.getHours()).padStart(2, "0")}${String(
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
+      now.getDate(),
+    ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(
       now.getMinutes(),
     ).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
 
@@ -139,24 +128,15 @@ exports.uploadVideo = async (req, res) => {
 
     const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
-    // ================= READ FILE =================
-
-    const fileBuffer = await fsPromises.readFile(req.file.path);
-
-    // ================= SAVE FILE =================
-
-    const uploadResult = await localStorage.uploadSubOpFile(
-      fileBuffer,
+    // ================= MOVE FILE =================
+    const uploadResult = await localStorage.moveSubOpFile(
+      req.file.path,
       finalFilename,
       "video",
       subOpId,
     );
 
-    // remove temp file
-    await fsPromises.unlink(req.file.path);
-
     // ================= VALIDATE SAVED FILE =================
-
     if (!fs.existsSync(uploadResult.fullPath)) {
       return res.status(500).json({
         success: false,
@@ -165,7 +145,6 @@ exports.uploadVideo = async (req, res) => {
     }
 
     const fileSize = fs.statSync(uploadResult.fullPath).size;
-
     if (fileSize < 1024) {
       return res.status(400).json({
         success: false,
@@ -174,7 +153,6 @@ exports.uploadVideo = async (req, res) => {
     }
 
     // ================= SAVE DB =================
-
     const mediaRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
@@ -186,11 +164,9 @@ exports.uploadVideo = async (req, res) => {
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
-
       processed_with_ffmpeg: false,
       rotation_fixed: false,
       original_rotation: 0,
-
       status: "success",
     });
 
