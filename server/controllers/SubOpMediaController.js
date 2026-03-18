@@ -66,60 +66,85 @@ async function padVideoForBrowser(
 }
 
 // ==================== CONTROLLER ====================
-exports.uploadVideo = async (req, res, next) => {
+exports.uploadVideo = async (req, res) => {
   console.log("📤 Video upload request received");
 
   try {
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No file uploaded" });
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
     }
 
     const { styleNo, moId, sopId, sopName, subOpId } = req.body;
+
     if (!styleNo || !moId || !sopId || !subOpId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Missing required fields" });
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields",
+      });
     }
 
     // ================= VALIDATE FOREIGN KEYS =================
-    const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
-    if (!styleRecord)
-      return res
-        .status(400)
-        .json({ success: false, message: `Style ${styleNo} not found` });
+
+    const styleRecord = await Style.findOne({
+      where: { style_no: styleNo },
+    });
+
+    if (!styleRecord) {
+      return res.status(400).json({
+        success: false,
+        message: `Style ${styleNo} not found`,
+      });
+    }
 
     const operationExists = await MainOperation.findByPk(moId);
-    if (!operationExists)
-      return res
-        .status(400)
-        .json({ success: false, message: `Operation ${moId} not found` });
+    if (!operationExists) {
+      return res.status(400).json({
+        success: false,
+        message: `Operation ${moId} not found`,
+      });
+    }
 
     const subOperationExists = await SubOperation.findByPk(subOpId);
-    if (!subOperationExists)
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Sub-operation ${subOpId} not found`,
-        });
+    if (!subOperationExists) {
+      return res.status(400).json({
+        success: false,
+        message: `Sub-operation ${subOpId} not found`,
+      });
+    }
 
     const styleIdDb = styleRecord.style_id;
 
-    // ================= FILE INFO =================
+    // ================= FILE NAME =================
+
     const ext = path.extname(req.file.originalname).toLowerCase();
+
     const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}${String(now.getDate()).padStart(
+      2,
+      "0",
+    )}_${String(now.getHours()).padStart(2, "0")}${String(
+      now.getMinutes(),
+    ).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
+
     const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
-    // ================= READ FILE AS BUFFER =================
+    // ================= READ FILE =================
+
     const fileBuffer = await fsPromises.readFile(req.file.path);
 
-    // ================= UPLOAD TO LOCAL STORAGE =================
+    // ================= SAVE FILE =================
+
     const uploadResult = await localStorage.uploadSubOpFile(
       fileBuffer,
       finalFilename,
@@ -127,54 +152,50 @@ exports.uploadVideo = async (req, res, next) => {
       subOpId,
     );
 
-    // Cleanup temp uploaded file
+    // remove temp file
     await fsPromises.unlink(req.file.path);
 
-    if (
-      !fs.existsSync(uploadResult.fullPath) ||
-      !isValidFile(uploadResult.fullPath)
-    ) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Uploaded file is too small or corrupted",
-        });
+    // ================= VALIDATE SAVED FILE =================
+
+    if (!fs.existsSync(uploadResult.fullPath)) {
+      return res.status(500).json({
+        success: false,
+        message: "File was not saved correctly",
+      });
     }
 
-    // ================= PAD VIDEO FOR BROWSER =================
-    let finalPath = uploadResult.fullPath;
-    try {
-      const paddedPath = await padVideoForBrowser(finalPath);
-      if (isValidFile(paddedPath)) finalPath = paddedPath;
-    } catch (err) {
-      console.warn(
-        "⚠️ Video padding failed, using original file:",
-        err.message,
-      );
+    const fileSize = fs.statSync(uploadResult.fullPath).size;
+
+    if (fileSize < 1024) {
+      return res.status(400).json({
+        success: false,
+        message: "Uploaded file is too small or corrupted",
+      });
     }
 
-    const fileSize = fs.statSync(finalPath).size;
+    // ================= SAVE DB =================
 
-    // ================= CREATE DB RECORD =================
     const mediaRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
       sub_operation_id: subOpId,
       sub_operation_name: sopName || null,
-      media_url: uploadResult.filePath, // original relative path
+      media_url: uploadResult.filePath,
       video_url: uploadResult.filePath,
       file_size: fileSize,
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
-      processed_with_ffmpeg: true,
-      rotation_fixed: false, // rotation is irrelevant now
+
+      processed_with_ffmpeg: false,
+      rotation_fixed: false,
       original_rotation: 0,
+
       status: "success",
     });
 
     console.log(`✅ Video uploaded successfully: ${finalFilename}`);
+
     return res.status(201).json({
       success: true,
       message: "Video uploaded successfully",
@@ -182,9 +203,11 @@ exports.uploadVideo = async (req, res, next) => {
     });
   } catch (error) {
     console.error("❌ Upload error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to upload video" });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload video",
+    });
   }
 };
 

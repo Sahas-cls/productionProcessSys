@@ -405,9 +405,10 @@ const VideoGallery = () => {
                       <video
                         ref={(el) => (videoRefs.current[item.so_media_id] = el)}
                         src={videoUrl}
-                        className={`w-full h-full object-cover transition-opacity duration-300 ${
+                        className={`w-full h-full object-contain transition-opacity duration-300 ${
                           isActive ? "opacity-100" : "opacity-0"
                         }`}
+                        style={{ aspectRatio: item.width / item.height }}
                         playsInline
                         preload="metadata"
                         crossOrigin="anonymous"
