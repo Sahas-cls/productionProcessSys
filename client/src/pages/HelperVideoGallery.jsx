@@ -382,7 +382,7 @@ const HelperVideoGallery = () => {
             const styleName = item.style?.style_name || "N/A";
 
             // Check if status is not "Success" (show pending card)
-            const isPending = item.status !== "Success";
+            const isPending = item.status.toLowerCase() !== "success";
 
             return (
               <motion.div

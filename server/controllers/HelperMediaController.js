@@ -78,17 +78,222 @@ exports.getVideos = async (req, res, next) => {
 /**
  * Upload video for helper operation
  */
+// exports.uploadVideos = async (req, res, next) => {
+//   console.log("📤 [Local Helper] Video upload request received");
+
+//   try {
+//     if (!req.file) {
+//       return res
+//         .status(400)
+//         .json({ message: "No video file uploaded", success: false });
+//     }
+
+//     const { hOpName, hoId, styleNo } = req.body;
+//     if (!hoId || !styleNo) {
+//       return res.status(400).json({
+//         message: "Missing required fields: hoId or styleNo",
+//         success: false,
+//       });
+//     }
+
+//     // ================= VALIDATE FOREIGN KEYS =================
+//     const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
+//     if (!styleRecord)
+//       return res
+//         .status(400)
+//         .json({ message: `Style ${styleNo} not found`, success: false });
+
+//     const helperExists = await Helper.findByPk(hoId);
+//     if (!helperExists)
+//       return res.status(400).json({
+//         message: `Helper operation ${hoId} not found`,
+//         success: false,
+//       });
+
+//     const styleIdDb = styleRecord.style_id;
+
+//     // ================= TEMP PATH =================
+//     const ext = path.extname(req.file.originalname).toLowerCase();
+//     const tempDir = path.join(__dirname, "../temp");
+//     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+
+//     let tempInputPath = path.join(tempDir, `helper_input_${Date.now()}${ext}`);
+
+//     if (req.file.buffer) {
+//       // buffer exists (memoryStorage)
+//       fs.writeFileSync(tempInputPath, req.file.buffer);
+//     } else if (req.file.path) {
+//       // file saved to disk by multer
+//       fs.copyFileSync(req.file.path, tempInputPath);
+//     } else {
+//       throw new Error("No file data available in req.file");
+//     }
+
+//     // ================= CREATE DB RECORD IMMEDIATELY =================
+//     const videoRecord = await HelperVideo.create({
+//       helper_id: hoId,
+//       style_id: styleIdDb,
+//       original_file_name: req.file.originalname,
+//       video_url: "processing",
+//       file_size: null,
+//       file_type: req.file.mimetype,
+//       processed_with_ffmpeg: false,
+//       rotation_fixed: false,
+//       original_rotation: 0,
+//       status: "processing",
+//       user_id: req.user?.userId || null,
+//     });
+
+//     // ================= RESPOND IMMEDIATELY =================
+//     res.status(201).json({
+//       message: "Video upload received, processing in background",
+//       success: true,
+//       data: {
+//         helper_video_id: videoRecord.helper_video_id,
+//         status: videoRecord.status,
+//       },
+//     });
+
+//     // ================= BACKGROUND PROCESSING =================
+//     (async () => {
+//       let tempOutputPath = null;
+//       try {
+//         // Detect rotation metadata
+//         const rotationInfo = await new Promise((resolve) => {
+//           ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
+//             if (err) return resolve({ hasRotation: false, rotation: 0 });
+//             const videoStream = metadata.streams?.find(
+//               (s) => s.codec_type === "video",
+//             );
+//             let rotation = 0;
+//             if (videoStream?.tags?.rotate)
+//               rotation = parseInt(videoStream.tags.rotate);
+//             else if (videoStream?.side_data_list) {
+//               const rotateData = videoStream.side_data_list.find(
+//                 (sd) => sd.rotation !== undefined,
+//               );
+//               if (rotateData) rotation = rotateData.rotation;
+//             }
+//             resolve({ hasRotation: rotation !== 0, rotation });
+//           });
+//         });
+
+//         tempOutputPath = path.join(
+//           tempDir,
+//           `helper_output_${Date.now()}${ext}`,
+//         );
+
+//         // FFmpeg processing
+//         await new Promise((resolve, reject) => {
+//           let command = ffmpeg(tempInputPath)
+//             .videoCodec("libx264")
+//             .audioCodec("aac")
+//             .outputOptions(["-movflags +faststart"])
+//             .on("end", resolve)
+//             .on("error", reject)
+//             .save(tempOutputPath);
+
+//           if (rotationInfo.hasRotation) {
+//             let transposeFilter = "transpose=1";
+//             if (rotationInfo.rotation === 90) transposeFilter = "transpose=1";
+//             else if (
+//               rotationInfo.rotation === 270 ||
+//               rotationInfo.rotation === -90
+//             )
+//               transposeFilter = "transpose=2";
+//             else if (rotationInfo.rotation === 180)
+//               transposeFilter = "transpose=1,transpose=1";
+
+//             command = ffmpeg(tempInputPath)
+//               .videoFilters(transposeFilter)
+//               .videoCodec("libx264")
+//               .audioCodec("aac")
+//               .outputOptions([
+//                 "-movflags +faststart",
+//                 "-map_metadata 0",
+//                 "-metadata:s:v:0 rotate=0",
+//               ])
+//               .on("end", resolve)
+//               .on("error", reject)
+//               .save(tempOutputPath);
+//           }
+//         });
+
+//         const processedBuffer = fs.readFileSync(tempOutputPath);
+
+//         // Generate final filename
+//         const now = new Date();
+//         const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+//         const sanitizedHOpName = (hOpName || "helper_operation")
+//           .replace(/[/\\?%*:|"<>]/g, "_")
+//           .replace(/\s+/g, "_")
+//           .substring(0, 40);
+
+//         const finalFilename = `${styleNo}_${hoId}_${sanitizedHOpName}_${dateTime}${ext}`;
+
+//         // Upload to local storage
+//         const uploadResult = await localStorage.uploadSubOpFile(
+//           processedBuffer,
+//           finalFilename,
+//           "video",
+//           hoId,
+//         );
+
+//         // Update DB record with final info
+//         await HelperVideo.update(
+//           {
+//             status: "success",
+//             video_url: uploadResult.filePath,
+//             file_size: processedBuffer.length,
+//             processed_with_ffmpeg: true,
+//             rotation_fixed: rotationInfo.hasRotation,
+//             original_rotation: rotationInfo.rotation,
+//           },
+//           { where: { helper_video_id: videoRecord.helper_video_id } },
+//         );
+
+//         // Cleanup temp files
+//         [tempInputPath, tempOutputPath].forEach((p) => {
+//           if (fs.existsSync(p)) fs.unlinkSync(p);
+//         });
+
+//         console.log(
+//           "✅ Background video processing finished for",
+//           finalFilename,
+//         );
+//       } catch (bgError) {
+//         console.error("❌ Background processing error:", bgError);
+//         if (videoRecord?.helper_video_id) {
+//           await HelperVideo.update(
+//             { status: "failed" },
+//             { where: { helper_video_id: videoRecord.helper_video_id } },
+//           );
+//         }
+//         // Cleanup temp files
+//         [tempInputPath, tempOutputPath].forEach((p) => {
+//           if (p && fs.existsSync(p)) fs.unlinkSync(p);
+//         });
+//       }
+//     })();
+//   } catch (error) {
+//     console.error("❌ Upload error:", error);
+//     res.status(500).json({ message: "Failed to upload video", success: false });
+//   }
+// };
+
 exports.uploadVideos = async (req, res, next) => {
-  console.log("📤 [Local Helper] Video upload request received");
+  console.log("📤 [Direct Upload] Video upload request received");
 
   try {
     if (!req.file) {
-      return res
-        .status(400)
-        .json({ message: "No video file uploaded", success: false });
+      return res.status(400).json({
+        message: "No video file uploaded",
+        success: false,
+      });
     }
 
     const { hOpName, hoId, styleNo } = req.body;
+
     if (!hoId || !styleNo) {
       return res.status(400).json({
         message: "Missing required fields: hoId or styleNo",
@@ -97,187 +302,100 @@ exports.uploadVideos = async (req, res, next) => {
     }
 
     // ================= VALIDATE FOREIGN KEYS =================
-    const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
-    if (!styleRecord)
-      return res
-        .status(400)
-        .json({ message: `Style ${styleNo} not found`, success: false });
+    const styleRecord = await Style.findOne({
+      where: { style_no: styleNo },
+    });
+
+    if (!styleRecord) {
+      return res.status(400).json({
+        message: `Style ${styleNo} not found`,
+        success: false,
+      });
+    }
 
     const helperExists = await Helper.findByPk(hoId);
-    if (!helperExists)
+    if (!helperExists) {
       return res.status(400).json({
         message: `Helper operation ${hoId} not found`,
         success: false,
       });
+    }
 
     const styleIdDb = styleRecord.style_id;
 
-    // ================= TEMP PATH =================
+    // ================= PREPARE FILE =================
     const ext = path.extname(req.file.originalname).toLowerCase();
-    const tempDir = path.join(__dirname, "../temp");
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    let tempInputPath = path.join(tempDir, `helper_input_${Date.now()}${ext}`);
+    const now = new Date();
+    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+      2,
+      "0",
+    )}${String(now.getDate()).padStart(2, "0")}_${String(
+      now.getHours(),
+    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(
+      now.getSeconds(),
+    ).padStart(2, "0")}`;
+
+    const sanitizedHOpName = (hOpName || "helper_operation")
+      .replace(/[/\\?%*:|"<>]/g, "_")
+      .replace(/\s+/g, "_")
+      .substring(0, 40);
+
+    const finalFilename = `${styleNo}_${hoId}_${sanitizedHOpName}_${dateTime}${ext}`;
+
+    // ================= GET FILE BUFFER =================
+    let fileBuffer;
 
     if (req.file.buffer) {
-      // buffer exists (memoryStorage)
-      fs.writeFileSync(tempInputPath, req.file.buffer);
+      // memoryStorage
+      fileBuffer = req.file.buffer;
     } else if (req.file.path) {
-      // file saved to disk by multer
-      fs.copyFileSync(req.file.path, tempInputPath);
+      // diskStorage
+      fileBuffer = fs.readFileSync(req.file.path);
     } else {
       throw new Error("No file data available in req.file");
     }
 
-    // ================= CREATE DB RECORD IMMEDIATELY =================
+    // ================= UPLOAD USING YOUR HELPER =================
+    const uploadResult = await localStorage.uploadSubOpFile(
+      fileBuffer,
+      finalFilename,
+      "video",
+      hoId,
+    );
+
+    // ================= SAVE DB =================
     const videoRecord = await HelperVideo.create({
       helper_id: hoId,
       style_id: styleIdDb,
       original_file_name: req.file.originalname,
-      video_url: "processing",
-      file_size: null,
+      video_url: uploadResult.filePath,
+      file_size: fileBuffer.length,
       file_type: req.file.mimetype,
       processed_with_ffmpeg: false,
       rotation_fixed: false,
       original_rotation: 0,
-      status: "processing",
+      status: "success",
       user_id: req.user?.userId || null,
     });
 
-    // ================= RESPOND IMMEDIATELY =================
+    // ================= CLEANUP (if disk storage) =================
+    if (req.file.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+
+    // ================= RESPONSE =================
     res.status(201).json({
-      message: "Video upload received, processing in background",
+      message: "Video uploaded successfully",
       success: true,
-      data: {
-        helper_video_id: videoRecord.helper_video_id,
-        status: videoRecord.status,
-      },
+      data: videoRecord,
     });
-
-    // ================= BACKGROUND PROCESSING =================
-    (async () => {
-      let tempOutputPath = null;
-      try {
-        // Detect rotation metadata
-        const rotationInfo = await new Promise((resolve) => {
-          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-            if (err) return resolve({ hasRotation: false, rotation: 0 });
-            const videoStream = metadata.streams?.find(
-              (s) => s.codec_type === "video",
-            );
-            let rotation = 0;
-            if (videoStream?.tags?.rotate)
-              rotation = parseInt(videoStream.tags.rotate);
-            else if (videoStream?.side_data_list) {
-              const rotateData = videoStream.side_data_list.find(
-                (sd) => sd.rotation !== undefined,
-              );
-              if (rotateData) rotation = rotateData.rotation;
-            }
-            resolve({ hasRotation: rotation !== 0, rotation });
-          });
-        });
-
-        tempOutputPath = path.join(
-          tempDir,
-          `helper_output_${Date.now()}${ext}`,
-        );
-
-        // FFmpeg processing
-        await new Promise((resolve, reject) => {
-          let command = ffmpeg(tempInputPath)
-            .videoCodec("libx264")
-            .audioCodec("aac")
-            .outputOptions(["-movflags +faststart"])
-            .on("end", resolve)
-            .on("error", reject)
-            .save(tempOutputPath);
-
-          if (rotationInfo.hasRotation) {
-            let transposeFilter = "transpose=1";
-            if (rotationInfo.rotation === 90) transposeFilter = "transpose=1";
-            else if (
-              rotationInfo.rotation === 270 ||
-              rotationInfo.rotation === -90
-            )
-              transposeFilter = "transpose=2";
-            else if (rotationInfo.rotation === 180)
-              transposeFilter = "transpose=1,transpose=1";
-
-            command = ffmpeg(tempInputPath)
-              .videoFilters(transposeFilter)
-              .videoCodec("libx264")
-              .audioCodec("aac")
-              .outputOptions([
-                "-movflags +faststart",
-                "-map_metadata 0",
-                "-metadata:s:v:0 rotate=0",
-              ])
-              .on("end", resolve)
-              .on("error", reject)
-              .save(tempOutputPath);
-          }
-        });
-
-        const processedBuffer = fs.readFileSync(tempOutputPath);
-
-        // Generate final filename
-        const now = new Date();
-        const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
-        const sanitizedHOpName = (hOpName || "helper_operation")
-          .replace(/[/\\?%*:|"<>]/g, "_")
-          .replace(/\s+/g, "_")
-          .substring(0, 40);
-
-        const finalFilename = `${styleNo}_${hoId}_${sanitizedHOpName}_${dateTime}${ext}`;
-
-        // Upload to local storage
-        const uploadResult = await localStorage.uploadSubOpFile(
-          processedBuffer,
-          finalFilename,
-          "video",
-          hoId,
-        );
-
-        // Update DB record with final info
-        await HelperVideo.update(
-          {
-            status: "success",
-            video_url: uploadResult.filePath,
-            file_size: processedBuffer.length,
-            processed_with_ffmpeg: true,
-            rotation_fixed: rotationInfo.hasRotation,
-            original_rotation: rotationInfo.rotation,
-          },
-          { where: { helper_video_id: videoRecord.helper_video_id } },
-        );
-
-        // Cleanup temp files
-        [tempInputPath, tempOutputPath].forEach((p) => {
-          if (fs.existsSync(p)) fs.unlinkSync(p);
-        });
-
-        console.log(
-          "✅ Background video processing finished for",
-          finalFilename,
-        );
-      } catch (bgError) {
-        console.error("❌ Background processing error:", bgError);
-        if (videoRecord?.helper_video_id) {
-          await HelperVideo.update(
-            { status: "failed" },
-            { where: { helper_video_id: videoRecord.helper_video_id } },
-          );
-        }
-        // Cleanup temp files
-        [tempInputPath, tempOutputPath].forEach((p) => {
-          if (p && fs.existsSync(p)) fs.unlinkSync(p);
-        });
-      }
-    })();
   } catch (error) {
     console.error("❌ Upload error:", error);
-    res.status(500).json({ message: "Failed to upload video", success: false });
+    res.status(500).json({
+      message: "Failed to upload video",
+      success: false,
+    });
   }
 };
 

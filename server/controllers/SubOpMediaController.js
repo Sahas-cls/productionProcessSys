@@ -29,7 +29,7 @@ function isValidFile(filePath) {
   }
 }
 
-// ==================== FFmpeg: PAD VIDEO FOR BROWSER ====================
+// ==================== FFmpeg: VIDEO FOR BROWSER ====================
 async function padVideoForBrowser(
   inputPath,
   targetWidth = 1920,
@@ -154,7 +154,7 @@ exports.uploadVideo = async (req, res) => {
 
     // ================= SAVE DB =================
     const mediaRecord = await SubOperationMedia.create({
-      style_id: styleIdDb,
+      style_id: styleIdDb, 
       operation_id: moId,
       sub_operation_id: subOpId,
       sub_operation_name: sopName || null,
@@ -313,7 +313,7 @@ exports.deleteSubOperationVideo = async (req, res, next) => {
 };
 
 // ==================== IMAGE CONTROLLERS ====================
-
+// 13
 exports.uploadImage = async (req, res, next) => {
   console.log("📤 [Local] Image upload request received");
   console.log("📋 Request body:", req.body);
