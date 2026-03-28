@@ -555,6 +555,7 @@ const AddStyle = ({ userRole }) => {
   const getImageUrl = (mediaUrl) => {
     if (!mediaUrl) return null;
     if (mediaUrl.startsWith("http")) return mediaUrl;
+    console.log("requesting image: ", "apiUrl/b2-files/", mediaUrl);
     return `${apiUrl}/api/b2-files/${mediaUrl}`;
   };
 
