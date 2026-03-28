@@ -52,11 +52,17 @@ const VideoGallery = () => {
     }
   };
 
+  // NOTE function to get video using video url
   const getVideoUrl = (item) => {
     if (item.media_url) {
       // Clean the URL path
       const cleanPath = item.media_url.replace(/^\//, "");
-      return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}`;
+      const encodedPath = encodeURIComponent(cleanPath);
+      console.log(
+        `video path: ${import.meta.env.VITE_API_URL}/api/b2-files/${encodedPath}`,
+      );
+      // return `${import.meta.env.VITE_API_URL}/api/b2-files/${cleanPath}`;
+      return `${import.meta.env.VITE_API_URL}/api/b2-files/${encodedPath}`;
     }
     return "";
   };

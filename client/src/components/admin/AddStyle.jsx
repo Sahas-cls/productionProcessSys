@@ -37,6 +37,18 @@ const AddStyle = ({ userRole }) => {
   const { stylesList, isLoading: styleLoading, refresh } = useStyles();
   const apiUrl = import.meta.env.VITE_API_URL;
 
+  // Track which existing images have been removed
+  const [removedExistingImages, setRemovedExistingImages] = useState({
+    front: false,
+    back: false,
+  });
+
+  // Track original existing images for comparison
+  const [originalExistingImages, setOriginalExistingImages] = useState({
+    front: null,
+    back: null,
+  });
+
   // Memoized filtered styles based on search term
   const filteredStyles = useMemo(() => {
     if (!searchTerm) return stylesList;
@@ -56,7 +68,7 @@ const AddStyle = ({ userRole }) => {
           .includes(searchTerm.toLowerCase()) ||
         style.style_description
           ?.toLowerCase()
-          .includes(searchTerm.toLowerCase())
+          .includes(searchTerm.toLowerCase()),
     );
   }, [stylesList, searchTerm]);
 
@@ -64,17 +76,16 @@ const AddStyle = ({ userRole }) => {
     try {
       const response = await axios.get(`${apiUrl}/api/styles/getExcel`, {
         withCredentials: true,
-        responseType: "blob", // important for Excel/other files
+        responseType: "blob",
       });
 
-      // Create a download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "styles.xlsx"); // filename
+      link.setAttribute("download", "styles.xlsx");
       document.body.appendChild(link);
       link.click();
-      link.remove(); // cleanup
+      link.remove();
     } catch (error) {
       console.error("Excel download failed:", error);
     }
@@ -84,16 +95,14 @@ const AddStyle = ({ userRole }) => {
   const handleSearch = (e) => {
     const value = e.target.value;
 
-    // Clear previous timeout if exists
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
 
-    // Set new timeout
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300) // 300ms debounce delay
+      }, 300),
     );
   };
 
@@ -111,6 +120,8 @@ const AddStyle = ({ userRole }) => {
     setIsAddStyle(!isAddStyle);
     setEditingStyle(null);
     setIsSubmitting(false);
+    setRemovedExistingImages({ front: false, back: false });
+    setOriginalExistingImages({ front: null, back: null });
     if (!isAddStyle) {
       formik.resetForm();
       setFrontImage(null);
@@ -120,19 +131,13 @@ const AddStyle = ({ userRole }) => {
     }
   };
 
-  // use state to store editing images
-  const [eiditingImgs, setEditingImgs] = useState({
-    frontImage: "",
-    backImage: "",
-  });
-
-  // Handle style edit
   // Handle style edit
   const handleEditStyle = (style) => {
-    // console.log("editing style: ", style);
     setEditingStyle(style);
     setIsAddStyle(true);
     setIsSubmitting(false);
+    setRemovedExistingImages({ front: false, back: false });
+
     formik.setValues({
       styleFactory: style.factory_id,
       styleCustomer: style.customer_id,
@@ -145,19 +150,27 @@ const AddStyle = ({ userRole }) => {
     });
     setCurrentCustomer(style.customer_id);
 
-    // Use the helper function here
     const mediaArray = style.style_medias || style.StyleMedia || [];
+    const frontMedia = mediaArray.find((media) => media.media_type === "front");
+    const backMedia = mediaArray.find((media) => media.media_type === "back");
 
-    if (mediaArray.length > 0) {
-      mediaArray.forEach((media) => {
-        const fullImageUrl = getImageUrl(media.media_url); // Using helper function
+    // Store original image URLs for comparison
+    setOriginalExistingImages({
+      front: frontMedia ? getImageUrl(frontMedia.media_url) : null,
+      back: backMedia ? getImageUrl(backMedia.media_url) : null,
+    });
 
-        if (media.media_type === "front") {
-          setFrontPreview(fullImageUrl);
-        } else if (media.media_type === "back") {
-          setBackPreview(fullImageUrl);
-        }
-      });
+    // Set previews
+    if (frontMedia) {
+      setFrontPreview(getImageUrl(frontMedia.media_url));
+    } else {
+      setFrontPreview(null);
+    }
+
+    if (backMedia) {
+      setBackPreview(getImageUrl(backMedia.media_url));
+    } else {
+      setBackPreview(null);
     }
   };
 
@@ -179,7 +192,7 @@ const AddStyle = ({ userRole }) => {
     try {
       const respons = await axios.delete(
         `${apiUrl}/api/styles/deleteStyle/${styleId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
       refresh();
       swal.fire({
@@ -201,20 +214,36 @@ const AddStyle = ({ userRole }) => {
     }
   };
 
-  // Handle removing an image
+  // Handle removing an image - FIXED VERSION
   const handleRemoveImage = (type) => {
     if (type === "front") {
+      // Clean up blob URL if it exists
       if (frontPreview && frontPreview.startsWith("blob:")) {
         URL.revokeObjectURL(frontPreview);
       }
+
+      // Clear the new image if any
       setFrontImage(null);
       setFrontPreview(null);
+
+      // If we're editing and this was an existing image, mark it as removed
+      if (editingStyle && originalExistingImages.front) {
+        setRemovedExistingImages((prev) => ({ ...prev, front: true }));
+      }
     } else if (type === "back") {
+      // Clean up blob URL if it exists
       if (backPreview && backPreview.startsWith("blob:")) {
         URL.revokeObjectURL(backPreview);
       }
+
+      // Clear the new image if any
       setBackImage(null);
       setBackPreview(null);
+
+      // If we're editing and this was an existing image, mark it as removed
+      if (editingStyle && originalExistingImages.back) {
+        setRemovedExistingImages((prev) => ({ ...prev, back: true }));
+      }
     }
   };
 
@@ -304,18 +333,18 @@ const AddStyle = ({ userRole }) => {
       .required("Style no is required")
       .matches(
         /^[A-Za-z0-9- /]+$/,
-        "Style number can only contain letters and numbers"
+        "Style number can only contain letters and numbers",
       ),
     styleName: yup
       .string()
       .required("Style name is required")
       .matches(
         /^[A-Za-z0-9- /]+$/,
-        "Style number can only contain letters and numbers"
+        "Style number can only contain letters and numbers",
       ),
   });
 
-  // Formik form handling
+  // Formik form handling - FIXED SUBMISSION LOGIC
   const formik = useFormik({
     initialValues: {
       styleFactory: "",
@@ -338,30 +367,51 @@ const AddStyle = ({ userRole }) => {
           formData.append(key, value);
         });
 
-        // Append front image if exists
+        // Append front image if exists (new upload)
         if (frontImage) {
           formData.append("frontImage", frontImage);
         }
 
-        // Append back image if exists
+        // Append back image if exists (new upload)
         if (backImage) {
           formData.append("backImage", backImage);
         }
 
-        // For editing, include existing images
+        // For editing, handle existing images properly
         if (editingStyle) {
           const existingImages = [];
-          if (frontPreview && !frontPreview.startsWith("blob:")) {
+
+          // Check front image - only include if NOT removed and NO new image uploaded
+          if (
+            originalExistingImages.front &&
+            !removedExistingImages.front &&
+            !frontImage
+          ) {
             existingImages.push({
-              path: frontPreview,
+              path: originalExistingImages.front,
               type: "front",
             });
           }
-          if (backPreview && !backPreview.startsWith("blob:")) {
+
+          // Check back image - only include if NOT removed and NO new image uploaded
+          if (
+            originalExistingImages.back &&
+            !removedExistingImages.back &&
+            !backImage
+          ) {
             existingImages.push({
-              path: backPreview,
+              path: originalExistingImages.back,
               type: "back",
             });
+          }
+
+          // Add flags for removed images to let backend know they should be deleted
+          if (removedExistingImages.front && originalExistingImages.front) {
+            formData.append("removeFrontImage", "true");
+          }
+
+          if (removedExistingImages.back && originalExistingImages.back) {
+            formData.append("removeBackImage", "true");
           }
 
           formData.append("existingImages", JSON.stringify(existingImages));
@@ -381,13 +431,13 @@ const AddStyle = ({ userRole }) => {
           response = await axios.put(
             `${apiUrl}/api/styles/editStyle/${editingStyle.style_id}`,
             formData,
-            config
+            config,
           );
         } else {
           response = await axios.post(
             `${apiUrl}/api/styles/addStyle`,
             formData,
-            config
+            config,
           );
         }
 
@@ -398,6 +448,8 @@ const AddStyle = ({ userRole }) => {
         setFrontPreview(null);
         setBackPreview(null);
         setCurrentCustomer(null);
+        setRemovedExistingImages({ front: false, back: false });
+        setOriginalExistingImages({ front: null, back: null });
 
         swal.fire({
           icon: "success",
@@ -446,7 +498,7 @@ const AddStyle = ({ userRole }) => {
   useEffect(() => {
     if (currentCustomer && seasonsList) {
       const seasons = seasonsList.filter(
-        (season) => season.customer_id == currentCustomer
+        (season) => season.customer_id == currentCustomer,
       );
       setFilteredSeasons(seasons);
     } else {
@@ -454,17 +506,37 @@ const AddStyle = ({ userRole }) => {
     }
   }, [currentCustomer, seasonsList]);
 
-  // Handle file upload for specific image type
+  // Handle file upload for specific image type - FIXED to clear removed flag when uploading new image
   const handleFileChange = (e, type) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (type === "front") {
+      // Clean up old blob URL if exists
+      if (frontPreview && frontPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(frontPreview);
+      }
+
       setFrontImage(file);
       setFrontPreview(URL.createObjectURL(file));
+
+      // If we're editing and this replaces an existing image, clear the removed flag
+      if (editingStyle) {
+        setRemovedExistingImages((prev) => ({ ...prev, front: false }));
+      }
     } else if (type === "back") {
+      // Clean up old blob URL if exists
+      if (backPreview && backPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(backPreview);
+      }
+
       setBackImage(file);
       setBackPreview(URL.createObjectURL(file));
+
+      // If we're editing and this replaces an existing image, clear the removed flag
+      if (editingStyle) {
+        setRemovedExistingImages((prev) => ({ ...prev, back: false }));
+      }
     }
   };
 
@@ -713,32 +785,6 @@ const AddStyle = ({ userRole }) => {
               )}
             </motion.div>
 
-            {/* po number */}
-            {/* <motion.div variants={itemVariants} className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                PO Number
-              </label>
-              <input
-                type="text"
-                name="poNumber"
-                value={formik.values.poNumber}
-                onChange={formik.handleChange}
-                onBlur={formik.handleBlur}
-                className="form-input-base w-full"
-                placeholder="PO No"
-              />
-              {formik.touched.poNumber && formik.errors.poNumber && (
-                <motion.div
-                  className="text-red-500 text-xs mt-1"
-                  initial={{ opacity: 0, y: -5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                >
-                  {formik.errors.poNumber}
-                </motion.div>
-              )}
-            </motion.div> */}
-
             {/* Description */}
             <motion.div variants={itemVariants} className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -791,7 +837,6 @@ const AddStyle = ({ userRole }) => {
                   </motion.label>
 
                   {/* Front Image Preview */}
-                  {/* Front Image Preview */}
                   <AnimatePresence>
                     {frontPreview && (
                       <motion.div
@@ -808,7 +853,6 @@ const AddStyle = ({ userRole }) => {
                             className="w-full h-40 object-contain rounded-md shadow"
                             onError={(e) => {
                               e.target.style.display = "none";
-                              // You could show a placeholder image here
                             }}
                           />
                           <motion.button
@@ -1008,21 +1052,19 @@ const AddStyle = ({ userRole }) => {
                       <div className="font-medium text-gray-900 flex items-center gap-x-6">
                         {style.style_medias?.[0]?.media_url && (
                           <img
-                            // Use proxy route with crossOrigin attribute:
                             src={`${apiUrl}/api/b2-files/${style.style_medias[0].media_url}`}
                             alt="Style preview"
                             width={60}
                             height={60}
                             loading="lazy"
-                            crossOrigin="anonymous" // ADD THIS
+                            crossOrigin="anonymous"
                             className="object-cover rounded"
                             onError={(e) => {
                               console.error(
                                 "Failed to load style image:",
-                                e.target.src
+                                e.target.src,
                               );
                               e.target.style.display = "none";
-                              // Optional: Add fallback or show placeholder
                               const fallback = document.createElement("div");
                               fallback.className =
                                 "w-[60px] h-[60px] bg-gray-200 rounded flex items-center justify-center";
@@ -1033,13 +1075,13 @@ const AddStyle = ({ userRole }) => {
           `;
                               e.target.parentNode.insertBefore(
                                 fallback,
-                                e.target
+                                e.target,
                               );
                             }}
                             onLoad={(e) => {
                               console.log(
                                 "✅ Style image loaded:",
-                                e.target.src
+                                e.target.src,
                               );
                             }}
                           />
@@ -1111,13 +1153,6 @@ const AddStyle = ({ userRole }) => {
           )}
         </table>
       </motion.div>
-      {/* <div className="">
-        <h1 className="text-3xl">img</h1>
-        <img
-          src={`${import.meta.env.VITE_API_URL}/media/STY-001-20_front.jpg`}
-          alt="this is a style image"
-        />
-      </div> */}
     </motion.div>
   );
 };

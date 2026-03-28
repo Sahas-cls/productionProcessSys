@@ -308,10 +308,217 @@ app.use("/api/test", test);
 // ==================== B2 PROXY ROUTE ====================
 // This replaces the old /media UNC path
 // Fixed backend route for video streaming with proper progressive playback support
+// app.get("/api/b2-files/*", async (req, res) => {
+//   console.log("video request called: 🎥🎥")
+//   try {
+//     const filePath = req.params[0];
+//     console.log("📁 [B2 Proxy] Requested file:", filePath);
+
+//     if (!filePath) {
+//       return res.status(400).json({ error: "No file specified" });
+//     }
+
+//     const params = {
+//       Bucket: process.env.B2_BUCKET_NAME || "guston-test-bucket",
+//       Key: filePath,
+//     };
+
+//     console.log("🔑 [B2 Proxy] Fetching:", params.Key);
+
+//     // **CRITICAL FIX: Set proper CORS headers for video streaming**
+//     const corsHeaders = {
+//       "Access-Control-Allow-Origin": "*", // CHANGED: Allow all origins for video
+//       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+//       "Access-Control-Allow-Headers":
+//         "Range, Content-Type, Authorization, Accept",
+//       "Access-Control-Allow-Credentials": "false", // CHANGED: Must be false when Allow-Origin is *
+//       "Access-Control-Expose-Headers":
+//         "Content-Range, Accept-Ranges, Content-Length, Content-Type, Content-Disposition",
+//       "Cache-Control": "public, max-age=31536000",
+//       "Cross-Origin-Resource-Policy": "cross-origin", // **ADD THIS**
+//       "Cross-Origin-Embedder-Policy": "credentialless", // **ADD THIS - allows cross-origin video**
+//     };
+
+//     // Handle OPTIONS preflight immediately
+//     if (req.method === "OPTIONS") {
+//       res.set(corsHeaders);
+//       return res.status(200).end();
+//     }
+
+//     try {
+//       // Get file metadata
+//       const headResult = await s3.headObject(params).promise();
+//       const fileSize = headResult.ContentLength;
+
+//       // IMPORTANT: Override Content-Type based on file extension for video files
+//       const fileExtension = path.extname(filePath).toLowerCase();
+//       let contentType = headResult.ContentType;
+
+//       // Force correct Content-Type for known video formats
+//       const videoMimeTypes = {
+//         ".mp4": "video/mp4",
+//         ".webm": "video/webm",
+//         ".mov": "video/quicktime",
+//         ".avi": "video/x-msvideo",
+//         ".mkv": "video/x-matroska",
+//         ".flv": "video/x-flv",
+//         ".wmv": "video/x-ms-wmv",
+//         ".m4v": "video/x-m4v",
+//         ".ogv": "video/ogg",
+//         ".3gp": "video/3gpp",
+//       };
+
+//       if (videoMimeTypes[fileExtension]) {
+//         contentType = videoMimeTypes[fileExtension];
+//       } else if (!contentType || contentType === "application/octet-stream") {
+//         contentType = getContentTypeFromExtension(filePath);
+//       }
+
+//       const isVideo = isVideoExtension(filePath);
+
+//       console.log(
+//         `📊 [B2 Proxy] File found: ${fileSize} bytes, Type: ${contentType}, Video: ${isVideo}`,
+//       );
+
+//       // **CRITICAL: Add headers for video streaming**
+//       if (isVideo) {
+//         corsHeaders["Accept-Ranges"] = "bytes";
+//         corsHeaders["Content-Type"] = contentType;
+
+//         // Additional headers for proper video playback
+//         corsHeaders["Access-Control-Allow-Headers"] =
+//           "Range, Content-Type, Authorization, Accept, Origin, X-Requested-With";
+
+//         // For progressive download support
+//         if (!req.headers.range) {
+//           corsHeaders["Content-Length"] = fileSize;
+//         }
+//       }
+
+//       // Handle Range request (for video seeking)
+//       const range = req.headers.range;
+
+//       if (isVideo && range) {
+//         console.log(`🎯 [B2 Proxy] Range requested: ${range}`);
+
+//         const parts = range.replace(/bytes=/, "").split("-");
+//         const start = parseInt(parts[0], 10);
+//         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+//         // Validate range
+//         if (start >= fileSize || end >= fileSize) {
+//           res.set({
+//             ...corsHeaders,
+//             "Content-Range": `bytes */${fileSize}`,
+//           });
+//           return res.status(416).send("Requested range not satisfiable");
+//         }
+
+//         const chunkSize = end - start + 1;
+
+//         console.log(
+//           `🎯 [B2 Proxy] Streaming bytes ${start}-${end} of ${fileSize}`,
+//         );
+
+//         // Stream specific range
+//         const streamParams = {
+//           ...params,
+//           Range: `bytes=${start}-${end}`,
+//         };
+
+//         const headers = {
+//           ...corsHeaders,
+//           "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+//           "Content-Length": chunkSize,
+//           "Content-Type": contentType,
+//           "Accept-Ranges": "bytes",
+//         };
+
+//         res.writeHead(206, headers);
+
+//         // Stream with error handling
+//         const stream = s3.getObject(streamParams).createReadStream();
+
+//         stream.on("error", (streamError) => {
+//           console.error("❌ [B2 Proxy] Stream error:", streamError.message);
+//           if (!res.headersSent) {
+//             res.set(corsHeaders);
+//             res
+//               .status(500)
+//               .json({ error: "Stream error", message: streamError.message });
+//           }
+//         });
+
+//         stream.pipe(res);
+//       } else {
+//         // Full file request (initial load or non-video)
+//         console.log(`📦 [B2 Proxy] Streaming full file (${fileSize} bytes)`);
+
+//         const headers = {
+//           ...corsHeaders,
+//           "Content-Length": fileSize,
+//           "Content-Type": contentType,
+//         };
+
+//         if (isVideo) {
+//           headers["Accept-Ranges"] = "bytes";
+//           headers["Content-Disposition"] = "inline"; // Play in browser, don't download
+//         }
+
+//         res.writeHead(200, headers);
+
+//         const stream = s3.getObject(params).createReadStream();
+
+//         stream.on("error", (streamError) => {
+//           console.error("❌ [B2 Proxy] Stream error:", streamError.message);
+//           if (!res.headersSent) {
+//             res.set(corsHeaders);
+//             res
+//               .status(500)
+//               .json({ error: "Stream error", message: streamError.message });
+//           }
+//         });
+
+//         stream.pipe(res);
+//       }
+//     } catch (headError) {
+//       console.error("❌ [B2 Proxy] File not found:", headError.message);
+
+//       res.set(corsHeaders);
+//       return res.status(404).json({
+//         error: "File not found",
+//         requested: filePath,
+//       });
+//     }
+//   } catch (error) {
+//     console.error("❌ [B2 Proxy] Unexpected error:", error.message);
+
+//     res.set({
+//       "Access-Control-Allow-Origin": "*",
+//       "Access-Control-Allow-Methods": "GET, OPTIONS",
+//       "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
+//       "Content-Type": "application/json",
+//       "Cross-Origin-Resource-Policy": "cross-origin",
+//     });
+
+//     return res.status(500).json({
+//       error: "Failed to stream file",
+//       message: error.message,
+//     });
+//   }
+// });
+
+// const path = require("path");
+
 app.get("/api/b2-files/*", async (req, res) => {
+  console.log("🎥 [B2 Proxy] Request received");
+
   try {
-    const filePath = req.params[0];
-    console.log("📁 [B2 Proxy] Requested file:", filePath);
+    // ✅ Get and decode file path
+    const rawPath = req.params[0];
+    const filePath = decodeURIComponent(rawPath);
+
+    console.log("📁 Requested file:", filePath);
 
     if (!filePath) {
       return res.status(400).json({ error: "No file specified" });
@@ -322,187 +529,146 @@ app.get("/api/b2-files/*", async (req, res) => {
       Key: filePath,
     };
 
-    console.log("🔑 [B2 Proxy] Fetching:", params.Key);
+    console.log("🔑 Fetching from B2:", params.Key);
 
-    // **CRITICAL FIX: Set proper CORS headers for video streaming**
+    // ✅ CORS headers
     const corsHeaders = {
-      "Access-Control-Allow-Origin": "*", // CHANGED: Allow all origins for video
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
       "Access-Control-Allow-Headers":
-        "Range, Content-Type, Authorization, Accept",
-      "Access-Control-Allow-Credentials": "false", // CHANGED: Must be false when Allow-Origin is *
+        "Range, Content-Type, Authorization, Accept, Origin, X-Requested-With",
       "Access-Control-Expose-Headers":
         "Content-Range, Accept-Ranges, Content-Length, Content-Type, Content-Disposition",
       "Cache-Control": "public, max-age=31536000",
-      "Cross-Origin-Resource-Policy": "cross-origin", // **ADD THIS**
-      "Cross-Origin-Embedder-Policy": "credentialless", // **ADD THIS - allows cross-origin video**
+      "Cross-Origin-Resource-Policy": "cross-origin",
+      "Cross-Origin-Embedder-Policy": "credentialless",
     };
 
-    // Handle OPTIONS preflight immediately
+    // ✅ Handle preflight
     if (req.method === "OPTIONS") {
       res.set(corsHeaders);
       return res.status(200).end();
     }
 
-    try {
-      // Get file metadata
-      const headResult = await s3.headObject(params).promise();
-      const fileSize = headResult.ContentLength;
+    // ✅ Get metadata from B2
+    const headResult = await s3.headObject(params).promise();
+    const fileSize = headResult.ContentLength;
 
-      // IMPORTANT: Override Content-Type based on file extension for video files
-      const fileExtension = path.extname(filePath).toLowerCase();
-      let contentType = headResult.ContentType;
+    let contentType = headResult.ContentType || "application/octet-stream";
 
-      // Force correct Content-Type for known video formats
-      const videoMimeTypes = {
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-        ".mov": "video/quicktime",
-        ".avi": "video/x-msvideo",
-        ".mkv": "video/x-matroska",
-        ".flv": "video/x-flv",
-        ".wmv": "video/x-ms-wmv",
-        ".m4v": "video/x-m4v",
-        ".ogv": "video/ogg",
-        ".3gp": "video/3gpp",
+    const fileExtension = path.extname(filePath).toLowerCase();
+
+    const videoMimeTypes = {
+      ".mp4": "video/mp4",
+      ".webm": "video/webm",
+      ".mov": "video/quicktime",
+      ".avi": "video/x-msvideo",
+      ".mkv": "video/x-matroska",
+      ".flv": "video/x-flv",
+      ".wmv": "video/x-ms-wmv",
+      ".m4v": "video/x-m4v",
+      ".ogv": "video/ogg",
+      ".3gp": "video/3gpp",
+    };
+
+    if (videoMimeTypes[fileExtension]) {
+      contentType = videoMimeTypes[fileExtension];
+    }
+
+    const isVideo = !!videoMimeTypes[fileExtension];
+
+    // ✅ Handle range requests (for videos)
+    const range = req.headers.range;
+
+    if (isVideo && range) {
+      console.log("🎯 Range request:", range);
+
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize || end >= fileSize) {
+        res.set({
+          ...corsHeaders,
+          "Content-Range": `bytes */${fileSize}`,
+        });
+        return res.status(416).send("Requested range not satisfiable");
+      }
+
+      const chunkSize = end - start + 1;
+
+      const streamParams = {
+        ...params,
+        Range: `bytes=${start}-${end}`,
       };
 
-      if (videoMimeTypes[fileExtension]) {
-        contentType = videoMimeTypes[fileExtension];
-      } else if (!contentType || contentType === "application/octet-stream") {
-        contentType = getContentTypeFromExtension(filePath);
-      }
+      const headers = {
+        ...corsHeaders,
+        "Content-Range": `bytes ${start}-${end}/${fileSize}`,
+        "Content-Length": chunkSize,
+        "Content-Type": contentType,
+        "Accept-Ranges": "bytes",
+      };
 
-      const isVideo = isVideoExtension(filePath);
+      res.writeHead(206, headers);
 
-      console.log(
-        `📊 [B2 Proxy] File found: ${fileSize} bytes, Type: ${contentType}, Video: ${isVideo}`,
-      );
+      const stream = s3.getObject(streamParams).createReadStream();
 
-      // **CRITICAL: Add headers for video streaming**
-      if (isVideo) {
-        corsHeaders["Accept-Ranges"] = "bytes";
-        corsHeaders["Content-Type"] = contentType;
+      stream.pipe(res);
 
-        // Additional headers for proper video playback
-        corsHeaders["Access-Control-Allow-Headers"] =
-          "Range, Content-Type, Authorization, Accept, Origin, X-Requested-With";
-
-        // For progressive download support
-        if (!req.headers.range) {
-          corsHeaders["Content-Length"] = fileSize;
+      stream.on("error", (err) => {
+        console.error("❌ Stream error:", err.message);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Streaming error" });
         }
+      });
+
+      return;
+    }
+
+    // ✅ Normal (full file) response
+    const headers = {
+      ...corsHeaders,
+      "Content-Length": fileSize,
+      "Content-Type": contentType,
+    };
+
+    // 🔥 ONLY add these for video (fix for your bug)
+    if (isVideo) {
+      headers["Accept-Ranges"] = "bytes";
+      headers["Content-Disposition"] = "inline";
+    }
+
+    res.writeHead(200, headers);
+
+    const stream = s3.getObject(params).createReadStream();
+
+    stream.pipe(res);
+
+    stream.on("error", (err) => {
+      console.error("❌ Stream error:", err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Streaming error" });
       }
+    });
+  } catch (err) {
+    console.error("❌ [B2 Proxy] Error FULL:", err);
 
-      // Handle Range request (for video seeking)
-      const range = req.headers.range;
-
-      if (isVideo && range) {
-        console.log(`🎯 [B2 Proxy] Range requested: ${range}`);
-
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-
-        // Validate range
-        if (start >= fileSize || end >= fileSize) {
-          res.set({
-            ...corsHeaders,
-            "Content-Range": `bytes */${fileSize}`,
-          });
-          return res.status(416).send("Requested range not satisfiable");
-        }
-
-        const chunkSize = end - start + 1;
-
-        console.log(
-          `🎯 [B2 Proxy] Streaming bytes ${start}-${end} of ${fileSize}`,
-        );
-
-        // Stream specific range
-        const streamParams = {
-          ...params,
-          Range: `bytes=${start}-${end}`,
-        };
-
-        const headers = {
-          ...corsHeaders,
-          "Content-Range": `bytes ${start}-${end}/${fileSize}`,
-          "Content-Length": chunkSize,
-          "Content-Type": contentType,
-          "Accept-Ranges": "bytes",
-        };
-
-        res.writeHead(206, headers);
-
-        // Stream with error handling
-        const stream = s3.getObject(streamParams).createReadStream();
-
-        stream.on("error", (streamError) => {
-          console.error("❌ [B2 Proxy] Stream error:", streamError.message);
-          if (!res.headersSent) {
-            res.set(corsHeaders);
-            res
-              .status(500)
-              .json({ error: "Stream error", message: streamError.message });
-          }
-        });
-
-        stream.pipe(res);
-      } else {
-        // Full file request (initial load or non-video)
-        console.log(`📦 [B2 Proxy] Streaming full file (${fileSize} bytes)`);
-
-        const headers = {
-          ...corsHeaders,
-          "Content-Length": fileSize,
-          "Content-Type": contentType,
-        };
-
-        if (isVideo) {
-          headers["Accept-Ranges"] = "bytes";
-          headers["Content-Disposition"] = "inline"; // Play in browser, don't download
-        }
-
-        res.writeHead(200, headers);
-
-        const stream = s3.getObject(params).createReadStream();
-
-        stream.on("error", (streamError) => {
-          console.error("❌ [B2 Proxy] Stream error:", streamError.message);
-          if (!res.headersSent) {
-            res.set(corsHeaders);
-            res
-              .status(500)
-              .json({ error: "Stream error", message: streamError.message });
-          }
-        });
-
-        stream.pipe(res);
-      }
-    } catch (headError) {
-      console.error("❌ [B2 Proxy] File not found:", headError.message);
-
-      res.set(corsHeaders);
+    // ✅ Proper error handling
+    if (
+      err.code === "NotFound" ||
+      err.code === "NoSuchKey" ||
+      err.$metadata?.httpStatusCode === 404
+    ) {
       return res.status(404).json({
         error: "File not found",
-        requested: filePath,
+        requested: req.params[0],
       });
     }
-  } catch (error) {
-    console.error("❌ [B2 Proxy] Unexpected error:", error.message);
-
-    res.set({
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Range, Authorization",
-      "Content-Type": "application/json",
-      "Cross-Origin-Resource-Policy": "cross-origin",
-    });
 
     return res.status(500).json({
-      error: "Failed to stream file",
-      message: error.message,
+      error: "Internal server error",
+      message: err.message,
     });
   }
 });

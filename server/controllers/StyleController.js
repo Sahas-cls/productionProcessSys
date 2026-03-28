@@ -372,16 +372,13 @@ exports.addStyle = async (req, res, next) => {
 };
 
 // for edit existing style
-// const b2Storage = require("../utils/b2Storage"); // Add this import
-
 exports.editStyle = async (req, res, next) => {
   if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
-    const error = new Error("You don't have permission to perform this action");
-    error.status = 403; // Forbidden
-    return next(error);
+    return res
+      .status(403)
+      .json({ message: "You don't have permission to perform this action" });
   }
 
-  console.log("edit route called");
   const styleId = req.params.id;
   const {
     styleFactory,
@@ -391,132 +388,155 @@ exports.editStyle = async (req, res, next) => {
     poNumber,
     styleName,
     styleDescription,
+    removeFront,
+    removeBack,
+    removeFrontImage, // Add this to accept frontend field
+    removeBackImage, // Add this to accept frontend field
+    existingImages, // Add this to handle existing images JSON if sent
   } = req.body;
 
-  const t = await sequelize.transaction(); // Add transaction for safety
+  const t = await sequelize.transaction();
 
   try {
-    // Validate style number - exclude current style from check
-    const findStyleNo = await Style.findAll({
+    // Check uniqueness
+    const duplicate = await Style.findOne({
       where: {
         style_no: styleNo,
         po_number: poNumber,
-        style_id: { [Op.ne]: styleId }, // Exclude current style
+        style_id: { [Op.ne]: styleId },
       },
       transaction: t,
     });
 
-    if (findStyleNo.length > 0) {
-      const error = new Error(
-        "The provided style number and po number already exist, please check your data",
-      );
-      error.status = 400;
-      throw error;
+    if (duplicate) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ message: "Style number & PO number already exist" });
     }
 
-    // Find style
     const currentStyle = await Style.findByPk(styleId, { transaction: t });
     if (!currentStyle) {
       await t.rollback();
-      const error = new Error("Cannot find that style in database");
-      error.status = 404;
-      return next(error);
+      return res.status(404).json({ message: "Style not found" });
     }
 
-    // Update style fields
-    const editStyle = {
-      factory_id: styleFactory,
-      customer_id: styleCustomer,
-      season_id: styleSeason,
-      style_no: styleNo,
-      style_name: styleName,
-      po_number: poNumber,
-      style_description: styleDescription,
-    };
-    await currentStyle.update(editStyle, { transaction: t });
+    // Update style info
+    await currentStyle.update(
+      {
+        factory_id: styleFactory,
+        customer_id: styleCustomer,
+        season_id: styleSeason,
+        style_no: styleNo,
+        style_name: styleName,
+        po_number: poNumber,
+        style_description: styleDescription,
+      },
+      { transaction: t },
+    );
 
-    // Handle media files if uploaded
-    const files = req.files;
+    const files = req.files || {};
 
-    // Helper function to handle image update
-    const handleImageUpdate = async (file, imageType) => {
-      // First, check if old media exists
-      const existingMedia = await StyleMedia.findOne({
-        where: {
-          style_id: styleId,
-          media_type: imageType,
-        },
+    const deleteMedia = async (type) => {
+      const media = await StyleMedia.findOne({
+        where: { style_id: styleId, media_type: type },
         transaction: t,
       });
+      if (!media) return;
 
-      // Delete old file from B2 if exists
-      if (existingMedia && existingMedia.b2_file_id) {
+      if (media.b2_file_id) {
         try {
-          await b2Storage.deleteFile(
-            existingMedia.b2_file_id,
-            existingMedia.media_url,
-          );
-          console.log(`Deleted old ${imageType} image from B2`);
-        } catch (deleteError) {
-          console.warn(
-            `Could not delete old ${imageType} image:`,
-            deleteError.message,
-          );
-          // Continue anyway - don't fail the whole update
+          await b2Storage.deleteFile(media.b2_file_id, media.media_url);
+        } catch (err) {
+          console.warn(`Failed to delete ${type} from B2:`, err.message);
         }
       }
 
-      // Upload new file to B2
-      const uploadResult = await saveImageToB2(
-        file,
-        styleNo,
-        imageType,
-        styleId,
-      );
+      await media.destroy({ transaction: t });
+    };
 
-      if (uploadResult) {
+    const uploadMedia = async (file, type) => {
+      const result = await saveImageToB2(file, styleNo, type, styleId);
+      if (result) {
         await StyleMedia.upsert(
           {
-            style_media_id: `${styleId}-${imageType}`,
+            style_media_id: `${styleId}-${type}`,
             style_id: styleId,
-            media_url: uploadResult.filePath,
-            b2_file_id: uploadResult.fileId,
-            media_type: imageType,
+            media_url: result.filePath,
+            b2_file_id: result.fileId,
+            media_type: type,
           },
           { transaction: t },
         );
-
-        return true;
       }
-
-      return false;
     };
 
-    // Process front image
-    if (files?.frontImage?.[0]) {
-      const frontFile = files.frontImage[0];
-      await handleImageUpdate(frontFile, "front");
+    // Helper function to check if an image should be removed
+    const shouldRemoveImage = (type) => {
+      // Check both possible field names (with and without "Image" suffix)
+      const removeField = type === "front" ? removeFront : removeBack;
+      const removeImageField =
+        type === "front" ? removeFrontImage : removeBackImage;
+
+      return (
+        removeField === "true" ||
+        removeField === true ||
+        removeImageField === "true" ||
+        removeImageField === true
+      );
+    };
+
+    // Handle FRONT image
+    if (files.frontImage?.[0]) {
+      // New image uploaded - delete old and upload new
+      await deleteMedia("front");
+      await uploadMedia(files.frontImage[0], "front");
+    } else if (shouldRemoveImage("front")) {
+      // No new image but removal flag is set - delete existing image
+      await deleteMedia("front");
+    }
+    // If no new image and no removal flag, keep existing image
+
+    // Handle BACK image
+    if (files.backImage?.[0]) {
+      // New image uploaded - delete old and upload new
+      await deleteMedia("back");
+      await uploadMedia(files.backImage[0], "back");
+    } else if (shouldRemoveImage("back")) {
+      // No new image but removal flag is set - delete existing image
+      await deleteMedia("back");
+    }
+    // If no new image and no removal flag, keep existing image
+
+    // Optional: Handle existingImages JSON if your frontend sends it
+    // This is for backward compatibility
+    if (existingImages) {
+      try {
+        const existingImagesArray =
+          typeof existingImages === "string"
+            ? JSON.parse(existingImages)
+            : existingImages;
+
+        // Process existing images - but this is not strictly needed since
+        // we're handling images through the remove flags and new uploads
+        console.log("Existing images to preserve:", existingImagesArray);
+      } catch (err) {
+        console.warn("Failed to parse existingImages:", err);
+      }
     }
 
-    // Process back image
-    if (files?.backImage?.[0]) {
-      const backFile = files.backImage[0];
-      await handleImageUpdate(backFile, "back");
-    }
-
-    // Commit transaction
     await t.commit();
-
-    console.log("update success");
     res.status(200).json({
       status: "success",
       message: "Style updated successfully",
-      styleId: styleId,
+      styleId,
     });
-  } catch (error) {
+  } catch (err) {
     await t.rollback();
-    console.error("Edit style error:", error);
-    return next(error);
+    console.error("Edit style error:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to update style", error: err.message });
   }
 };
 
