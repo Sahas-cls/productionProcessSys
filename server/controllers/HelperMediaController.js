@@ -64,7 +64,6 @@ exports.getVideos = async (req, res, next) => {
 };
 
 exports.uploadVideos = async (req, res, next) => {
-  // console.log("Helper video uploading 🧧🧧🧧");
   console.log("📤 [Helper] Video upload request received");
   console.log("📋 Request body:", req.body);
   console.log(
@@ -81,10 +80,6 @@ exports.uploadVideos = async (req, res, next) => {
 
   let uploadResult = null;
   let dbRecord = null;
-  let tempInputPath = null;
-  let tempOutputPath = null;
-  let sizeControlledPath = null;
-  let secondPassPath = null;
 
   try {
     if (!req.file) {
@@ -141,102 +136,62 @@ exports.uploadVideos = async (req, res, next) => {
 
     const isVideo = req.file.mimetype.startsWith("video/");
     const ext = path.extname(req.file.originalname).toLowerCase();
+
     let processedBuffer = req.file.buffer;
     let finalFilename = "";
-    let wasNormalized = false;
 
+    // ================= VIDEO COMPRESSION =================
     if (isVideo) {
       try {
-        const tempDir = path.join(__dirname, "../temp");
-        if (!fs.existsSync(tempDir)) {
-          fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        tempInputPath = path.join(tempDir, `helper_input_${Date.now()}${ext}`);
-        tempOutputPath = path.join(
-          tempDir,
-          `helper_output_${Date.now()}${ext}`,
-        );
-
-        await fs.promises.writeFile(tempInputPath, req.file.buffer);
-
-        const hasRotation = await new Promise((resolve) => {
-          ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-            if (err) return resolve(false);
-            const videoStream = metadata.streams?.find(
-              (s) => s.codec_type === "video",
-            );
-            const rotate =
-              videoStream?.tags?.rotate ??
-              videoStream?.side_data_list?.[0]?.rotation;
-            resolve(Boolean(rotate));
-          });
-        });
-
-        if (hasRotation) {
-          try {
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .outputOptions(["-map_metadata 0", "-c copy"])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(tempOutputPath);
-            });
-          } catch {
-            await new Promise((resolve, reject) => {
-              ffmpeg(tempInputPath)
-                .videoFilters("transpose=1")
-                .outputOptions(["-map_metadata 0"])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(tempOutputPath);
-            });
-          }
-
-          processedBuffer = await fs.promises.readFile(tempOutputPath);
-          req.file.size = processedBuffer.length;
-          wasNormalized = true;
-          console.log("✅ Video orientation normalized");
-        }
-
-        // ================= SIZE CONTROL COMPRESSION =================
         const MAX_SIZE_MB = 95;
         const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
-        const compressionSourcePath = wasNormalized
-          ? tempOutputPath
-          : tempInputPath;
+        const COMPRESSION_THRESHOLD_MB = 50;
+        const COMPRESSION_THRESHOLD_BYTES =
+          COMPRESSION_THRESHOLD_MB * 1024 * 1024;
 
-        const currentBuffer = wasNormalized
-          ? processedBuffer
-          : await fs.promises.readFile(tempInputPath);
+        console.log(
+          `📦 Incoming video size: ${(req.file.size / 1024 / 1024).toFixed(2)} MB`,
+        );
 
-        if (isVideo) {
-          console.log("Applying compressions...");
+        // 👉 Only compress if > 50MB
+        if (req.file.size > COMPRESSION_THRESHOLD_BYTES) {
+          console.log("⚙️ Compressing video (size > 50MB)...");
 
+          const tempDir = path.join(__dirname, "../temp");
+          if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+          }
+
+          const tempInputPath = path.join(
+            tempDir,
+            `helper_input_${Date.now()}${ext}`,
+          );
+          const tempOutputPath = path.join(
+            tempDir,
+            `helper_compressed_${Date.now()}.mp4`,
+          );
+
+          await fs.promises.writeFile(tempInputPath, req.file.buffer);
+
+          // Get duration
           const duration = await new Promise((resolve) => {
-            ffmpeg.ffprobe(compressionSourcePath, (err, metadata) => {
+            ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
               if (err) return resolve(60);
               resolve(metadata.format?.duration || 60);
             });
           });
 
           const audioBitrate = 128000;
-          const targetSizeBits = MAX_SIZE_BYTES * 8;
-
-          let videoBitrate =
-            Math.floor(targetSizeBits / duration) - audioBitrate;
+          let videoBitrate = Math.floor(
+            (MAX_SIZE_BYTES * 8 - audioBitrate) / duration,
+          );
 
           videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000));
           const bitrateK = Math.floor(videoBitrate / 1000) + "k";
 
-          sizeControlledPath = path.join(
-            path.dirname(tempInputPath),
-            `helper_size_${Date.now()}.mp4`,
-          );
-
           await new Promise((resolve, reject) => {
-            ffmpeg(compressionSourcePath)
+            ffmpeg(tempInputPath)
               .videoCodec("libx264")
               .audioCodec("aac")
               .outputOptions([
@@ -250,56 +205,29 @@ exports.uploadVideos = async (req, res, next) => {
               ])
               .on("end", resolve)
               .on("error", reject)
-              .save(sizeControlledPath);
+              .save(tempOutputPath);
           });
 
-          let finalBuffer = await fs.promises.readFile(sizeControlledPath);
-
-          // Second pass if still too big
-          if (finalBuffer.length > MAX_SIZE_BYTES) {
-            console.log("🔁 Second compression pass...");
-
-            const reducedBitrate = Math.floor(videoBitrate * 0.8);
-            const reducedBitrateK = Math.floor(reducedBitrate / 1000) + "k";
-
-            secondPassPath = path.join(
-              path.dirname(tempInputPath),
-              `helper_second_${Date.now()}.mp4`,
-            );
-
-            await new Promise((resolve, reject) => {
-              ffmpeg(sizeControlledPath)
-                .videoCodec("libx264")
-                .audioCodec("aac")
-                .outputOptions([
-                  "-preset veryfast",
-                  "-movflags +faststart",
-                  "-vf scale='min(1280,iw)':-2",
-                  "-b:v " + reducedBitrateK,
-                  "-maxrate " + reducedBitrateK,
-                  "-bufsize 2M",
-                  "-b:a 128k",
-                ])
-                .on("end", resolve)
-                .on("error", reject)
-                .save(secondPassPath);
-            });
-
-            finalBuffer = await fs.promises.readFile(secondPassPath);
-          }
-
-          processedBuffer = finalBuffer;
-          req.file.size = finalBuffer.length;
+          processedBuffer = await fs.promises.readFile(tempOutputPath);
+          req.file.size = processedBuffer.length;
 
           console.log(
-            `✅ Final compressed size: ${(processedBuffer.length / 1024 / 1024).toFixed(2)} MB`,
+            `✅ Compressed size: ${(processedBuffer.length / 1024 / 1024).toFixed(2)} MB`,
           );
+
+          // Cleanup temp files
+          [tempInputPath, tempOutputPath].forEach(async (p) => {
+            if (fs.existsSync(p)) await fs.promises.unlink(p);
+          });
+        } else {
+          console.log("⚡ Skipping compression (<= 50MB)");
         }
       } catch (err) {
-        console.warn("⚠️ Video processing failed:", err.message);
+        console.warn("⚠️ Compression failed, using original:", err.message);
       }
     }
 
+    // ================= FILE NAMING =================
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
       2,
@@ -335,6 +263,7 @@ exports.uploadVideos = async (req, res, next) => {
       ).toFixed(2)}MB)`,
     );
 
+    // ================= UPLOAD =================
     uploadResult = await b2HelperStorage.uploadHelperFile(
       processedBuffer,
       finalFilename,
@@ -342,6 +271,7 @@ exports.uploadVideos = async (req, res, next) => {
       hoId,
     );
 
+    // ================= DB SAVE =================
     dbRecord = await HelperVideo.create({
       helper_id: hoId,
       style_id: styleIdDb,
@@ -353,20 +283,7 @@ exports.uploadVideos = async (req, res, next) => {
       user_id: req.user?.userId || null,
     });
 
-    // Cleanup
-    const filesToDelete = [
-      tempInputPath,
-      tempOutputPath,
-      sizeControlledPath,
-      secondPassPath,
-    ];
-
-    for (const file of filesToDelete) {
-      if (file && fs.existsSync(file)) {
-        await fs.promises.unlink(file);
-      }
-    }
-
+    // ================= RESPONSE =================
     res.status(201).json({
       message: "Helper operation video uploaded successfully",
       success: true,
@@ -386,19 +303,6 @@ exports.uploadVideos = async (req, res, next) => {
       await HelperVideo.destroy({
         where: { helper_video_id: dbRecord.helper_video_id },
       });
-    }
-
-    const filesToDelete = [
-      tempInputPath,
-      tempOutputPath,
-      sizeControlledPath,
-      secondPassPath,
-    ];
-
-    for (const file of filesToDelete) {
-      if (file && fs.existsSync(file)) {
-        await fs.promises.unlink(file);
-      }
     }
 
     res.status(500).json({

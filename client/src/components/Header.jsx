@@ -60,7 +60,10 @@ const Header = ({ toggleSidebar, setToggleSidebar }) => {
           <GiHamburgerMenu size={24} />
         </button>
         <h1 className="text-xl font-bold text-black/70 font-sans italic">
-          {loggedUser?.userRole === "Admin" ? "Admin " : "User "}
+          {loggedUser?.userRole === "Admin" ||
+          loggedUser?.userRole === "SuperAdmin"
+            ? "Admin "
+            : "User "}
           Panel
         </h1>
         <button onClick={() => navigate("/test")}>
