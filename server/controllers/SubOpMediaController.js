@@ -51,80 +51,36 @@ exports.uploadVideo = async (req, res) => {
   }
 
   try {
-    // Validate foreign keys
+    // ==================== VALIDATIONS ====================
     const styleRecord = await Style.findOne({ where: { style_no: styleNo } });
     if (!styleRecord) throw new Error(`Style "${styleNo}" not found`);
     const styleIdDb = styleRecord.style_id;
 
     if (!(await MainOperation.findByPk(moId)))
       throw new Error(`Operation "${moId}" not found`);
+
     if (!(await SubOperation.findByPk(subOpId)))
       throw new Error(`Sub-operation "${subOpId}" not found`);
 
-    // ==================== VIDEO COMPRESSION ====================
+    // ==================== FILE PREPARATION ====================
     const ext = path.extname(req.file.originalname).toLowerCase();
-    const tempDir = path.join(__dirname, "../temp");
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
 
-    const tempInputPath = path.join(tempDir, `input_${Date.now()}${ext}`);
-    const tempOutputPath = path.join(tempDir, `compressed_${Date.now()}.mp4`);
-
-    await fs.promises.writeFile(tempInputPath, req.file.buffer);
-
-    const MAX_SIZE_MB = 95;
-    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-
-    // Estimate video duration
-    const duration = await new Promise((resolve) => {
-      ffmpeg.ffprobe(tempInputPath, (err, metadata) => {
-        if (err) return resolve(60);
-        resolve(metadata.format?.duration || 60);
-      });
-    });
-
-    const audioBitrate = 128000; // 128 kbps
-    let videoBitrate = Math.floor(
-      (MAX_SIZE_BYTES * 8 - audioBitrate) / duration,
-    );
-    videoBitrate = Math.max(800000, Math.min(videoBitrate, 2500000)); // Clamp
-    const bitrateK = Math.floor(videoBitrate / 1000) + "k";
-
-    // Compress video
-    await new Promise((resolve, reject) => {
-      ffmpeg(tempInputPath)
-        .videoCodec("libx264")
-        .audioCodec("aac")
-        .outputOptions([
-          "-preset veryfast",
-          "-movflags +faststart",
-          "-vf scale='min(1280,iw)':-2",
-          "-b:v " + bitrateK,
-          "-maxrate " + bitrateK,
-          "-bufsize 2M",
-          "-b:a 128k",
-        ])
-        .on("end", resolve)
-        .on("error", reject)
-        .save(tempOutputPath);
-    });
-
-    const processedBuffer = await fs.promises.readFile(tempOutputPath);
-
-    // ==================== UPLOAD TO B2 ====================
     const now = new Date();
     const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
       now.getDate(),
     ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(
       now.getMinutes(),
     ).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
+
     const sanitizedSopName = (sopName || "unknown")
       .replace(/[/\\?%*:|"<>]/g, "_")
       .replace(/\s+/g, "_");
 
-    const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_web_optimized_${dateTime}${ext}`;
+    const finalFilename = `${styleNo}_${moId}_${sopId}_${sanitizedSopName}_${dateTime}${ext}`;
 
+    // ==================== DIRECT UPLOAD ====================
     const uploadResult = await b2SubOpStorage.uploadSubOpFile(
-      processedBuffer,
+      req.file.buffer, // 🔥 direct buffer
       finalFilename,
       "video",
       subOpId,
@@ -139,23 +95,18 @@ exports.uploadVideo = async (req, res) => {
       media_url: uploadResult.filePath,
       video_url: uploadResult.filePath,
       b2_file_id: uploadResult.fileId,
-      file_size: processedBuffer.length,
+      file_size: req.file.size, // ✅ original size
       original_filename: req.file.originalname,
       uploaded_by: req.user?.userId || null,
       file_type: req.file.mimetype,
-      processed_with_ffmpeg: true,
+      processed_with_ffmpeg: false, // ❌ no processing
       rotation_fixed: false,
       original_rotation: null,
     });
 
-    // ==================== CLEANUP ====================
-    [tempInputPath, tempOutputPath].forEach(async (p) => {
-      if (fs.existsSync(p)) await fs.promises.unlink(p);
-    });
-
     // ==================== RESPONSE ====================
     res.status(201).json({
-      message: "Video uploaded and compressed successfully",
+      message: "Video uploaded successfully",
       success: true,
       data: {
         so_media_id: dbRecord.so_media_id,
@@ -163,7 +114,7 @@ exports.uploadVideo = async (req, res) => {
         video_url: uploadResult.filePath,
         file_name: finalFilename,
         original_filename: req.file.originalname,
-        file_size: processedBuffer.length,
+        file_size: req.file.size,
         file_type: req.file.mimetype,
       },
       storage: {
