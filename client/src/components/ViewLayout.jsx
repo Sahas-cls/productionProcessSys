@@ -19,8 +19,11 @@ const ViewLayout = () => {
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
   const apiUrl = import.meta.env.VITE_API_URL;
   console.log("layout list: ", layoutList);
+  const [lastVisit, setLastVisit] = useState(
+    localStorage.getItem("lastLayout") || null,
+  );
   // console.log("layout list: ", layoutList);
-
+  console.log("last visit: ", lastVisit);
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -276,20 +279,11 @@ const ViewLayout = () => {
                   <div className="p-5 cursor-pointer">
                     <div className="flex justify-center items-center mb-3">
                       <h2 className="text-lg md:text-lg font-bold text-gray-800 truncate text-center">
-                        Layout {layout.layout_id}
+                        Style {layout.style.style_no}
                       </h2>
                     </div>
 
                     <div className="px-1 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Style No
-                        </p>
-                        <p className="text-gray-700 font-medium">
-                          {layout.style.style_no}
-                        </p>
-                      </div>
-
                       {/* <div className="flex items-center justify-between">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Season ID
@@ -320,7 +314,7 @@ const ViewLayout = () => {
                         </p>
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between pb-4">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           Workstations count
                         </p>
@@ -329,6 +323,16 @@ const ViewLayout = () => {
                             ? "4"
                             : layout.workstation_count}
                         </p>
+                      </div>
+                      <div
+                        className={`flex items-center text-white justify-between h-1.5 rounded-full bg-gradient-to-r ${layout.layout_id == lastVisit ? "from-blue-500/50 to-green-600/50" : "from-gray-500/20 to-gray-600/20"} hover:animate-pulse`}
+                      >
+                        {/* <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider"> */}
+                        {/* Style No */}
+                        {/* <hr className="" /> */}
+                        {/* </p> */}
+                        {/* <p className="text-white font-medium"> */}
+                        {/* {layout.style.style_no} */}.{/* </p> */}
                       </div>
                     </div>
                   </div>
@@ -349,11 +353,12 @@ const ViewLayout = () => {
                       </p>
                       <button
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
+                          localStorage.setItem("lastLayout", layout.layout_id);
                           navigate("/workstation/list-view", {
                             state: { layout: layout.layout_id, style: layout },
-                          })
-                        }
+                          });
+                        }}
                       >
                         <FaArrowCircleRight className="text-xl text-blue-500 hover:scale-105 duration-150" />
                       </button>
