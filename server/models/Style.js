@@ -67,6 +67,7 @@ module.exports = (sequelize, DataTypes) => {
     },
   );
 
+  // NOTE ASSOCIATIONS
   Style.associate = (models) => {
     Style.belongsTo(models.Factory, {
       foreignKey: "factory_id",
@@ -92,6 +93,14 @@ module.exports = (sequelize, DataTypes) => {
     Style.hasMany(models.StyleMedia, {
       foreignKey: "style_id",
       as: "style_medias",
+      models,
+    });
+
+    Style.hasMany(models.SubOperationTechPack, {
+      foreignKey: "style_id",
+      as: "tech_packs",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     Style.hasMany(models.Helper, {

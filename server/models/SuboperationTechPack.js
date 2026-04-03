@@ -70,6 +70,8 @@ module.exports = (sequelize, DataTypes) => {
     SubOperationTechPack.belongsTo(models.Style, {
       foreignKey: "style_id",
       as: "style",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
     });
 
     // SubOperationTechPack.belongsTo(models.MainOperation, {
