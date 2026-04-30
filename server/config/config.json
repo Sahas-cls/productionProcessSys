@@ -2,7 +2,7 @@
   "development": {
     "username": "root",
     "password": null,
-    "database": "production_process_sys_live_2",
+    "database": "production_process_sys_live_3",
     "host": "127.0.0.1",
     "dialect": "mysql"
   },

@@ -648,6 +648,7 @@ exports.getImages = async (req, res, next) => {
 // Delete helper image
 exports.deleteImage = async (req, res, next) => {
   const { imageId } = req.params;
+  console.log("Image id: ", imageId);
   console.log("🗑️ [B2 Helper] Delete image request for ID:", imageId);
 
   if (!imageId || isNaN(imageId)) {
