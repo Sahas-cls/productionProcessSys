@@ -64,7 +64,7 @@ app.use(helmet());
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(morgan("combined"));
+app.use(morgan("dev"));
 
 // ==================== STATIC FILE SERVING ====================
 
