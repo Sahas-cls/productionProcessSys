@@ -17,7 +17,7 @@ import {
 import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
-import fixWebmDuration from "webm-duration-fix"; // Add this import
+import fixWebmDuration from "webm-duration-fix";
 
 const CameraOrBrowse = ({
   setIsUploading,
@@ -45,7 +45,6 @@ const CameraOrBrowse = ({
   const [showQualityMenu, setShowQualityMenu] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [videoDuration, setVideoDuration] = useState(0);
-  const [currentTime, setCurrentTime] = useState(0);
 
   // Refs
   const mediaRecorderRef = useRef(null);
@@ -55,7 +54,6 @@ const CameraOrBrowse = ({
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
   const qualityMenuRef = useRef(null);
-  const progressBarRef = useRef(null);
 
   // Quality presets
   const qualityPresets = {
@@ -195,7 +193,6 @@ const CameraOrBrowse = ({
       };
 
       recorder.onstop = async () => {
-        // Make this async
         try {
           if (recordedChunks.current.length === 0) {
             throw new Error("No data recorded");
@@ -210,7 +207,6 @@ const CameraOrBrowse = ({
           if (blob.type.includes("webm")) {
             try {
               console.log("Fixing WebM duration metadata...");
-              // Pass the actual recording duration to the fixer
               const fixedBlob = await fixWebmDuration(blob, {
                 duration: recordingTime,
               });
@@ -218,8 +214,12 @@ const CameraOrBrowse = ({
               blob = fixedBlob;
             } catch (fixError) {
               console.warn("Failed to fix WebM duration:", fixError);
-              // Continue with original blob if fix fails
             }
+          }
+
+          // Clean up old URL if exists
+          if (recordedVideo) {
+            URL.revokeObjectURL(recordedVideo);
           }
 
           const videoUrl = URL.createObjectURL(blob);
@@ -229,15 +229,25 @@ const CameraOrBrowse = ({
           setRecordedVideo(videoUrl);
           setRecordedBlob(blob);
           setVideoDuration(duration);
-          setCurrentTime(0);
           setStatus("preview");
           setVideoError(false);
           setRecordingTime(duration);
 
-          // Force video reload to use fixed metadata
+          // Set video source and load it
           if (previewVideoRef.current) {
             previewVideoRef.current.src = videoUrl;
             previewVideoRef.current.load();
+
+            // Force play attempt to ensure video loads
+            setTimeout(() => {
+              if (previewVideoRef.current) {
+                previewVideoRef.current.play().catch((e) => {
+                  console.log(
+                    "Autoplay prevented, user will need to click play",
+                  );
+                });
+              }
+            }, 100);
           }
         } catch (error) {
           console.error("Error in recorder.onstop:", error);
@@ -340,59 +350,6 @@ const CameraOrBrowse = ({
     }
   };
 
-  // Custom video controls for WebM duration fix
-  const handleVideoTimeUpdate = () => {
-    if (previewVideoRef.current) {
-      const video = previewVideoRef.current;
-      let current = video.currentTime;
-
-      // Fix for WebM where duration might be Infinity
-      if (video.duration === Infinity || isNaN(video.duration)) {
-        if (current > videoDuration) {
-          current = videoDuration;
-        }
-        setCurrentTime(current);
-      } else {
-        setCurrentTime(current);
-        // Update our duration if we finally got it
-        if (video.duration > 0 && video.duration !== videoDuration) {
-          setVideoDuration(video.duration);
-        }
-      }
-    }
-  };
-
-  const handleVideoLoadedMetadata = () => {
-    const video = previewVideoRef.current;
-    if (video) {
-      // If video duration is valid, use it
-      if (video.duration && isFinite(video.duration) && video.duration > 0) {
-        setVideoDuration(video.duration);
-      } else {
-        // For WebM with missing duration, use recorded time
-        setVideoDuration(recordingTime);
-      }
-    }
-  };
-
-  const handleSeek = (e) => {
-    const seekTime = parseFloat(e.target.value);
-    setCurrentTime(seekTime);
-    if (previewVideoRef.current) {
-      previewVideoRef.current.currentTime = seekTime;
-    }
-  };
-
-  const toggleVideoPlayback = () => {
-    if (previewVideoRef.current) {
-      if (previewVideoRef.current.paused) {
-        previewVideoRef.current.play().catch(console.error);
-      } else {
-        previewVideoRef.current.pause();
-      }
-    }
-  };
-
   // Handle file upload
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
@@ -409,16 +366,30 @@ const CameraOrBrowse = ({
     }
 
     setOriginalSize(file.size);
+
+    // Clean up old URL if exists
+    if (recordedVideo) {
+      URL.revokeObjectURL(recordedVideo);
+    }
+
     const videoUrl = URL.createObjectURL(file);
     setRecordedVideo(videoUrl);
     setRecordedBlob(file);
 
+    // Get duration from video
     const tempVideo = document.createElement("video");
+    tempVideo.preload = "metadata";
     tempVideo.src = videoUrl;
     tempVideo.onloadedmetadata = () => {
       const duration = tempVideo.duration;
       setRecordingTime(Math.floor(duration));
       setVideoDuration(duration);
+
+      // Set preview video source
+      if (previewVideoRef.current) {
+        previewVideoRef.current.src = videoUrl;
+        previewVideoRef.current.load();
+      }
     };
 
     setStatus("preview");
@@ -586,7 +557,9 @@ const CameraOrBrowse = ({
 
   // Reset state
   const resetState = () => {
-    if (recordedVideo) URL.revokeObjectURL(recordedVideo);
+    if (recordedVideo) {
+      URL.revokeObjectURL(recordedVideo);
+    }
     setRecordedVideo(null);
     setRecordedBlob(null);
     setStatus("idle");
@@ -594,7 +567,6 @@ const CameraOrBrowse = ({
     setOriginalSize(0);
     setCompressedSize(0);
     setVideoDuration(0);
-    setCurrentTime(0);
     setVideoError(false);
     stopCamera();
 
@@ -614,9 +586,13 @@ const CameraOrBrowse = ({
 
   useEffect(() => {
     return () => {
-      if (recordedVideo) URL.revokeObjectURL(recordedVideo);
+      if (recordedVideo) {
+        URL.revokeObjectURL(recordedVideo);
+      }
       stopCamera();
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
     };
   }, []);
 
@@ -746,15 +722,30 @@ const CameraOrBrowse = ({
             />
           ) : (
             <video
+              key={recordedVideo} // Force re-render when source changes
               ref={previewVideoRef}
-              src={recordedVideo}
               controls
+              autoPlay
               playsInline
               className="w-full h-full object-contain"
-              onLoadedMetadata={handleVideoLoadedMetadata}
+              onLoadedMetadata={(e) => {
+                const video = e.target;
+                if (
+                  video.duration &&
+                  isFinite(video.duration) &&
+                  video.duration > 0
+                ) {
+                  setVideoDuration(video.duration);
+                }
+                console.log("Video loaded, duration:", video.duration);
+              }}
               onError={(e) => {
                 console.error("Video error:", e);
                 setVideoError(true);
+              }}
+              onCanPlay={() => {
+                console.log("Video can play");
+                setVideoError(false);
               }}
             />
           )}
