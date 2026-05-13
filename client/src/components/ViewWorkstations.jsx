@@ -77,10 +77,10 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const fileUploadRef = useRef();
   const { state } = location;
   const { layoutId, styleId, styleNo: pStyleNo } = useParams();
-  console.log("state:;;;:;: ; ", state);
+  // console.log("state:;;;:;: ; ", state);
   useEffect(() => {
     if (state?.layout) {
-      console.log("setting up parent values using useLocation");
+      // console.log("setting up parent values using useLocation");
       setLayoutId(state.layout); //|| useParams.layoutId;
       setStyleNo(state.style.style.style_no); //|| useParams.styleId;
     }
@@ -230,7 +230,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       const response = await axios.get(
         `${apiUrl}/api/workstations/getWorkstations/${layoutId || state.layout}`,
       );
-      console.log("workstation list----: ", response);
+      // console.log("workstation list----: ", response);
       const sortedWorkstations = response.data.data.sort((a, b) => {
         const seqA = a.sequence_number !== null ? a.sequence_number : 9999;
         const seqB = b.sequence_number !== null ? b.sequence_number : 9999;
@@ -284,7 +284,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       });
       return;
     }
-    console.log(`Style upload data:`, uploadingData);
+    // console.log(`Style upload data:`, uploadingData);
   };
 
   const helperOpDelete = async (subOpId, workstation_id) => {
@@ -518,9 +518,9 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       subOpId: subOpId,
       operationType: "MainOperation",
     }));
-    console.log(
-      `moid: ${moId} sopId: ${sopId} soName: ${soName} subOpId: ${subOpId}`,
-    );
+    // console.log(
+    //   `moid: ${moId} sopId: ${sopId} soName: ${soName} subOpId: ${subOpId}`,
+    // );
   };
 
   const handleHWUploadData = (moId, sopId, soName, subOpId) => {
@@ -532,7 +532,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       hOpName: soName || "",
       operationType: "HelperOperation",
     }));
-    console.log("uploading data: ", uploadingData);
+    // console.log("uploading data: ", uploadingData);
   };
   // ============================================================================
 
@@ -709,7 +709,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
         sequence_number: index,
       }));
 
-      console.log("Saving order data:", orderData);
+      // console.log("Saving order data:", orderData);
 
       const response = await axios.put(
         `${apiUrl}/api/workstations/sequence-update`,

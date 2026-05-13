@@ -18,12 +18,12 @@ const ViewLayout = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
   const apiUrl = import.meta.env.VITE_API_URL;
-  console.log("layout list: ", layoutList);
+  // console.log("layout list: ", layoutList);
   const [lastVisit, setLastVisit] = useState(
     localStorage.getItem("lastLayout") || null,
   );
   // console.log("layout list: ", layoutList);
-  console.log("last visit: ", lastVisit);
+  // console.log("last visit: ", lastVisit);
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -85,7 +85,7 @@ const ViewLayout = () => {
         window.location.reload();
       }
     } catch (error) {
-      console.log("Error while trying to delete layout: ", error);
+      // console.log("Error while trying to delete layout: ", error);
     }
   };
 
@@ -112,7 +112,7 @@ const ViewLayout = () => {
   const currentItems =
     filteredLayouts?.slice(offset, offset + itemsPerPage) || [];
 
-  console.log("current items: ", currentItems);
+  // console.log("current items: ", currentItems);
 
   const handlePageClick = ({ selected }) => {
     setCurrentPage(selected);
