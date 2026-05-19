@@ -40,6 +40,8 @@ exports.uploadVideo = async (req, res) => {
       .json({ message: "No file uploaded", success: false });
   }
 
+  console.log("upload req body: ", req.body);
+
   const { styleNo, moId, sopId, sopName, subOpId } = req.body;
 
   if (!styleNo || !moId || !sopId || !subOpId) {

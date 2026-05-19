@@ -261,7 +261,7 @@ const CameraOrBrowse = ({
     const secs = roundedSeconds % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
-  
+
   const requestFullscreen = (element) => {
     if (element.requestFullscreen) element.requestFullscreen();
     else if (element.webkitRequestFullscreen) element.webkitRequestFullscreen();
@@ -380,9 +380,11 @@ const CameraOrBrowse = ({
         text: "Please record or select a video first",
         icon: "warning",
         timer: 3000,
+        showConfirmButton: false,
       });
       return;
     }
+
     if (!validateUploadData()) return;
 
     setUploading(true);
@@ -390,6 +392,7 @@ const CameraOrBrowse = ({
 
     try {
       const formData = new FormData();
+
       if (operationType === "HelperOperation") {
         formData.append("hOpName", uploadingData.hOpName || "");
         formData.append("hoId", uploadingData.hoId || "");
@@ -404,18 +407,51 @@ const CameraOrBrowse = ({
         formData.append("sopId", uploadingData.sopId || "");
         formData.append("sopName", uploadingData.sopName || "");
       }
+
       formData.append("recordingDuration", recordingTime || 0);
       formData.append("videoQuality", videoQuality);
       formData.append("originalSize", originalSize || recordedBlob.size);
       formData.append("compressedSize", compressedSize || recordedBlob.size);
 
       const timestamp = new Date().getTime();
-      const extension = recordedBlob.type?.includes("webm") ? "webm" : "mp4";
-      const fileName = `operation-recording-${timestamp}.${extension}`;
-      const videoFile = new File([recordedBlob], fileName, {
-        type: recordedBlob.type,
+
+      // Convert blob to proper file format
+      let videoFile;
+      let mimeType;
+      let fileExtension;
+
+      // Check what format the backend expects (usually MP4)
+      // Most backends prefer MP4 format
+      if (recordedBlob.type.includes("webm")) {
+        // If it's WebM, we need to convert or at least rename with proper extension
+        // Some backends accept WebM if extension is .webm
+        mimeType = "video/webm";
+        fileExtension = "webm";
+      } else if (recordedBlob.type.includes("mp4")) {
+        mimeType = "video/mp4";
+        fileExtension = "mp4";
+      } else {
+        // Default to MP4
+        mimeType = "video/mp4";
+        fileExtension = "mp4";
+      }
+
+      const fileName = `operation-recording-${timestamp}.${fileExtension}`;
+
+      // Create the File object with proper MIME type
+      videoFile = new File([recordedBlob], fileName, {
+        type: mimeType,
         lastModified: Date.now(),
       });
+
+      // Log the file details for debugging
+      console.log("Uploading file:", {
+        name: videoFile.name,
+        type: videoFile.type,
+        size: videoFile.size,
+        originalBlobType: recordedBlob.type,
+      });
+
       formData.append("video", videoFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -426,6 +462,10 @@ const CameraOrBrowse = ({
 
       const response = await axios.post(endpoint, formData, {
         withCredentials: true,
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Accept: "application/json",
+        },
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
             setUploadProgress(
@@ -449,11 +489,35 @@ const CameraOrBrowse = ({
       }
     } catch (error) {
       console.error("Upload error:", error);
-      Swal.fire({
-        title: "Upload Failed",
-        text: error.response?.data?.message || "Please try again",
-        icon: "error",
-      });
+
+      // Log more details about the error
+      if (error.response) {
+        console.error("Error response:", error.response.data);
+        console.error("Error status:", error.response.status);
+
+        Swal.fire({
+          title: "Upload Failed",
+          text:
+            error.response.data?.message ||
+            `Server error: ${error.response.status}`,
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+      } else if (error.request) {
+        Swal.fire({
+          title: "Upload Failed",
+          text: "No response from server. Please check your connection.",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+      } else {
+        Swal.fire({
+          title: "Upload Failed",
+          text: error.message || "Please try again",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+      }
     } finally {
       setUploading(false);
       setUploadProgress(0);

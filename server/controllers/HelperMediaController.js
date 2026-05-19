@@ -650,7 +650,7 @@ exports.getImages = async (req, res, next) => {
 exports.deleteImage = async (req, res, next) => {
   const { imageId } = req.params;
   console.log("Image id: ", imageId);
-  console.log("🗑️ [B2 Helper] Delete image request for ID:", imageId);
+  console.log("🗑️[B2 Helper] Delete image request for ID:", imageId);
 
   if (!imageId || isNaN(imageId)) {
     return res.status(400).json({
@@ -683,21 +683,21 @@ exports.deleteImage = async (req, res, next) => {
     // Delete from B2 if we have file ID
     if (imageRecord.b2_file_id && imageRecord.image_url) {
       try {
-        console.log("☁️ Deleting from Backblaze B2...");
+        console.log("Deleting from Backblaze B2...");
         await b2HelperStorage.deleteFile(
           imageRecord.b2_file_id,
           imageRecord.image_url,
         );
-        console.log("✅ B2 deletion successful");
+        console.log("B2 deletion successful");
       } catch (b2Error) {
-        console.error("❌ B2 deletion failed:", b2Error);
-        // Continue with DB deletion even if B2 fails
+        console.error("B2 deletion failed:", b2Error);
+        // Continue with DB deletion even if B2 fails....
       }
     }
 
     // Delete from database
     await imageRecord.destroy();
-    console.log("✅ Database record deleted");
+    console.log("Database record deleted");
 
     res.status(200).json({
       message: "Image deleted successfully",
