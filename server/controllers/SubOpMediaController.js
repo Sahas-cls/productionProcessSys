@@ -42,13 +42,13 @@ exports.uploadVideo = async (req, res) => {
 
   console.log("upload req body: ", req.body);
 
-  const { styleNo, moId, sopId, sopName, subOpId } = req.body;
+  const { styleNo, moId, sopId, sopName } = req.body;
 
-  if (!styleNo || !moId || !sopId || !subOpId) {
+  if (!styleNo || !moId || !sopId) {
     return res.status(400).json({
       message: "Missing required fields",
       success: false,
-      received: { styleNo, moId, sopId, subOpId },
+      received: { styleNo, moId, sopId },
     });
   }
 
@@ -61,8 +61,8 @@ exports.uploadVideo = async (req, res) => {
     if (!(await MainOperation.findByPk(moId)))
       throw new Error(`Operation "${moId}" not found`);
 
-    if (!(await SubOperation.findByPk(subOpId)))
-      throw new Error(`Sub-operation "${subOpId}" not found`);
+    if (!(await SubOperation.findByPk(sopId)))
+      throw new Error(`Sub-operation "${sopId}" not found`);
 
     // ==================== FILE PREPARATION ====================
     const ext = path.extname(req.file.originalname).toLowerCase();
@@ -85,14 +85,14 @@ exports.uploadVideo = async (req, res) => {
       req.file.buffer, // 🔥 direct buffer
       finalFilename,
       "video",
-      subOpId,
+      sopId,
     );
 
     // ==================== SAVE TO DB ====================
     const dbRecord = await SubOperationMedia.create({
       style_id: styleIdDb,
       operation_id: moId,
-      sub_operation_id: subOpId,
+      sub_operation_id: sopId,
       sub_operation_name: sopName || null,
       media_url: uploadResult.filePath,
       video_url: uploadResult.filePath,
