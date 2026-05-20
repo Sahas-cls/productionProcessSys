@@ -241,5 +241,6 @@ routes.post(
   generateFilenames, // Add filename generation
   controller.uploadImage,
 );
+routes.delete("/deleteImage/:ho_img_id", controller.deleteImage);
 
 module.exports = routes;

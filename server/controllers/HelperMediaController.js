@@ -283,6 +283,7 @@ exports.deleteVideo = async (req, res) => {
 // Helper Image Upload Controller
 exports.uploadImage = async (req, res, next) => {
   console.log("📤 [B2 Helper] Image upload request received");
+  // return;
   console.log("📋 Request body:", req.body);
   console.log(
     "📁 File details:",
@@ -298,7 +299,7 @@ exports.uploadImage = async (req, res, next) => {
 
   let uploadResult = null;
   let dbRecord = null;
-
+  // return;
   try {
     // Check if file uploaded
     if (!req.file) {
@@ -309,8 +310,12 @@ exports.uploadImage = async (req, res, next) => {
       });
     }
 
-    const { hOpName, hoId, styleNo, helperId, styleId } = req.body;
-    console.log("req.body, ", req.body);
+    const { hOpName, hoId, styleNo, styleId } = req.body;
+    // // console.log("req.body, ", req.body);
+    console.log(
+      "⛔⛔⛔: ",
+      `HopName: ${hOpName} | hoId: ${hoId} | styleNo: ${styleNo} | hoId: ${hoId} | styleId: ${styleId}`,
+    );
     // return;
 
     const style = await Style.findOne({ where: { style_no: styleNo } });
@@ -648,11 +653,11 @@ exports.getImages = async (req, res, next) => {
 
 // Delete helper image
 exports.deleteImage = async (req, res, next) => {
-  const { imageId } = req.params;
-  console.log("Image id: ", imageId);
-  console.log("🗑️[B2 Helper] Delete image request for ID:", imageId);
+  const { ho_img_id } = req.params;
+  console.log("Image id: ", ho_img_id);
+  console.log("🗑️[B2 Helper] Delete image request for ID:", ho_img_id);
 
-  if (!imageId || isNaN(imageId)) {
+  if (!ho_img_id || isNaN(ho_img_id)) {
     return res.status(400).json({
       message: "Invalid image ID",
       success: false,
@@ -663,7 +668,7 @@ exports.deleteImage = async (req, res, next) => {
 
   try {
     // Find the image record
-    imageRecord = await HelperImage.findByPk(imageId);
+    imageRecord = await HelperImage.findByPk(ho_img_id);
 
     if (!imageRecord) {
       console.log("❌ Image not found in database");
