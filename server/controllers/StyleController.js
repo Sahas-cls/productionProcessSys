@@ -251,10 +251,11 @@ exports.getStylesMo = async (req, res, next) => {
     return next(error);
   }
 };
-
 // for add new style
 exports.addStyle = async (req, res, next) => {
-  if (req?.user?.userRole !== "Admin" && req?.user?.userRole !== "SuperAdmin") {
+  const allowedRoles = ["Admin", "SuperAdmin"];
+  console.log(req.user);
+  if (!allowedRoles.includes(req?.user?.userRole)) {
     const error = new Error("You don't have permission to perform this action");
     error.status = 401;
     return next(error);

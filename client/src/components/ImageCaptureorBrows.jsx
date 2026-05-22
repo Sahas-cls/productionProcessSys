@@ -20,6 +20,7 @@ const ImageCaptureorBrows = ({
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [imageError, setImageError] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -44,65 +45,176 @@ const ImageCaptureorBrows = ({
     }
   }, [cameraFacing]);
 
-  // Start camera - using the working version from older code
+  // Start camera - FIXED: removed exact constraint
   const startCamera = async () => {
     setStatus("loading");
     setImageError(false);
+    setVideoReady(false);
 
     try {
+      // Stop any existing stream first
       stopCamera();
 
+      // Simple constraints without 'exact' to avoid OverconstrainedError
       const constraints = {
         video: {
-          facingMode: cameraFacing,
-          width: { ideal: isMobile ? 1280 : 1920 },
-          height: { ideal: isMobile ? 720 : 1080 },
+          facingMode: cameraFacing, // Removed the { exact: } wrapper
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
       };
 
+      console.log("Requesting camera with constraints:", constraints);
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log("Camera stream obtained successfully");
+
       setMediaStream(stream);
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        // Important: Use .catch() to handle play errors properly
-        await videoRef.current
-          .play()
-          .catch((e) => console.error("Play error:", e));
-      }
 
-      setStatus("ready");
+        // Wait for video metadata to load
+        videoRef.current.onloadedmetadata = () => {
+          console.log("Video metadata loaded");
+          videoRef.current
+            .play()
+            .then(() => {
+              console.log("Video playing successfully");
+              setVideoReady(true);
+              setStatus("ready");
+            })
+            .catch((e) => {
+              console.error("Play error:", e);
+              setStatus("error");
+              Swal.fire({
+                title: "Camera Error",
+                text: "Failed to start video stream",
+                icon: "error",
+                confirmButtonText: "OK",
+              });
+            });
+        };
+
+        videoRef.current.onerror = (e) => {
+          console.error("Video element error:", e);
+          setStatus("error");
+        };
+      }
     } catch (error) {
       console.error("Camera error:", error);
-      setStatus("error");
-      Swal.fire({
-        title: "Camera Error",
-        text: error.message || "Unable to access camera",
-        icon: "error",
-        confirmButtonText: "OK",
-      });
+
+      // Try fallback without specifying facingMode
+      if (
+        error.name === "OverconstrainedError" ||
+        error.name === "NotReadableError"
+      ) {
+        try {
+          console.log("Trying fallback without facingMode constraint");
+          const fallbackConstraints = {
+            video: true, // Just request any camera
+          };
+
+          const fallbackStream =
+            await navigator.mediaDevices.getUserMedia(fallbackConstraints);
+          console.log("Fallback camera stream obtained");
+
+          setMediaStream(fallbackStream);
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = fallbackStream;
+            videoRef.current.onloadedmetadata = () => {
+              videoRef.current
+                .play()
+                .then(() => {
+                  console.log("Fallback video playing");
+                  setVideoReady(true);
+                  setStatus("ready");
+                })
+                .catch((e) => console.error("Fallback play error:", e));
+            };
+          }
+        } catch (fallbackError) {
+          console.error("Fallback camera error:", fallbackError);
+          setStatus("error");
+          Swal.fire({
+            title: "Camera Error",
+            text: "Unable to access camera. Please check permissions.",
+            icon: "error",
+            confirmButtonText: "OK",
+          });
+        }
+      } else {
+        setStatus("error");
+        Swal.fire({
+          title: "Camera Error",
+          text: error.message || "Unable to access camera",
+          icon: "error",
+          confirmButtonText: "OK",
+        });
+      }
     }
   };
 
-  // Stop camera - simpler version that works
+  // Stop camera
   const stopCamera = () => {
     if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream.getTracks().forEach((track) => {
+        track.stop();
+      });
       setMediaStream(null);
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setVideoReady(false);
   };
 
   // Capture image
   const captureImage = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    console.log("Capture attempted - video ready:", videoReady);
+    console.log("Video ref:", videoRef.current);
+
+    if (!videoRef.current || !canvasRef.current) {
+      console.error("Missing refs:", {
+        video: !!videoRef.current,
+        canvas: !!canvasRef.current,
+      });
+      Swal.fire({
+        title: "Capture Failed",
+        text: "Camera not ready. Please wait a moment.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
 
     const video = videoRef.current;
+
+    // Check if video has valid dimensions
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.error(
+        "Video dimensions not ready",
+        video.videoWidth,
+        video.videoHeight,
+      );
+      Swal.fire({
+        title: "Capture Failed",
+        text: "Camera not fully initialized. Please wait a moment.",
+        icon: "error",
+        confirmButtonText: "OK",
+      });
+      return;
+    }
+
     const canvas = canvasRef.current;
     const context = canvas.getContext("2d");
 
     // Set canvas dimensions to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+
+    console.log("Capturing with dimensions:", canvas.width, canvas.height);
 
     // Draw current video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -111,6 +223,7 @@ const ImageCaptureorBrows = ({
     canvas.toBlob(
       (blob) => {
         if (!blob) {
+          console.error("Failed to create blob");
           Swal.fire({
             title: "Capture Failed",
             text: "Failed to capture image. Please try again.",
@@ -119,6 +232,8 @@ const ImageCaptureorBrows = ({
           });
           return;
         }
+
+        console.log("Image captured, size:", blob.size);
 
         // Check file size (5MB limit for images)
         if (blob.size > 5 * 1024 * 1024) {
@@ -133,7 +248,7 @@ const ImageCaptureorBrows = ({
         }
       },
       "image/jpeg",
-      0.9, // Using the working quality from older version
+      0.9,
     );
   };
 
@@ -414,14 +529,6 @@ const ImageCaptureorBrows = ({
         });
       }
 
-      console.log("Image upload details:", {
-        mimeType: mimeType,
-        fileName: fileName,
-        size: imageBlob.size,
-        operationType: operationType,
-        isHelperOp: isHelperOp,
-      });
-
       formData.append("image", imageFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -429,8 +536,6 @@ const ImageCaptureorBrows = ({
       const endpoint = isHelperOp
         ? `${apiUrl}/api/helperOpMedia/uploadImages`
         : `${apiUrl}/api/subOperationMedia/uploadImages`;
-
-      console.log("Upload endpoint:", endpoint);
 
       const response = await axios.post(endpoint, formData, {
         withCredentials: true,
@@ -447,8 +552,6 @@ const ImageCaptureorBrows = ({
         },
         timeout: 60000,
       });
-
-      console.log("Upload response:", response.data);
 
       if (response.status === 201 || response.status === 200) {
         if (response.data?.success === true) {
@@ -543,6 +646,7 @@ const ImageCaptureorBrows = ({
     setImageBlob(null);
     setStatus("idle");
     setImageError(false);
+    setVideoReady(false);
     stopCamera();
 
     if (fileInputRef.current) {
@@ -552,7 +656,14 @@ const ImageCaptureorBrows = ({
 
   // Switch camera
   const switchCamera = () => {
-    setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
+    if (status === "ready") {
+      stopCamera();
+      setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
+      // Small delay to ensure camera is stopped before restarting
+      setTimeout(() => {
+        startCamera();
+      }, 100);
+    }
   };
 
   // Handle image error
@@ -651,7 +762,7 @@ const ImageCaptureorBrows = ({
             </div>
           )}
 
-          {status === "ready" && (
+          {(status === "ready" || status === "loading") && (
             <video
               ref={videoRef}
               autoPlay
@@ -710,7 +821,7 @@ const ImageCaptureorBrows = ({
         )}
 
         {/* Camera indicator */}
-        {status === "ready" && (
+        {status === "ready" && videoReady && (
           <div className="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             Camera Ready
@@ -726,7 +837,12 @@ const ImageCaptureorBrows = ({
         {status === "idle" && (
           <p>📸 Open camera or upload an image (max 5MB)</p>
         )}
-        {status === "ready" && <p>Camera ready. Position and tap capture</p>}
+        {status === "ready" && videoReady && (
+          <p>Camera ready. Position and tap capture</p>
+        )}
+        {status === "ready" && !videoReady && (
+          <p>⏳ Initializing camera, please wait...</p>
+        )}
         {status === "preview" && !imageError && (
           <p>✅ Review your image and upload</p>
         )}
@@ -751,7 +867,6 @@ const ImageCaptureorBrows = ({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 onChange={handleFileUpload}
                 className="hidden"
                 disabled={uploading}
@@ -766,7 +881,7 @@ const ImageCaptureorBrows = ({
             <button
               onClick={captureImage}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-medium transition flex-1 justify-center text-sm"
-              disabled={uploading}
+              disabled={uploading || !videoReady}
             >
               📸 Capture Image
             </button>
@@ -774,7 +889,7 @@ const ImageCaptureorBrows = ({
               <button
                 onClick={switchCamera}
                 className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 px-4 py-3 rounded-lg font-medium transition min-w-[100px] justify-center text-sm"
-                disabled={uploading}
+                disabled={uploading || !videoReady}
               >
                 <FaSyncAlt /> Flip
               </button>
@@ -820,7 +935,7 @@ const ImageCaptureorBrows = ({
       </div>
 
       {/* Camera facing mode indicator */}
-      {status === "ready" && (
+      {status === "ready" && videoReady && (
         <div className="mt-4 text-center text-xs text-gray-400">
           Using {cameraFacing === "environment" ? "back" : "front"} camera
         </div>
