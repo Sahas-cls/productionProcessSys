@@ -108,6 +108,13 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "user_id",
       as: "helper_images",
     });
+
+    // relation with special videos
+    User.hasMany(models.SpecialVideos, {
+      foreignKey: "uploaded_by",
+      as: "special_videos",
+    });
+
     // Has created factories
     // User.hasMany(models.Factory, {
     //   foreignKey: "created_by",

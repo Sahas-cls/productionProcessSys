@@ -44,6 +44,8 @@ import HelperWorkstationPage from "./pages/HelperWorkstationPage";
 import HelperVideoGallery from "./pages/HelperVideoGallery";
 import HelperImageGallery from "./pages/HelperImageGallery";
 import TestUpload from "./pages/TestUpload";
+import SpecialVideoUpload from "./pages/SpecialVideoUpload";
+import SpecialVideos from "./pages/SpecialVideos";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -142,6 +144,15 @@ const App = () => {
           <Route path="/sub-operation/videos" element={<VideoGallery />} />
           <Route path="/sub-operation/images" element={<ImageGallery />} />
           <Route path="/style/tech-packs" element={<TechPackGallery />} />
+
+          {/* to upload special videos */}
+          <Route
+            path="/special-videos/upload-new-video"
+            element={<SpecialVideoUpload />}
+          />
+          {/* to watch uploaded special videos */}
+          <Route path="/special/uploaded-videos" element={<SpecialVideos />} />
+
           <Route
             path="/sub-operation/tech_packs"
             element={<TechPackGallery />}

@@ -12,6 +12,8 @@ import { MdSpaceDashboard } from "react-icons/md";
 import { TbNeedleThread } from "react-icons/tb";
 import { FaUsersCog } from "react-icons/fa";
 import { TbToolsOff } from "react-icons/tb";
+import { MdFolderSpecial } from "react-icons/md";
+import { RiVideoUploadFill } from "react-icons/ri";
 
 export const adminSidebarData = [
   {
@@ -102,12 +104,31 @@ export const adminSidebarData = [
   },
   {
     id: 10,
+    title: "Special Videos",
+    icon: MdFolderSpecial,
+    submenu: [
+      {
+        id: 91,
+        title: "Upload Video",
+        icon: RiVideoUploadFill,
+        navigateTo: "/special-videos/upload-new-video",
+      },
+      {
+        id: 92,
+        title: "Watch Videos",
+        icon: FaRegEye,
+        navigateTo: "/special/uploaded-videos",
+      },
+    ],
+  },
+  {
+    id: 11,
     title: "Report",
     icon: TbReport,
     navigateTo: "/reports",
   },
   {
-    id: 11,
+    id: 12,
     title: "Manage Users",
     icon: FaUsersCog,
     navigateTo: "/manage-users",

@@ -1,5 +1,5 @@
-import axios from "axios";
 import React, { useState, useRef, useEffect } from "react";
+import axios from "axios";
 import {
   FaCamera,
   FaUpload,
@@ -9,7 +9,6 @@ import {
   FaStop,
   FaExpand,
   FaCompress,
-  FaVideo,
   FaCog,
   FaPlay,
   FaPause,
@@ -18,13 +17,13 @@ import { RxCross2 } from "react-icons/rx";
 import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
 import fixWebmDuration from "webm-duration-fix";
+import { IoArrowBack } from "react-icons/io5";
+import { useNavigate } from "react-router-dom";
 
-const CameraOrBrowse = ({
-  setIsUploading,
-  uploadingData,
-  setUploadingMaterial,
-  operationType,
-}) => {
+const SpecialVideoUpload = () => {
+  // hooks
+  const navigate = useNavigate();
+
   // States
   const [mediaStream, setMediaStream] = useState(null);
   const [recording, setRecording] = useState(false);
@@ -47,6 +46,11 @@ const CameraOrBrowse = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
+  // Modal states
+  const [showVideoNameModal, setShowVideoNameModal] = useState(false);
+  const [videoName, setVideoName] = useState("");
+  const [videoDescription, setVideoDescription] = useState("");
+
   // Refs
   const mediaRecorderRef = useRef(null);
   const cameraVideoRef = useRef(null);
@@ -55,6 +59,7 @@ const CameraOrBrowse = ({
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
   const qualityMenuRef = useRef(null);
+  const modalRef = useRef(null);
 
   // Quality presets
   const qualityPresets = {
@@ -74,17 +79,38 @@ const CameraOrBrowse = ({
       ) {
         setShowQualityMenu(false);
       }
+      // Close modal if clicking outside
+      if (
+        modalRef.current &&
+        !modalRef.current.contains(event.target) &&
+        showVideoNameModal
+      ) {
+        setShowVideoNameModal(false);
+        setVideoName("");
+        setVideoDescription("");
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
+
+    // Handle escape key to close modal
+    const handleEscKey = (event) => {
+      if (event.key === "Escape" && showVideoNameModal) {
+        setShowVideoNameModal(false);
+        setVideoName("");
+        setVideoDescription("");
+      }
+    };
+    document.addEventListener("keydown", handleEscKey);
 
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscKey);
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
       if (videoUrl) URL.revokeObjectURL(videoUrl);
     };
-  }, []);
+  }, [showVideoNameModal]);
 
   const handleFullscreenChange = () => {
     setIsFullscreen(!!document.fullscreenElement);
@@ -278,9 +304,13 @@ const CameraOrBrowse = ({
   };
 
   const togglePlayPause = () => {
-    if (previewVideoRef.current) {
-      if (isPlaying) previewVideoRef.current.pause();
-      else previewVideoRef.current.play().catch(console.error);
+    const video = previewVideoRef.current;
+    if (!video) return;
+
+    if (video.paused) {
+      video.play().catch(console.error);
+    } else {
+      video.pause();
     }
   };
 
@@ -305,7 +335,6 @@ const CameraOrBrowse = ({
     }
   };
 
-  // FIXED: The upload button was disappearing because of videoError state and status not being set correctly
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -320,24 +349,18 @@ const CameraOrBrowse = ({
       return;
     }
 
-    // CRITICAL FIX: Reset error state FIRST
     setVideoError(false);
 
-    // Revoke old URL to prevent memory leaks
     if (videoUrl) {
       URL.revokeObjectURL(videoUrl);
     }
 
-    // Create new object URL
     const newUrl = URL.createObjectURL(file);
     setVideoUrl(newUrl);
     setRecordedBlob(file);
     setOriginalSize(file.size);
-
-    // CRITICAL FIX: Set status to preview IMMEDIATELY so buttons show
     setStatus("preview");
 
-    // Get duration from metadata (async, but won't affect button visibility)
     const tempVideo = document.createElement("video");
     tempVideo.preload = "metadata";
     tempVideo.onloadedmetadata = () => {
@@ -348,7 +371,6 @@ const CameraOrBrowse = ({
       tempVideo.remove();
     };
     tempVideo.onerror = () => {
-      // Even if metadata fails, we STILL show the video preview with buttons
       console.warn(
         "Could not load video metadata, but preview is still available",
       );
@@ -356,41 +378,11 @@ const CameraOrBrowse = ({
     };
     tempVideo.src = newUrl;
 
-    // Clear the input value so same file can be selected again
     event.target.value = null;
   };
 
-  const validateUploadData = () => {
-    if (!uploadingData) {
-      Swal.fire({
-        title: "Missing Data",
-        text: "Operation data is missing",
-        icon: "error",
-      });
-      return false;
-    }
-    if (operationType === "HelperOperation") {
-      if (!uploadingData.hoId) {
-        Swal.fire({
-          title: "Missing Data",
-          text: "Helper operation ID (hoId) is missing",
-          icon: "error",
-        });
-        return false;
-      }
-      if (!uploadingData.styleNo) {
-        Swal.fire({
-          title: "Missing Data",
-          text: "Style number (styleNo) is missing",
-          icon: "error",
-        });
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const handleUpload = async () => {
+  // Show modal when user clicks upload
+  const handleUploadClick = () => {
     if (!recordedBlob) {
       Swal.fire({
         title: "No Video",
@@ -402,29 +394,39 @@ const CameraOrBrowse = ({
       return;
     }
 
-    if (!validateUploadData()) return;
+    // Open modal to collect video name
+    setShowVideoNameModal(true);
+    setVideoName("");
+    setVideoDescription("");
+  };
 
+  // Handle actual upload after collecting video name
+  const handleConfirmUpload = async () => {
+    // Validate video name
+    if (!videoName.trim()) {
+      Swal.fire({
+        title: "Video Name Required",
+        text: "Please enter a name for your video",
+        icon: "warning",
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      return;
+    }
+
+    // Close modal
+    setShowVideoNameModal(false);
+
+    // Start upload process
     setUploading(true);
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
 
-      if (operationType === "HelperOperation") {
-        formData.append("hOpName", uploadingData.hOpName || "");
-        formData.append("hoId", uploadingData.hoId || "");
-        formData.append("styleNo", uploadingData.styleNo || "");
-      } else {
-        formData.append(
-          "styleId",
-          uploadingData.style_id || uploadingData.styleId || 1,
-        );
-        formData.append("styleNo", uploadingData.styleNo || "");
-        formData.append("moId", uploadingData.moId || "");
-        formData.append("sopId", uploadingData.sopId || "");
-        formData.append("sopName", uploadingData.sopName || "");
-      }
-
+      // Add video metadata
+      formData.append("videoName", videoName.trim());
+      formData.append("videoDescription", videoDescription.trim() || "");
       formData.append("recordingDuration", recordingTime || 0);
       formData.append("videoQuality", videoQuality);
       formData.append("originalSize", originalSize || recordedBlob.size);
@@ -447,26 +449,21 @@ const CameraOrBrowse = ({
         fileExtension = "mp4";
       }
 
-      const fileName = `operation-recording-${timestamp}.${fileExtension}`;
+      // Use the user-provided video name for the filename (sanitize it)
+      const sanitizedName = videoName
+        .trim()
+        .replace(/[^a-z0-9]/gi, "_")
+        .toLowerCase();
+      const fileName = `${sanitizedName}_${timestamp}.${fileExtension}`;
       videoFile = new File([recordedBlob], fileName, {
         type: mimeType,
         lastModified: Date.now(),
       });
 
-      console.log("Uploading file:", {
-        name: videoFile.name,
-        type: videoFile.type,
-        size: videoFile.size,
-        originalBlobType: recordedBlob.type,
-      });
-
       formData.append("video", videoFile);
 
       const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
-      const endpoint =
-        operationType === "HelperOperation"
-          ? `${apiUrl}/api/helperOpMedia/uploadVideos`
-          : `${apiUrl}/api/subOperationMedia/uploadVideos`;
+      const endpoint = `${apiUrl}/api/specialOp/upload-special-video`;
 
       const response = await axios.post(endpoint, formData, {
         withCredentials: true,
@@ -487,21 +484,17 @@ const CameraOrBrowse = ({
       if (response.status === 201 || response.status === 200) {
         await Swal.fire({
           title: "Success!",
-          text: "Video uploaded successfully!",
+          text: `Video "${videoName.trim()}" uploaded successfully!`,
           icon: "success",
           timer: 4000,
           showConfirmButton: false,
         });
         resetState();
-        if (setUploadingMaterial) setUploadingMaterial(null);
       }
     } catch (error) {
       console.error("Upload error:", error);
 
       if (error.response) {
-        console.error("Error response:", error.response.data);
-        console.error("Error status:", error.response.status);
-
         Swal.fire({
           title: "Upload Failed",
           text:
@@ -528,6 +521,8 @@ const CameraOrBrowse = ({
     } finally {
       setUploading(false);
       setUploadProgress(0);
+      setVideoName("");
+      setVideoDescription("");
     }
   };
 
@@ -557,10 +552,126 @@ const CameraOrBrowse = ({
 
   return (
     <div className="bg-gray-900 min-h-screen p-4 w-full mx-auto text-white">
+      {/* Video Name Modal */}
+      {showVideoNameModal && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div
+            ref={modalRef}
+            className="bg-gray-800 rounded-xl max-w-md w-full shadow-2xl animate-in fade-in zoom-in duration-200"
+          >
+            <div className="flex justify-between items-center p-4 border-b border-gray-700">
+              <h3 className="text-xl font-semibold text-white">
+                Video Information
+              </h3>
+              <button
+                onClick={() => {
+                  setShowVideoNameModal(false);
+                  setVideoName("");
+                  setVideoDescription("");
+                }}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <RxCross2 className="text-2xl" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Video Preview Info */}
+              {recordedBlob && (
+                <div className="bg-gray-700/50 rounded-lg p-3 mb-4">
+                  <div className="text-sm text-gray-300">
+                    <div className="flex justify-between mb-1">
+                      <span>File Size:</span>
+                      <span className="font-medium">
+                        {(recordedBlob.size / (1024 * 1024)).toFixed(2)} MB
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Duration:</span>
+                      <span className="font-medium">
+                        {formatTime(duration || recordingTime)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Video Name Input */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Video Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={videoName}
+                  onChange={(e) => setVideoName(e.target.value)}
+                  placeholder="Enter a name for your video"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  autoFocus
+                  maxLength={100}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  {videoName.length}/100 characters
+                </p>
+              </div>
+
+              {/* Video Description (Optional) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={videoDescription}
+                  onChange={(e) => setVideoDescription(e.target.value)}
+                  placeholder="Add a description for your video..."
+                  rows="4"
+                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                  maxLength={500}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  {videoDescription.length}/500 characters
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 p-4 border-t border-gray-700">
+              <button
+                onClick={() => {
+                  setShowVideoNameModal(false);
+                  setVideoName("");
+                  setVideoDescription("");
+                }}
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmUpload}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition font-medium"
+              >
+                Upload Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">
-          {status === "preview" ? "Video Preview" : "Record Operation"}
-        </h2>
+        <div className="flex items-center justify-center gap-2 ">
+          <button
+            className="bg-white rounded-full w-8 md:w-6 h-6 flex items-center justify-center group shadow-lg border border-white"
+            onClick={() => navigate(-1)}
+          >
+            <IoArrowBack
+              size={18}
+              className="text-black/70 group-hover:animate-ping"
+            />
+          </button>
+          <h2 className="text-xl font-semibold hidden md:block">
+            {status === "preview" ? "Video Preview" : "Video Upload & Record"}
+          </h2>
+          <h2 className="block md:hidden">&nbsp;</h2>
+        </div>
         <div className="flex items-center gap-2">
           <div className="relative" ref={qualityMenuRef}>
             <button
@@ -580,7 +691,9 @@ const CameraOrBrowse = ({
                       setVideoQuality(key);
                       setShowQualityMenu(false);
                     }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 ${videoQuality === key ? "bg-blue-600" : ""}`}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 ${
+                      videoQuality === key ? "bg-blue-600" : ""
+                    }`}
                   >
                     {preset.name}
                   </button>
@@ -588,7 +701,7 @@ const CameraOrBrowse = ({
               </div>
             )}
           </div>
-          <button
+          {/* <button
             className="p-1.5 hover:bg-red-600 rounded-lg"
             onClick={() => {
               if (!uploading && !recording) resetState();
@@ -596,7 +709,7 @@ const CameraOrBrowse = ({
             disabled={uploading || recording}
           >
             <RxCross2 className="text-xl" />
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -615,7 +728,7 @@ const CameraOrBrowse = ({
         </div>
       )}
 
-      <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-black mb-4 h-[60vh] min-h-[400px]">
+      <div className="relative rounded-xl overflow-hidden border border-gray-700 bg-black mb-4 h-[100vh] min-h-[400px]">
         {status === "recording" && (
           <div className="absolute top-3 left-3 z-20 bg-red-600/90 text-white px-2.5 py-1 rounded-md flex items-center shadow-lg">
             <div className="w-2 h-2 bg-white rounded-full mr-1.5 animate-pulse" />
@@ -662,23 +775,24 @@ const CameraOrBrowse = ({
                   }
                 }}
                 onError={() => {
-                  // Don't set videoError to true - just log it
                   console.warn(
                     "Video preview error, but buttons will still work",
                   );
                 }}
               />
 
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+              <div className="left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                 <input
                   type="range"
                   min="0"
                   max={duration || recordingTime || 1}
                   value={currentTime}
                   onChange={handleSeek}
-                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                  className="w-full"
                   style={{
-                    background: `linear-gradient(to right, #3b82f6 ${(currentTime / (duration || recordingTime || 1)) * 100}%, #4b5563 ${(currentTime / (duration || recordingTime || 1)) * 100}%)`,
+                    background: `linear-gradient(to right, #3b82f6 ${
+                      (currentTime / (duration || recordingTime || 1)) * 100
+                    }%, #4b5563 ${(currentTime / (duration || recordingTime || 1)) * 100}%)`,
                   }}
                 />
                 <div className="flex justify-between items-center mt-2">
@@ -706,7 +820,6 @@ const CameraOrBrowse = ({
         )}
       </div>
 
-      {/* ALWAYS show this section when status is preview - regardless of videoError */}
       {status === "preview" && recordedBlob && (
         <div className="bg-gray-800/30 rounded-lg p-3 mb-4">
           <div className="grid grid-cols-3 gap-4 text-sm">
@@ -730,25 +843,25 @@ const CameraOrBrowse = ({
         </div>
       )}
 
-      <div className="mb-6 text-center text-sm text-gray-300">
+      <div className="mb-6 text-center text-sm text-gray-300 hidden md:block">
         {status === "idle" && "Select an option to begin"}
-        {status === "ready" && "Camera ready - Position your operation"}
+        {status === "ready" && "Camera ready - Position your video"}
         {status === "recording" && `Recording - ${formatTime(recordingTime)}`}
         {status === "preview" && "Review your video"}
         {status === "error" && "Error occurred. Please try again."}
       </div>
 
-      <div className="space-y-3 max-w-md mx-auto">
+      <div className="space-y-3 mt-4 max-w-md mx-auto">
         {status === "idle" && (
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={startCamera}
-              className="flex flex-col items-center gap-2 bg-blue-600 hover:bg-blue-700 px-2 py-2 rounded-xl"
+              className="flex justify-center md:flex-col items-center gap-2 bg-blue-600 hover:bg-blue-700 px-2 py-4 rounded-md md:rounded-lg"
             >
               <FaCamera className="text-xl" />
               <div className="text-sm">Open Camera</div>
             </button>
-            <label className="flex flex-col items-center gap-2 bg-gray-700 hover:bg-gray-800 px-2 py-2 rounded-xl cursor-pointer">
+            <label className="flex justify-center md:flex-col items-center gap-2 bg-gray-700 hover:bg-gray-800 px-2 py-4 rounded-md md:rounded-lg cursor-pointer">
               <FaUpload className="text-xl" />
               <div className="text-sm">Upload Video</div>
               <input
@@ -774,19 +887,19 @@ const CameraOrBrowse = ({
               </div>
               <div className="text-left">
                 <div className="font-semibold">Start Recording</div>
-                <div className="text-xs opacity-75">Begin operation</div>
+                <div className="text-xs opacity-75">Begin recording</div>
               </div>
             </button>
             <div className="flex flex-col gap-2">
               <button
                 onClick={switchCamera}
-                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
+                className="px-2 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
               >
                 <FaSyncAlt /> Switch
               </button>
               <button
                 onClick={resetState}
-                className="px-4 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
+                className="px-2 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-sm"
               >
                 Cancel
               </button>
@@ -802,12 +915,11 @@ const CameraOrBrowse = ({
             <FaStop className="text-xl" />
             <div className="text-left">
               <div className="font-semibold">Stop Recording</div>
-              <div className="text-xs opacity-75">Finish operation</div>
+              <div className="text-xs opacity-75">Finish recording</div>
             </div>
           </button>
         )}
 
-        {/* FIXED: Buttons will ALWAYS show when status is preview - removed the && !videoError condition */}
         {status === "preview" && (
           <div className="flex gap-3">
             <button
@@ -822,7 +934,7 @@ const CameraOrBrowse = ({
               </div>
             </button>
             <button
-              onClick={handleUpload}
+              onClick={handleUploadClick}
               className="flex-1 flex items-center gap-3 bg-green-600 hover:bg-green-700 px-5 py-3 rounded-xl"
               disabled={uploading}
             >
@@ -846,12 +958,13 @@ const CameraOrBrowse = ({
         )}
       </div>
 
-      <div className="mt-8 pt-4 border-t border-gray-800 text-center text-xs text-gray-500">
-        Quality: {qualityPresets[videoQuality]?.name || "Medium"} •{" "}
-        {isMobile ? "📱 Mobile" : "🖥️ Desktop"}
+      <div className="mt-0 pt-4 md:pt-0 border-t border-gray-800 text-center text-xs text-gray-500">
+        Quality: {qualityPresets[videoQuality]?.name || "Medium"}{" "}
+        <span className="hidden">• </span>
+        {/* {isMobile ? "📱 Mobile" : "🖥️ Desktop"} */}
       </div>
     </div>
   );
 };
 
-export default CameraOrBrowse;
+export default SpecialVideoUpload;

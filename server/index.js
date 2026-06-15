@@ -305,6 +305,10 @@ app.use("/api/thread", threadTypes);
 const test = require("../server/Routes/TestRoutes.js");
 app.use("/api/test", test);
 
+// special operation videos
+const specialVideos = require("../server/Routes/SpecialOpRoutes.js");
+app.use("/api/specialOp", specialVideos);
+
 // ==================== B2 PROXY ROUTE ====================
 // This replaces the old /media UNC path
 // Fixed backend route for video streaming with proper progressive playback support

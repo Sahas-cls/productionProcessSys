@@ -19,3 +19,20 @@ input:-webkit-autofill {
 .form-input {
   @apply w-full px-2 py-2 rounded-lg border border-gray-400/60 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm;
 }
+
+
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #4b5563;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  cursor: pointer;
+}
