@@ -4,7 +4,7 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const authMiddleware = require("../middlewares/AuthUser");
-const attachmentMediaController = require("../controllers/attachmentMediaController");
+const attachmentMediaController = require("../controllers/AttachmentMediaController");
 
 // ==================== STORAGE CONFIGURATION ====================
 const storage = multer.memoryStorage();
