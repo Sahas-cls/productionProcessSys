@@ -115,6 +115,18 @@ module.exports = (sequelize, DataTypes) => {
       as: "special_videos",
     });
 
+    // Has many attachment media
+    User.hasMany(models.AttachmentMedia, {
+      foreignKey: "uploaded_by",
+      as: "attachment_medias",
+    });
+
+    // Has many jig operation media
+    User.hasMany(models.JigOperationMedia, {
+      foreignKey: "uploaded_by",
+      as: "jig_operation_medias",
+    });
+
     // Has created factories
     // User.hasMany(models.Factory, {
     //   foreignKey: "created_by",

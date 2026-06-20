@@ -680,3 +680,39 @@ exports.generateExcel = async (req, res, next) => {
     return next(error);
   }
 };
+
+// to live search function
+exports.getStylesLS = async (req, res, next) => {
+  const { keyword } = req.params;
+
+  try {
+    const query = {
+      limit: 10,
+      order: [["style_no", "ASC"]],
+    };
+
+    // Only add WHERE when keyword exists
+    if (keyword && keyword.trim() !== "") {
+      query.where = {
+        style_no: {
+          [Op.like]: `%${keyword}%`,
+        },
+      };
+    }
+
+    const subOperations = await Style.findAll(query);
+
+    return res.status(200).json({
+      success: true,
+      count: subOperations.length,
+      data: subOperations,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching styles",
+    });
+  }
+};

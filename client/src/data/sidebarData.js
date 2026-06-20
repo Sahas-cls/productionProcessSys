@@ -14,6 +14,8 @@ import { FaUsersCog } from "react-icons/fa";
 import { TbToolsOff } from "react-icons/tb";
 import { MdFolderSpecial } from "react-icons/md";
 import { RiVideoUploadFill } from "react-icons/ri";
+import { HiOutlineLightBulb } from "react-icons/hi";
+import { CgAttachment } from "react-icons/cg";
 
 export const adminSidebarData = [
   {
@@ -104,20 +106,20 @@ export const adminSidebarData = [
   },
   {
     id: 10,
-    title: "Special Videos",
-    icon: MdFolderSpecial,
+    title: "Innovations",
+    icon: HiOutlineLightBulb,
     submenu: [
       {
         id: 91,
-        title: "Upload Video",
-        icon: RiVideoUploadFill,
-        navigateTo: "/special-videos/upload-new-video",
+        title: "Attachments",
+        icon: CgAttachment,
+        navigateTo: "/innovations/attachments",
       },
       {
         id: 92,
-        title: "Watch Videos",
+        title: "Jig Operations",
         icon: FaRegEye,
-        navigateTo: "/special/uploaded-videos",
+        navigateTo: "/innovations/jig-operations",
       },
     ],
   },

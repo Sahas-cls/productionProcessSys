@@ -309,7 +309,14 @@ app.use("/api/test", test);
 const specialVideos = require("../server/Routes/SpecialOpRoutes.js");
 app.use("/api/specialOp", specialVideos);
 
-// ==================== B2 PROXY ROUTE ====================
+// sub operation routes
+const subOperations = require("../server/Routes/SubOperationRoute.js");
+app.use("/api/sub-op", subOperations);
+
+// jig operations
+const jigOperations = require("../server/Routes/JigOperationMediaRoutes.js");
+app.use("/api/jig-operations", jigOperations);
+
 // This replaces the old /media UNC path
 // Fixed backend route for video streaming with proper progressive playback support
 // app.get("/api/b2-files/*", async (req, res) => {
@@ -513,7 +520,6 @@ app.use("/api/specialOp", specialVideos);
 // });
 
 // const path = require("path");
-
 app.get("/api/b2-files/*", async (req, res) => {
   console.log("🎥 [B2 Proxy] Request received");
 
@@ -676,6 +682,9 @@ app.get("/api/b2-files/*", async (req, res) => {
     });
   }
 });
+
+const attachmentMediaRoutes = require("./Routes/AttachmentMediaRoutes.js");
+app.use("/api/attachment", attachmentMediaRoutes);
 
 // **CRITICAL: Add these options handler**
 app.options("/api/b2-files/*", (req, res) => {

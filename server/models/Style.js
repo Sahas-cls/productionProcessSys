@@ -122,6 +122,12 @@ module.exports = (sequelize, DataTypes) => {
       foreignKey: "style_id",
       as: "helper_images",
     });
+
+    // Has many jig operation media
+    Style.hasMany(models.JigOperationMedia, {
+      foreignKey: "style_id",
+      as: "jig_operation_medias",
+    });
   };
 
   return Style;

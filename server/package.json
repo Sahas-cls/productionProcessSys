@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon start index.js"
+    "dev": "nodemon --ignore 'node_modules/**' --ignore 'public/**' index.js"
   },
   "keywords": [],
   "author": "",

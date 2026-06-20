@@ -41,7 +41,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif/;
     const extname = allowedTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = allowedTypes.test(file.mimetype);
 
@@ -89,6 +89,10 @@ routes.get("/getPOList/:styleId", styleController.getPOList);
 
 routes.post("/getStylesMo", styleController.getStylesMo);
 
+// style live search
+// routes.post("/getStylesLS", styleController.getStylesLS);
+routes.get("/getStylesLS/:keyword", styleController.getStylesLS);
+
 // to create new style
 routes.post(
   "/addStyle",
@@ -100,7 +104,7 @@ routes.post(
   processFileNames, // Optional: Add filename processing
   styleValidator,
   validateUser,
-  styleController.addStyle
+  styleController.addStyle,
 );
 
 // to edit existing style
@@ -114,7 +118,7 @@ routes.put(
   processFileNames, // Optional: Add filename processing
   styleValidator,
   validateUser,
-  styleController.editStyle
+  styleController.editStyle,
 );
 
 // to generate excel file

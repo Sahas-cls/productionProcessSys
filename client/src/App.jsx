@@ -46,6 +46,10 @@ import HelperImageGallery from "./pages/HelperImageGallery";
 import TestUpload from "./pages/TestUpload";
 import SpecialVideoUpload from "./pages/SpecialVideoUpload";
 import SpecialVideos from "./pages/SpecialVideos";
+import AttachmentPage from "./pages/AttachmentPage";
+import JigOperationsPage from "./pages/JigOperationsPage";
+import AttachmentMediaPage from "./pages/AttachmentMediaPage";
+import JigOperationsMediaPage from "./pages/JigOperationsMediaPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -152,6 +156,34 @@ const App = () => {
           />
           {/* to watch uploaded special videos */}
           <Route path="/special/uploaded-videos" element={<SpecialVideos />} />
+
+          {/* NOTE  INNOVATION SEC NAV */}
+          {/* attachments */}
+          <Route path="/innovations/attachments" element={<AttachmentPage />} />
+          <Route
+            path="/innovations/attachments/:opId"
+            element={<AttachmentMediaPage />}
+          />
+
+          {/* Git operations */}
+          {/* <Route
+            path="/innovations/jig-operations"
+            element={<JigOperationsPage />}
+          />
+
+          <Route
+            path="/innovations/jig-operations/:opId"
+            element={<JigOperationsMediaPage />}
+          /> */}
+
+          <Route
+            path="/innovations/jig-operations"
+            element={<JigOperationsPage />}
+          />
+          <Route
+            path="/innovations/jig-operations/:operationName"
+            element={<JigOperationsMediaPage />}
+          />
 
           <Route
             path="/sub-operation/tech_packs"
