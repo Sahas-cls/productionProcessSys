@@ -1,13 +1,15 @@
-// JigOperationsPage.jsx
+// JigOperationsPage.jsx - With Search Bar
+
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useState, useEffect, useRef } from "react";
-import { FaUpload, FaVideo, FaImage, FaFolder } from "react-icons/fa";
+import { FaUpload, FaVideo, FaImage, FaFolder, FaSearch } from "react-icons/fa";
 import { FcFolder } from "react-icons/fc";
 import { useNavigate } from "react-router-dom";
 import { GrAttachment } from "react-icons/gr";
 import { MdOutlineArrowBack } from "react-icons/md";
 import axios from "axios";
 import AttachmentPopupMedia from "../components/AttachmentPopupMedia";
+import { FaTimes } from "react-icons/fa";
 
 const JigOperationsPage = () => {
   // NOTE STATES
@@ -15,12 +17,15 @@ const JigOperationsPage = () => {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isVideo, setIsVideo] = useState(true);
   const [operations, setOperations] = useState([]);
+  const [filteredOperations, setFilteredOperations] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // NOTE REFS
   const navigate = useNavigate();
   const uploadRef = useRef();
+  const searchInputRef = useRef(null);
 
   // NOTE FETCH OPERATIONS WITH MEDIA
   const fetchOperationsWithMedia = async () => {
@@ -38,6 +43,7 @@ const JigOperationsPage = () => {
 
       if (response.data.success) {
         setOperations(response.data.data);
+        setFilteredOperations(response.data.data);
       }
     } catch (error) {
       console.error("Error fetching operations:", error);
@@ -50,6 +56,45 @@ const JigOperationsPage = () => {
   useEffect(() => {
     fetchOperationsWithMedia();
   }, []);
+
+  // Filter operations based on search term
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredOperations(operations);
+      return;
+    }
+
+    const searchLower = searchTerm.toLowerCase().trim();
+    const filtered = operations.filter((operation) => {
+      // Search in operation name
+      const nameMatch = operation.operation_name
+        ?.toLowerCase()
+        .includes(searchLower);
+
+      // Search in operation numbers (if they exist)
+      const numberMatch = operation.operation_numbers?.some((num) =>
+        String(num).toLowerCase().includes(searchLower),
+      );
+
+      // Search in style names
+      const styleMatch = operation.styles?.some(
+        (style) =>
+          style.style_no?.toLowerCase().includes(searchLower) ||
+          style.style_name?.toLowerCase().includes(searchLower),
+      );
+
+      // Search in media types
+      const typeMatch =
+        ((searchLower === "image" || searchLower === "images") &&
+          operation.media_types.image > 0) ||
+        ((searchLower === "video" || searchLower === "videos") &&
+          operation.media_types.video > 0);
+
+      return nameMatch || numberMatch || styleMatch || typeMatch;
+    });
+
+    setFilteredOperations(filtered);
+  }, [searchTerm, operations]);
 
   // Handle click outside when upload drop down expanded
   useEffect(() => {
@@ -66,6 +111,24 @@ const JigOperationsPage = () => {
     };
   }, []);
 
+  // Keyboard shortcut for search (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      // Escape to clear search
+      if (e.key === "Escape" && searchTerm) {
+        setSearchTerm("");
+        searchInputRef.current?.blur();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [searchTerm]);
+
   const handleVideoUpload = () => {
     console.log("VIDEO CLICKED");
     setIsUploadOpen(true);
@@ -79,7 +142,6 @@ const JigOperationsPage = () => {
   };
 
   const handleFolderClick = (operationName) => {
-    // Navigate using operation name instead of ID
     navigate(
       `/innovations/jig-operations/${encodeURIComponent(operationName)}`,
       {
@@ -88,6 +150,11 @@ const JigOperationsPage = () => {
         },
       },
     );
+  };
+
+  const clearSearch = () => {
+    setSearchTerm("");
+    searchInputRef.current?.focus();
   };
 
   // Render loading state
@@ -114,8 +181,35 @@ const JigOperationsPage = () => {
           </button>
           <h2 className="text-4xl font-bold text-blue-500">Jig Operation</h2>
         </div>
+
+        {/* Search Bar - Centered */}
+        <div className="flex-1 max-w-md mx-auto px-4">
+          <div className="relative">
+            <FaSearch
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={16}
+            />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search operations... (Ctrl+K)"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+            />
+            {searchTerm && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <FaTimes size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* header actions */}
-        <div className="absolute right-4">
+        <div className="w-3/12 flex justify-end">
           <div className="" ref={uploadRef}>
             <button
               onClick={() => setIsUploadExp(!isUploadExp)}
@@ -197,66 +291,91 @@ const JigOperationsPage = () => {
       </header>
 
       <section className="">
-        <div className="m-16 max-h-[70vh]">
+        <div className="m-16 max-h-[70vh] overflow-y-auto">
+          {/* Search Results Info */}
+          {searchTerm && (
+            <div className="mb-4 text-sm text-gray-500">
+              Found {filteredOperations.length} result
+              {filteredOperations.length !== 1 ? "s" : ""} for "{searchTerm}"
+            </div>
+          )}
+
           {error ? (
             <div className="text-center text-red-500 py-8">{error}</div>
-          ) : operations.length === 0 ? (
+          ) : filteredOperations.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
-              <FaFolder size={48} className="mx-auto text-gray-300 mb-4" />
-              <p>No operations with media found</p>
-              <p className="text-sm mt-2">Upload some media to get started</p>
+              {searchTerm ? (
+                <>
+                  <FaSearch size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p>No operations found for "{searchTerm}"</p>
+                  <p className="text-sm mt-2">Try a different search term</p>
+                </>
+              ) : (
+                <>
+                  <FaFolder size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p>No operations with media found</p>
+                  <p className="text-sm mt-2">
+                    Upload some media to get started
+                  </p>
+                </>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-              {operations.map((operation) => (
-                <div
-                  className="cursor-pointer hover:border-2 p-4 hover:shadow-md duration-500"
-                  key={operation.operation_name} // Use name as key since it's grouped
+            <motion.div
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-6"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {filteredOperations.map((operation, index) => (
+                <motion.div
+                  className="cursor-pointer hover:border-2 p-4 hover:shadow-md duration-500 rounded-lg"
+                  key={operation.operation_name + index}
                   onClick={() => handleFolderClick(operation.operation_name)}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                 >
-                  <div className="flex items-center flex-col relative ">
+                  <div className="flex items-center flex-col relative">
                     <div className="relative">
                       <FcFolder
                         size={90}
                         className="group-hover:scale-110 transition-transform duration-200"
                       />
                       {operation.total_media > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                        <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-medium">
                           {operation.total_media}
                         </span>
                       )}
                       {operation.operation_count > 1 && (
-                        <span className="absolute -bottom-1 -right-1 bg-green-500 text-white text-[10px] rounded-full px-1.5 py-0.5">
+                        <span className="absolute -bottom-1 -right-1 bg-green-500 text-white text-[10px] rounded-full px-1.5 py-0.5 font-medium">
                           {operation.operation_count} ops
                         </span>
                       )}
                     </div>
                     <div className="text-center mt-1">
-                      <p className="font-medium text-sm text-balance">
+                      <p className="font-medium text-sm text-balance line-clamp-2">
                         {operation.operation_name}
                       </p>
                       <div className="flex items-center justify-center gap-2 mt-1">
                         {operation.media_types.image > 0 && (
-                          <span className="text-xs text-blue-500">
+                          <span className="text-xs text-blue-500 flex items-center gap-0.5">
                             📷 {operation.media_types.image}
                           </span>
                         )}
                         {operation.media_types.video > 0 && (
-                          <span className="text-xs text-purple-500">
+                          <span className="text-xs text-purple-500 flex items-center gap-0.5">
                             🎬 {operation.media_types.video}
                           </span>
                         )}
                       </div>
-                      {/* {operation.operation_count > 1 && (
-                        <p className="text-[10px] text-gray-400 mt-0.5">
-                          {operation.operation_ids.join(", ")}
-                        </p>
-                      )} */}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
@@ -266,7 +385,7 @@ const JigOperationsPage = () => {
         onClose={() => setIsUploadOpen(false)}
         isAttachment={false}
         isVideo={isVideo}
-        onUploadSuccess={fetchOperationsWithMedia} // Refresh after upload
+        onUploadSuccess={fetchOperationsWithMedia}
       />
     </div>
   );

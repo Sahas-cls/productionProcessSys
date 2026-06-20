@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+// AttachmentPopupMedia.jsx - Fixed version with proper number handling
+
+import React, { useState, useEffect, useRef } from "react";
 import { FaTimes, FaUpload, FaSpinner, FaCheck } from "react-icons/fa";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
@@ -7,7 +9,13 @@ import useStylesLiveSearch from "../hooks/useStylesLiveSearch";
 import axios from "axios";
 import Swal from "sweetalert2";
 
-const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
+const AttachmentPopupMedia = ({
+  isOpen,
+  onClose,
+  isAttachment,
+  isVideo,
+  onUploadSuccess,
+}) => {
   // Operation search states
   const [operationKeyword, setOperationKeyword] = useState("");
   const [debouncedOperationKeyword, setDebouncedOperationKeyword] =
@@ -29,6 +37,10 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
   const styleDropdownRef = useRef(null);
   const styleInputRef = useRef(null);
 
+  // Form state - using local state instead of Formik for the search fields
+  const [operationId, setOperationId] = useState("");
+  const [styleNo, setStyleNo] = useState("");
+
   // Use debounced keywords for API calls
   const { refresh: refreshOperations, subOpList } = useSubOperations(
     debouncedOperationKeyword,
@@ -37,6 +49,7 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
     debouncedStyleKeyword,
   );
 
+  console.log("sub operation list: ", subOpList);
   // Debounce operation search input
   useEffect(() => {
     if (operationSearchTimeoutRef.current) {
@@ -82,19 +95,18 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
   // Reset search when popup closes
   useEffect(() => {
     if (!isOpen) {
-      // Reset operation states
       setOperationKeyword("");
       setDebouncedOperationKeyword("");
       setIsSearchingOperation(false);
       setSelectedOperation(null);
       setIsOperationDropdownOpen(false);
-
-      // Reset style states
+      setOperationId("");
       setStyleKeyword("");
       setDebouncedStyleKeyword("");
       setIsSearchingStyle(false);
       setSelectedStyle(null);
       setIsStyleDropdownOpen(false);
+      setStyleNo("");
     }
   }, [isOpen]);
 
@@ -128,11 +140,14 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle operation selection
+  // Handle operation selection - FIXED: Send as number
   const handleSelectOperation = (operation, setFieldValue) => {
     setSelectedOperation(operation);
     setOperationKeyword(operation.sub_operation_name);
-    setFieldValue("operation", operation.sub_operation_id);
+    // Store as number (not string) for the backend
+    const operationIdNumber = Number(operation.sub_operation_id);
+    setOperationId(String(operationIdNumber)); // Display as string
+    setFieldValue("operation", operationIdNumber); // Send as number
     setIsOperationDropdownOpen(false);
     setIsSearchingOperation(false);
   };
@@ -140,8 +155,10 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
   // Handle style selection
   const handleSelectStyle = (style, setFieldValue) => {
     setSelectedStyle(style);
-    setStyleKeyword(style.style_no || style.style_name || style);
-    setFieldValue("styleNo", style.style_no || style);
+    const styleValue = style.style_no || style.style_name || style;
+    setStyleKeyword(styleValue);
+    setStyleNo(styleValue);
+    setFieldValue("styleNo", styleValue);
     setIsStyleDropdownOpen(false);
     setIsSearchingStyle(false);
   };
@@ -156,21 +173,23 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
           if (!value) return false;
 
           const allowedTypes = isVideo
-            ? ["video/mp4", "video/webm", "video/ogg"]
+            ? ["video/mp4", "video/webm", "video/ogg", "video/quicktime"]
             : ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
           return allowedTypes.includes(value.type);
         },
-      )
-      .test("fileSize", `File size must be less than 5MB`, (value) => {
-        if (!value) return false;
-        return value.size <= 5 * 1024 * 1024;
+      ),
+    operation: Yup.number()
+      .required("Operation is required")
+      .typeError("Operation ID must be a number"),
+    styleNo: Yup.string()
+      .required("Style number is required")
+      .test("not-empty", "Style number is required", (value) => {
+        return value && value.trim() !== "";
       }),
-    operation: Yup.string().required("Operation is required"),
-    styleNo: Yup.string().required("Style number is required"),
-    description: Yup.string()
-      .required("Description is required")
-      .min(10, "Description must contain at least 10 characters"),
+    // description: Yup.string()
+    //   .required("Description is required")
+    //   .min(10, "Description must contain at least 10 characters"),
   });
 
   if (!isOpen) return null;
@@ -195,7 +214,7 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
         <Formik
           initialValues={{
             attachment: null,
-            operation: "",
+            operation: "", // Will be set as number by setFieldValue
             styleNo: "",
             description: "",
           }}
@@ -204,10 +223,13 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
             values,
             { resetForm, setSubmitting, setFieldError },
           ) => {
+            console.log("🚀 Submitting with values:", values);
+
             try {
               const formData = new FormData();
               formData.append("attachment", values.attachment);
-              formData.append("operation", values.operation);
+              // Ensure operation is sent as a number
+              formData.append("operation", Number(values.operation));
               formData.append("styleNo", values.styleNo);
               formData.append("description", values.description);
               formData.append("mediaType", isVideo ? "video" : "image");
@@ -229,29 +251,34 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
                 },
               );
 
-              if (response.status == 200 || response.status == 201) {
+              if (response.status === 200 || response.status === 201) {
                 Swal.fire({
                   title: "Success",
-                  text: "File upload success",
+                  text: "File uploaded successfully",
                   icon: "success",
                 });
+
+                if (onUploadSuccess) {
+                  onUploadSuccess();
+                }
               }
               console.log("Upload successful:", response.data);
 
-              // Reset form and close on success
               resetForm();
               setOperationKeyword("");
               setDebouncedOperationKeyword("");
               setSelectedOperation(null);
+              setOperationId("");
               setStyleKeyword("");
               setDebouncedStyleKeyword("");
               setSelectedStyle(null);
+              setStyleNo("");
               onClose();
             } catch (error) {
               console.error("Upload failed:", error);
               Swal.fire({
                 title: "Error",
-                text: `File failed ${error.message}`,
+                text: `Upload failed: ${error.response?.data?.message || error.message}`,
                 icon: "error",
               });
 
@@ -273,295 +300,329 @@ const AttachmentPopupMedia = ({ isOpen, onClose, isAttachment, isVideo }) => {
             }
           }}
         >
-          {({ values, setFieldValue, isSubmitting }) => (
-            <Form>
-              {/* Body */}
-              <div className="space-y-5 p-6">
-                {/* File Upload */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Select a {isVideo ? "Video" : "Image"}
-                  </label>
-                  <input
-                    type="file"
-                    accept={isVideo ? "video/*" : "image/*"}
-                    onChange={(event) => {
-                      const file = event.currentTarget.files[0];
-                      if (file) {
-                        setFieldValue("attachment", file);
-                      }
-                    }}
-                    className="w-full rounded-md border p-2 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                  />
-                  <ErrorMessage
-                    name="attachment"
-                    component="p"
-                    className="mt-1 text-sm text-red-500"
-                  />
-                </div>
+          {({
+            values,
+            setFieldValue,
+            isSubmitting,
+            errors,
+            touched,
+            validateForm,
+          }) => {
+            // Debug logs
+            console.log("🔍 Form errors:", errors);
+            console.log("📝 Form values:", values);
+            console.log("🎯 Operation ID state:", operationId);
 
-                {/* Operation with Live Search - Direct dropdown */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Operation Name <span className="text-red-500">*</span>
-                  </label>
+            return (
+              <Form>
+                <div className="space-y-5 p-6">
+                  {/* File Upload */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Select a {isVideo ? "Video" : "Image"}{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept={isVideo ? "video/*" : "image/*"}
+                      onChange={(event) => {
+                        const file = event.currentTarget.files[0];
+                        if (file) {
+                          setFieldValue("attachment", file);
+                        }
+                      }}
+                      className="w-full rounded-md border p-2 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    {values.attachment && (
+                      <p className="mt-2 text-sm text-gray-600">
+                        Selected: {values.attachment.name} (
+                        {(values.attachment.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                    )}
+                    <ErrorMessage
+                      name="attachment"
+                      component="p"
+                      className="mt-1 text-sm text-red-500"
+                    />
+                  </div>
 
-                  <div className="relative" ref={operationDropdownRef}>
-                    <div className="relative">
-                      <input
-                        ref={operationInputRef}
-                        type="text"
-                        value={operationKeyword}
-                        onChange={(e) => {
-                          setOperationKeyword(e.target.value);
-                          if (e.target.value === "") {
-                            setSelectedOperation(null);
-                            setFieldValue("operation", "");
-                          }
-                        }}
-                        onFocus={() => {
-                          if (operationKeyword.length > 0) {
-                            setIsOperationDropdownOpen(true);
-                          }
-                        }}
-                        placeholder="Type to search operations..."
-                        className="w-full rounded-md border p-2 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                      />
-                      {isSearchingOperation && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <FaSpinner className="animate-spin text-gray-400" />
-                        </div>
-                      )}
-                      {selectedOperation && !isSearchingOperation && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <FaCheck className="text-green-500" />
-                        </div>
-                      )}
-                    </div>
+                  {/* Operation with Live Search - Direct dropdown */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Operation Name <span className="text-red-500">*</span>
+                    </label>
 
-                    {/* Operation Dropdown results */}
-                    {isOperationDropdownOpen && operationKeyword.length > 0 && (
-                      <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
-                        {isSearchingOperation ? (
-                          <div className="flex items-center justify-center p-4">
-                            <FaSpinner className="animate-spin text-gray-400 mr-2" />
-                            <span className="text-gray-500">Searching...</span>
+                    <div className="relative" ref={operationDropdownRef}>
+                      <div className="relative">
+                        <input
+                          ref={operationInputRef}
+                          type="text"
+                          value={operationKeyword}
+                          onChange={(e) => {
+                            setOperationKeyword(e.target.value);
+                            if (e.target.value === "") {
+                              setSelectedOperation(null);
+                              setOperationId("");
+                              setFieldValue("operation", "");
+                            }
+                          }}
+                          onFocus={() => {
+                            if (operationKeyword.length > 0) {
+                              setIsOperationDropdownOpen(true);
+                            }
+                          }}
+                          placeholder="Type to search operations..."
+                          className="w-full rounded-md border p-2 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        />
+                        {isSearchingOperation && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <FaSpinner className="animate-spin text-gray-400" />
                           </div>
-                        ) : subOpList && subOpList.length > 0 ? (
-                          <ul className="py-1">
-                            {subOpList.map((operation) => (
-                              <li
-                                key={operation.sub_operation_id}
-                                onClick={() =>
-                                  handleSelectOperation(
-                                    operation,
-                                    setFieldValue,
-                                  )
-                                }
-                                className={`cursor-pointer px-4 py-2 hover:bg-blue-50 transition-colors ${
-                                  selectedOperation?.sub_operation_id ===
-                                  operation.sub_operation_id
-                                    ? "bg-blue-50"
-                                    : ""
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span>{operation.sub_operation_name}</span>
-                                  {selectedOperation?.sub_operation_id ===
-                                    operation.sub_operation_id && (
-                                    <FaCheck
-                                      className="text-blue-500"
-                                      size={14}
-                                    />
-                                  )}
-                                </div>
-                                {operation.sub_operation_code && (
-                                  <span className="text-xs text-gray-500">
-                                    Code: {operation.sub_operation_code}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="p-4 text-center text-gray-500">
-                            No operations found for "{operationKeyword}"
+                        )}
+                        {selectedOperation && !isSearchingOperation && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <FaCheck className="text-green-500" />
                           </div>
                         )}
                       </div>
+
+                      {/* Operation Dropdown results */}
+                      {isOperationDropdownOpen &&
+                        operationKeyword.length > 0 && (
+                          <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                            {isSearchingOperation ? (
+                              <div className="flex items-center justify-center p-4">
+                                <FaSpinner className="animate-spin text-gray-400 mr-2" />
+                                <span className="text-gray-500">
+                                  Searching...
+                                </span>
+                              </div>
+                            ) : subOpList && subOpList.length > 0 ? (
+                              <ul className="py-1">
+                                {subOpList.map((operation) => (
+                                  <li
+                                    key={operation.sub_operation_id}
+                                    onClick={() => {
+                                      handleSelectOperation(
+                                        operation,
+                                        setFieldValue,
+                                      );
+                                      // Force validation after selection
+                                      setTimeout(() => validateForm(), 100);
+                                    }}
+                                    className={`cursor-pointer px-4 py-2 hover:bg-blue-50 transition-colors ${
+                                      selectedOperation?.sub_operation_id ===
+                                      operation.sub_operation_id
+                                        ? "bg-blue-50"
+                                        : ""
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span>
+                                        {operation.sub_operation_name}
+                                      </span>
+                                      {selectedOperation?.sub_operation_id ===
+                                        operation.sub_operation_id && (
+                                        <FaCheck
+                                          className="text-blue-500"
+                                          size={14}
+                                        />
+                                      )}
+                                    </div>
+                                    {operation.sub_operation_number && (
+                                      <span className="text-xs text-gray-500">
+                                        #{operation.sub_operation_number}
+                                      </span>
+                                    )}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="p-4 text-center text-gray-500">
+                                No operations found for "{operationKeyword}"
+                              </div>
+                            )}
+                          </div>
+                        )}
+                    </div>
+
+                    {/* Display selected operation name */}
+                    {selectedOperation && (
+                      <p className="mt-1 text-sm text-green-600">
+                        {/* ✓ Selected: {selectedOperation.sub_operation_name} (ID:{" "}
+                        {operationId}) */}
+                      </p>
                     )}
 
-                    {/* Hidden field for form validation */}
-                    <input
-                      type="hidden"
+                    <ErrorMessage
                       name="operation"
-                      value={values.operation}
+                      component="p"
+                      className="mt-1 text-sm text-red-500"
                     />
                   </div>
 
-                  <ErrorMessage
-                    name="operation"
-                    component="p"
-                    className="mt-1 text-sm text-red-500"
-                  />
-                </div>
+                  {/* Style Number with Live Search - Direct dropdown */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Style Number <span className="text-red-500">*</span>
+                    </label>
 
-                {/* Style Number with Live Search - Direct dropdown */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Style Number <span className="text-red-500">*</span>
-                  </label>
+                    <div className="relative" ref={styleDropdownRef}>
+                      <div className="relative">
+                        <input
+                          ref={styleInputRef}
+                          type="text"
+                          value={styleKeyword}
+                          onChange={(e) => {
+                            setStyleKeyword(e.target.value);
+                            if (e.target.value === "") {
+                              setSelectedStyle(null);
+                              setStyleNo("");
+                              setFieldValue("styleNo", "");
+                            }
+                          }}
+                          onFocus={() => {
+                            if (styleKeyword.length > 0) {
+                              setIsStyleDropdownOpen(true);
+                            }
+                          }}
+                          placeholder="Type to search styles..."
+                          className="w-full rounded-md border p-2 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        />
+                        {isSearchingStyle && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <FaSpinner className="animate-spin text-gray-400" />
+                          </div>
+                        )}
+                        {selectedStyle && !isSearchingStyle && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <FaCheck className="text-green-500" />
+                          </div>
+                        )}
+                      </div>
 
-                  <div className="relative" ref={styleDropdownRef}>
-                    <div className="relative">
-                      <input
-                        ref={styleInputRef}
-                        type="text"
-                        value={styleKeyword}
-                        onChange={(e) => {
-                          setStyleKeyword(e.target.value);
-                          if (e.target.value === "") {
-                            setSelectedStyle(null);
-                            setFieldValue("styleNo", "");
-                          }
-                        }}
-                        onFocus={() => {
-                          if (styleKeyword.length > 0) {
-                            setIsStyleDropdownOpen(true);
-                          }
-                        }}
-                        placeholder="Type to search styles..."
-                        className="w-full rounded-md border p-2 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                      />
-                      {isSearchingStyle && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <FaSpinner className="animate-spin text-gray-400" />
-                        </div>
-                      )}
-                      {selectedStyle && !isSearchingStyle && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <FaCheck className="text-green-500" />
+                      {/* Style Dropdown results */}
+                      {isStyleDropdownOpen && styleKeyword.length > 0 && (
+                        <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                          {isSearchingStyle ? (
+                            <div className="flex items-center justify-center p-4">
+                              <FaSpinner className="animate-spin text-gray-400 mr-2" />
+                              <span className="text-gray-500">
+                                Searching...
+                              </span>
+                            </div>
+                          ) : stylesList && stylesList.length > 0 ? (
+                            <ul className="py-1">
+                              {stylesList.map((style, index) => (
+                                <li
+                                  key={style.style_id || index}
+                                  onClick={() => {
+                                    handleSelectStyle(style, setFieldValue);
+                                    setTimeout(() => validateForm(), 100);
+                                  }}
+                                  className={`cursor-pointer px-4 py-2 hover:bg-blue-50 transition-colors ${
+                                    selectedStyle?.style_id === style.style_id
+                                      ? "bg-blue-50"
+                                      : ""
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span>
+                                      {style.style_no ||
+                                        style.style_name ||
+                                        style}
+                                    </span>
+                                    {selectedStyle?.style_id ===
+                                      style.style_id && (
+                                      <FaCheck
+                                        className="text-blue-500"
+                                        size={14}
+                                      />
+                                    )}
+                                  </div>
+                                  {style.style_name && style.style_no && (
+                                    <span className="text-xs text-gray-500">
+                                      Name: {style.style_name}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <div className="p-4 text-center text-gray-500">
+                              No styles found for "{styleKeyword}"
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
 
-                    {/* Style Dropdown results */}
-                    {isStyleDropdownOpen && styleKeyword.length > 0 && (
-                      <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
-                        {isSearchingStyle ? (
-                          <div className="flex items-center justify-center p-4">
-                            <FaSpinner className="animate-spin text-gray-400 mr-2" />
-                            <span className="text-gray-500">Searching...</span>
-                          </div>
-                        ) : stylesList && stylesList.length > 0 ? (
-                          <ul className="py-1">
-                            {stylesList.map((style, index) => (
-                              <li
-                                key={style.style_id || index}
-                                onClick={() =>
-                                  handleSelectStyle(style, setFieldValue)
-                                }
-                                className={`cursor-pointer px-4 py-2 hover:bg-blue-50 transition-colors ${
-                                  selectedStyle?.style_id === style.style_id
-                                    ? "bg-blue-50"
-                                    : ""
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span>
-                                    {style.style_no ||
-                                      style.style_name ||
-                                      style}
-                                  </span>
-                                  {selectedStyle?.style_id ===
-                                    style.style_id && (
-                                    <FaCheck
-                                      className="text-blue-500"
-                                      size={14}
-                                    />
-                                  )}
-                                </div>
-                                {style.style_name && style.style_no && (
-                                  <span className="text-xs text-gray-500">
-                                    Name: {style.style_name}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="p-4 text-center text-gray-500">
-                            No styles found for "{styleKeyword}"
-                          </div>
-                        )}
-                      </div>
+                    {/* Display selected style */}
+                    {selectedStyle && (
+                      <p className="mt-1 text-sm text-green-600">
+                        {/* ✓ Selected: {selectedStyle.style_no} -{" "}
+                        {selectedStyle.style_name} */}
+                      </p>
                     )}
 
-                    {/* Hidden field for form validation */}
-                    <input
-                      type="hidden"
+                    <ErrorMessage
                       name="styleNo"
-                      value={values.styleNo}
+                      component="p"
+                      className="mt-1 text-sm text-red-500"
                     />
                   </div>
 
-                  <ErrorMessage
-                    name="styleNo"
-                    component="p"
-                    className="mt-1 text-sm text-red-500"
-                  />
+                  {/* Description */}
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Description <span className="text-red-500">*</span>
+                    </label>
+                    <Field
+                      as="textarea"
+                      name="description"
+                      rows={4}
+                      placeholder="Enter a description (min 10 characters)..."
+                      className="w-full resize-none rounded-md border p-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    />
+                    <ErrorMessage
+                      name="description"
+                      component="p"
+                      className="mt-1 text-sm text-red-500"
+                    />
+                  </div>
                 </div>
 
-                {/* Description */}
-                <div>
-                  <label className="mb-2 block text-sm font-medium">
-                    Description <span className="text-red-500">*</span>
-                  </label>
-                  <Field
-                    as="textarea"
-                    name="description"
-                    rows={4}
-                    placeholder="Enter a description..."
-                    className="w-full resize-none rounded-md border p-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                  <ErrorMessage
-                    name="description"
-                    component="p"
-                    className="mt-1 text-sm text-red-500"
-                  />
+                {/* Footer */}
+                <div className="flex justify-end gap-3 border-t px-6 py-4">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md border px-4 py-2 hover:bg-gray-50 transition-colors"
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <FaSpinner className="animate-spin" size={14} />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <FaUpload size={14} />
+                        Upload
+                      </>
+                    )}
+                  </button>
                 </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex justify-end gap-3 border-t px-6 py-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-md border px-4 py-2 hover:bg-gray-50 transition-colors"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <FaSpinner className="animate-spin" size={14} />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <FaUpload size={14} />
-                      Upload
-                    </>
-                  )}
-                </button>
-              </div>
-            </Form>
-          )}
+              </Form>
+            );
+          }}
         </Formik>
       </div>
     </div>

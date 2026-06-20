@@ -1,4 +1,5 @@
-// routes/AttachmentMediaRoutes.js
+// routes/AttachmentMediaRoutes.js - 5MB validation removed
+
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
@@ -15,7 +16,7 @@ const handleMulterError = (error, req, res, next) => {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        message: "File too large. Maximum size is 5MB",
+        message: "File too large. Maximum size exceeded",
       });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
@@ -43,7 +44,7 @@ const handleMulterError = (error, req, res, next) => {
 const attachmentMediaUpload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max file size
+    // REMOVED: fileSize: 5 * 1024 * 1024, // 5MB max file size - REMOVED
     files: 1,
   },
   fileFilter: (req, file, cb) => {

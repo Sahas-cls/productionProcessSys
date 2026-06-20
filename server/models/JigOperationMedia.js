@@ -50,11 +50,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       description: {
         type: DataTypes.TEXT,
-        allowNull: false,
-        validate: {
-          len: [10, 500],
-          notEmpty: true,
-        },
+        allowNull: true,
       },
       operation_id: {
         type: DataTypes.INTEGER,

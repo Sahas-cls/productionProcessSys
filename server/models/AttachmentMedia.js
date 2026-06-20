@@ -58,9 +58,7 @@ module.exports = (sequelize, DataTypes) => {
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
-        validate: {
-          len: [0, 500],
-        },
+
         comment: "Description of the attachment",
       },
       style_no: {

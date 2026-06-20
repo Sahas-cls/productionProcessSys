@@ -181,12 +181,12 @@ exports.uploadAttachmentMedia = async (req, res) => {
   //     });
   //   }
 
-  if (!description || description.trim().length < 10) {
-    return res.status(400).json({
-      success: false,
-      message: "Description is required and must be at least 10 characters",
-    });
-  }
+  // if (!description || description.trim().length < 10) {
+  //   return res.status(400).json({
+  //     success: false,
+  //     message: "Description is required and must be at least 10 characters",
+  //   });
+  // }
 
   // Determine media type from request or file
   const mediaType =
@@ -225,7 +225,7 @@ exports.uploadAttachmentMedia = async (req, res) => {
       file_size: req.file.size,
       mime_type: req.file.mimetype.split(";")[0],
       media_type: mediaType,
-      description: description.trim(),
+      description: description.trim() || "",
       style_no: styleNo,
       uploaded_by: req.user?.userId,
       is_active: true,

@@ -1,12 +1,6 @@
 // components/AttachmentPopup.jsx
 import React, { useState, useRef, useEffect } from "react";
-import {
-  FaTimes,
-  FaUpload,
-  FaSpinner,
-  FaImage,
-  FaVideo,
-} from "react-icons/fa";
+import { FaTimes, FaUpload, FaSpinner, FaImage, FaVideo } from "react-icons/fa";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
 import axios from "axios";
@@ -36,11 +30,7 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
 
           return allowedTypes.includes(value.type);
         },
-      )
-      .test("fileSize", `File size must be less than 5MB`, (value) => {
-        if (!value) return false;
-        return value.size <= 5 * 1024 * 1024;
-      }),
+      ),
     fileName: Yup.string()
       .required("File name is required")
       .min(3, "File name must be at least 3 characters")
@@ -49,10 +39,6 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
         /^[a-zA-Z0-9\s\-_\.]+$/,
         "File name can only contain letters, numbers, spaces, and - _ .",
       ),
-    description: Yup.string()
-      .required("Description is required")
-      .min(10, "Description must contain at least 10 characters")
-      .max(500, "Description must be less than 500 characters"),
   });
 
   // Reset form when popup closes
@@ -189,7 +175,10 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
                         setFieldValue("attachment", file);
                         // Auto-fill file name if empty
                         if (!values.fileName) {
-                          const nameWithoutExt = file.name.replace(/\.[^/.]+$/, "");
+                          const nameWithoutExt = file.name.replace(
+                            /\.[^/.]+$/,
+                            "",
+                          );
                           setFieldValue("fileName", nameWithoutExt);
                         }
                       }

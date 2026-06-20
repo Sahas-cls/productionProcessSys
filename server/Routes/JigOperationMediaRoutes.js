@@ -1,3 +1,5 @@
+// routes/jigOperationMediaRoutes.js - 5MB validation removed from backend
+
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
@@ -15,7 +17,7 @@ const handleMulterError = (error, req, res, next) => {
     if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
-        message: "File too large. Maximum size is 5MB",
+        message: "File too large. Maximum size exceeded",
       });
     }
     if (error.code === "LIMIT_FILE_COUNT") {
@@ -43,7 +45,7 @@ const handleMulterError = (error, req, res, next) => {
 const jigOperationMediaUpload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max file size
+    // REMOVED: fileSize: 5 * 1024 * 1024, // 5MB max file size - REMOVED
     files: 1, // Only 1 file per upload
   },
   fileFilter: (req, file, cb) => {
@@ -173,19 +175,9 @@ router.delete(
   jigOperationMediaController.deleteJigOperationMedia,
 );
 
-// routes/jigOperationMediaRoutes.js
-// Add these new routes to your existing routes file
-
 // GET operations with media (folder structure)
 router.get(
   "/jig-operation-operations",
-  authMiddleware,
-  jigOperationMediaController.getOperationsWithMedia,
-);
-
-// GET media by operation ID
-router.get(
-  "/jig-operation-media/operation/:operation_id",
   authMiddleware,
   jigOperationMediaController.getOperationsWithMedia,
 );
@@ -197,26 +189,11 @@ router.get(
   jigOperationMediaController.getMediaByOperationAndStyle,
 );
 
-// In your routes file
-// Get all operations grouped by name (for the main page)
-router.get(
-  "/jig-operation-operations",
-  authMiddleware,
-  jigOperationMediaController.getOperationsWithMedia,
-);
-
 // Get media by operation name (groups all operations with same name)
 router.get(
   "/jig-operation-media/name/:operation_name",
   authMiddleware,
   jigOperationMediaController.getMediaByOperationName,
-);
-
-// Keep existing route for backward compatibility
-router.get(
-  "/jig-operation-media/operation/:operation_id",
-  authMiddleware,
-  jigOperationMediaController.getMediaByOperationId,
 );
 
 module.exports = router;
