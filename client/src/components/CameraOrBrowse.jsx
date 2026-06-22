@@ -19,13 +19,275 @@ import { ClipLoader } from "react-spinners";
 import Swal from "sweetalert2";
 import fixWebmDuration from "webm-duration-fix";
 
+// ============================================================
+// MEDIA MANAGER - Pure media handling logic
+// ============================================================
+
+class MediaManager {
+  constructor() {
+    this.browserInfo = this.detectBrowser();
+    this.supportedMimeTypes = this.detectSupportedMimeTypes();
+    this.videoElement = null;
+    this.currentUrl = null;
+    this.cleanupFn = null;
+  }
+
+  detectBrowser() {
+    const ua = navigator.userAgent;
+    return {
+      isMobile: /Android|iPhone|iPad|iPod/i.test(ua),
+      isSafari: /^((?!chrome|android).)*safari/i.test(ua),
+      isChrome: /Chrome/i.test(ua) && !/Edge/i.test(ua),
+      isSamsung: /SamsungBrowser/i.test(ua),
+      isIOS: /iPhone|iPad|iPod/i.test(ua),
+      isAndroid: /Android/i.test(ua),
+      userAgent: ua,
+    };
+  }
+
+  detectSupportedMimeTypes() {
+    const types = [
+      // MP4 (most compatible)
+      {
+        mime: "video/mp4;codecs=h264,mp4a.40.2",
+        extension: "mp4",
+        label: "MP4 H.264",
+      },
+      { mime: "video/mp4", extension: "mp4", label: "MP4" },
+      // WebM (good fallback)
+      {
+        mime: "video/webm;codecs=vp9,opus",
+        extension: "webm",
+        label: "WebM VP9",
+      },
+      {
+        mime: "video/webm;codecs=vp8,opus",
+        extension: "webm",
+        label: "WebM VP8",
+      },
+      { mime: "video/webm", extension: "webm", label: "WebM" },
+    ];
+
+    const supported = types.filter((t) => {
+      try {
+        return MediaRecorder.isTypeSupported(t.mime);
+      } catch {
+        return false;
+      }
+    });
+
+    console.log("[MediaManager] Supported MIME types:", supported);
+    return supported;
+  }
+
+  getBestRecordingMimeType() {
+    // Priority: MP4 H.264 > WebM VP9 > WebM VP8 > fallback WebM
+    const priority = [
+      "video/mp4;codecs=h264,mp4a.40.2",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ];
+
+    for (const mime of priority) {
+      if (MediaRecorder.isTypeSupported(mime)) {
+        return mime;
+      }
+    }
+    return "video/webm"; // Fallback
+  }
+
+  createPreviewURL(file) {
+    this.cleanupURL();
+
+    const url = URL.createObjectURL(file);
+    this.currentUrl = url;
+
+    console.log("[MediaManager] Created preview URL:", {
+      url: url.substring(0, 50) + "...",
+      fileType: file.type,
+      fileSize: (file.size / (1024 * 1024)).toFixed(2) + "MB",
+      browser: this.browserInfo,
+    });
+
+    return url;
+  }
+
+  cleanupURL() {
+    if (this.currentUrl) {
+      URL.revokeObjectURL(this.currentUrl);
+      console.log(
+        "[MediaManager] Revoked URL:",
+        this.currentUrl.substring(0, 50) + "...",
+      );
+      this.currentUrl = null;
+    }
+  }
+
+  validateVideoFile(file) {
+    const errors = [];
+    const warnings = [];
+
+    // Check file type
+    if (!file.type.startsWith("video/")) {
+      errors.push("File is not a video");
+    }
+
+    // Check for common unsupported types
+    const unsupportedTypes = ["video/x-msvideo", "video/quicktime"];
+    if (unsupportedTypes.includes(file.type)) {
+      errors.push(`Unsupported video format: ${file.type}`);
+    }
+
+    // Check file size (200MB limit)
+    if (file.size > 200 * 1024 * 1024) {
+      warnings.push("Video exceeds 200MB, may cause issues");
+    }
+
+    // Log codec info if available
+    if (file.type) {
+      console.log("[MediaManager] File validation:", {
+        type: file.type,
+        size: (file.size / (1024 * 1024)).toFixed(2) + "MB",
+        extension: file.name.split(".").pop().toLowerCase(),
+        errors,
+        warnings,
+      });
+    }
+
+    return { valid: errors.length === 0, errors, warnings };
+  }
+
+  async loadVideoMetadata(videoElement, timeout = 10000) {
+    if (!videoElement) {
+      throw new Error("Video element is null");
+    }
+
+    this.videoElement = videoElement;
+
+    return new Promise((resolve, reject) => {
+      let timeoutId = setTimeout(() => {
+        reject(new Error("Metadata loading timeout"));
+      }, timeout);
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        videoElement.removeEventListener("loadedmetadata", onLoaded);
+        videoElement.removeEventListener("error", onError);
+      };
+
+      const onLoaded = () => {
+        cleanup();
+        const duration = videoElement.duration;
+        const readyState = videoElement.readyState;
+        const videoWidth = videoElement.videoWidth;
+        const videoHeight = videoElement.videoHeight;
+
+        console.log("[MediaManager] Metadata loaded:", {
+          duration: isFinite(duration) ? duration + "s" : "unknown",
+          readyState,
+          dimensions: `${videoWidth}x${videoHeight}`,
+          videoElement: videoElement.id || "unnamed",
+        });
+
+        resolve({ duration, readyState, videoWidth, videoHeight });
+      };
+
+      const onError = (e) => {
+        cleanup();
+        const error = videoElement.error;
+        const errorMsg = error
+          ? `Code ${error.code}: ${error.message}`
+          : "Unknown error";
+
+        console.error("[MediaManager] Video error:", {
+          error: errorMsg,
+          code: error?.code,
+          networkState: videoElement.networkState,
+          readyState: videoElement.readyState,
+          src: videoElement.src?.substring(0, 50) + "...",
+        });
+
+        reject(new Error(errorMsg));
+      };
+
+      videoElement.addEventListener("loadedmetadata", onLoaded);
+      videoElement.addEventListener("error", onError);
+
+      // Force load if not already loading
+      if (videoElement.networkState === 0) {
+        videoElement.load();
+      }
+
+      // If metadata already loaded, trigger immediately
+      if (videoElement.readyState >= 1) {
+        onLoaded();
+      }
+    });
+  }
+
+  setupVideoElement(videoElement, url, options = {}) {
+    if (!videoElement) return;
+
+    const {
+      autoPlay = false,
+      playsInline = true,
+      muted = true,
+      preload = "metadata",
+    } = options;
+
+    // Set attributes for mobile compatibility
+    videoElement.setAttribute("playsinline", playsInline ? "true" : "false");
+    videoElement.setAttribute("preload", preload);
+    if (muted) videoElement.muted = true;
+    if (autoPlay) videoElement.autoplay = true;
+
+    // Set source
+    videoElement.src = url;
+
+    // Force load for mobile browsers
+    videoElement.load();
+
+    console.log("[MediaManager] Video element setup:", {
+      src: url?.substring(0, 50) + "...",
+      playsInline: videoElement.getAttribute("playsinline"),
+      preload: videoElement.getAttribute("preload"),
+      muted: videoElement.muted,
+      browser: this.browserInfo,
+    });
+  }
+
+  destroy() {
+    this.cleanupURL();
+    this.videoElement = null;
+  }
+
+  // Get browser capability info
+  getCapabilities() {
+    const video = document.createElement("video");
+    const capabilities = {
+      h264: !!video.canPlayType("video/mp4;codecs=h264"),
+      webm: !!video.canPlayType("video/webm"),
+      mp4: !!video.canPlayType("video/mp4"),
+      browser: this.browserInfo,
+      supportedMimeTypes: this.supportedMimeTypes,
+    };
+    console.log("[MediaManager] Capabilities:", capabilities);
+    return capabilities;
+  }
+}
+
+// ============================================================
+// REACT COMPONENT - UI remains unchanged
+// ============================================================
+
 const CameraOrBrowse = ({
   setIsUploading,
   uploadingData,
   setUploadingMaterial,
   operationType,
 }) => {
-  // States
+  // States - unchanged
   const [mediaStream, setMediaStream] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState(null);
@@ -46,6 +308,7 @@ const CameraOrBrowse = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
 
   // Refs
   const mediaRecorderRef = useRef(null);
@@ -55,14 +318,28 @@ const CameraOrBrowse = ({
   const fileInputRef = useRef(null);
   const timerRef = useRef(null);
   const qualityMenuRef = useRef(null);
+  const mediaManagerRef = useRef(null);
 
-  // Quality presets
+  // Quality presets - unchanged
   const qualityPresets = {
     low: { name: "Low", bitrate: 3000, resolution: "854x480" },
     medium: { name: "Medium", bitrate: 5000, resolution: "1280x720" },
     high: { name: "High", bitrate: 8000, resolution: "1920x1080" },
   };
 
+  // Initialize MediaManager
+  useEffect(() => {
+    mediaManagerRef.current = new MediaManager();
+    mediaManagerRef.current.getCapabilities();
+
+    return () => {
+      if (mediaManagerRef.current) {
+        mediaManagerRef.current.destroy();
+      }
+    };
+  }, []);
+
+  // Detect mobile
   useEffect(() => {
     setIsMobile(/Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
     document.addEventListener("fullscreenchange", handleFullscreenChange);
@@ -83,17 +360,59 @@ const CameraOrBrowse = ({
       stopCamera();
       if (timerRef.current) clearInterval(timerRef.current);
       if (videoUrl) URL.revokeObjectURL(videoUrl);
+      if (mediaManagerRef.current) {
+        mediaManagerRef.current.destroy();
+      }
     };
   }, []);
 
+  // Watch videoUrl changes to handle preview loading
+  useEffect(() => {
+    if (videoUrl && status === "preview") {
+      setMetadataLoaded(false);
+      setVideoError(false);
+
+      // Ensure video element is properly set up
+      const videoEl = previewVideoRef.current;
+      if (videoEl) {
+        mediaManagerRef.current?.setupVideoElement(videoEl, videoUrl, {
+          playsInline: true,
+          muted: false,
+          preload: "metadata",
+        });
+
+        // Load metadata with timeout
+        mediaManagerRef.current
+          ?.loadVideoMetadata(videoEl, 15000)
+          .then((data) => {
+            setMetadataLoaded(true);
+            setDuration(data.duration || 0);
+            setRecordingTime(Math.floor(data.duration || 0));
+            console.log("[Component] Metadata loaded successfully");
+          })
+          .catch((error) => {
+            console.warn("[Component] Metadata load error:", error);
+            setVideoError(true);
+          });
+      }
+    }
+  }, [videoUrl, status]);
+
+  // Handle fullscreen change - unchanged
   const handleFullscreenChange = () => {
     setIsFullscreen(!!document.fullscreenElement);
   };
+
+  // ============================================================
+  // CAMERA FUNCTIONS
+  // ============================================================
 
   const startCamera = async () => {
     setStatus("loading");
     try {
       stopCamera();
+
+      // Determine constraints based on device
       const constraints = {
         video: {
           facingMode: cameraFacing,
@@ -102,10 +421,22 @@ const CameraOrBrowse = ({
         },
         audio: true,
       };
+
+      // iOS Safari specific handling
+      if (mediaManagerRef.current?.browserInfo.isIOS) {
+        constraints.video = {
+          ...constraints.video,
+          facingMode: cameraFacing,
+        };
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setMediaStream(stream);
+
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
+        cameraVideoRef.current.setAttribute("playsinline", "true");
+        cameraVideoRef.current.setAttribute("muted", "true");
         await cameraVideoRef.current
           .play()
           .catch((e) => console.error("Play error:", e));
@@ -127,7 +458,14 @@ const CameraOrBrowse = ({
       mediaStream.getTracks().forEach((track) => track.stop());
       setMediaStream(null);
     }
+    if (cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = null;
+    }
   };
+
+  // ============================================================
+  // RECORDING FUNCTIONS
+  // ============================================================
 
   const startRecording = () => {
     if (!mediaStream) {
@@ -144,35 +482,49 @@ const CameraOrBrowse = ({
     setRecordingTime(0);
     setVideoError(false);
 
-    let mimeType = "video/webm";
-    if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")) {
-      mimeType = "video/webm;codecs=vp9,opus";
-    } else if (MediaRecorder.isTypeSupported("video/webm;codecs=h264,opus")) {
-      mimeType = "video/webm;codecs=h264,opus";
-    }
+    // Get best supported MIME type
+    const mimeType =
+      mediaManagerRef.current?.getBestRecordingMimeType() || "video/webm";
+
+    // Adjust bitrate for mobile
+    const isMobile = mediaManagerRef.current?.browserInfo.isMobile;
+    const bitrateMultiplier = isMobile ? 0.7 : 1;
+    const bitrate =
+      (qualityPresets[videoQuality]?.bitrate || 5000) * bitrateMultiplier;
 
     const options = {
       mimeType: mimeType,
-      videoBitsPerSecond:
-        qualityPresets[videoQuality]?.bitrate * 1000 || 5000000,
+      videoBitsPerSecond: bitrate * 1000,
       audioBitsPerSecond: 128000,
     };
 
+    console.log("[Component] Recording options:", {
+      mimeType,
+      bitrate,
+      isMobile,
+      browser: mediaManagerRef.current?.browserInfo,
+    });
+
     try {
       const recorder = new MediaRecorder(mediaStream, options);
+
       recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0)
+        if (event.data && event.data.size > 0) {
           recordedChunks.current.push(event.data);
+        }
       };
+
       recorder.onstop = async () => {
         try {
-          if (recordedChunks.current.length === 0)
+          if (recordedChunks.current.length === 0) {
             throw new Error("No data recorded");
+          }
 
           let blob = new Blob(recordedChunks.current, {
             type: recorder.mimeType || "video/webm",
           });
 
+          // Fix duration for WebM
           if (blob.type.includes("webm")) {
             try {
               console.log("Fixing WebM duration...");
@@ -183,23 +535,31 @@ const CameraOrBrowse = ({
             }
           }
 
-          if (videoUrl) URL.revokeObjectURL(videoUrl);
-          const newUrl = URL.createObjectURL(blob);
+          // Convert to MP4 for better mobile compatibility if needed
+          if (
+            mediaManagerRef.current?.browserInfo.isIOS &&
+            blob.type.includes("webm")
+          ) {
+            console.warn(
+              "iOS may not support WebM playback, but we keep it for upload",
+            );
+          }
+
+          if (videoUrl) {
+            mediaManagerRef.current?.cleanupURL();
+            URL.revokeObjectURL(videoUrl);
+          }
+
+          const newUrl =
+            mediaManagerRef.current?.createPreviewURL(blob) ||
+            URL.createObjectURL(blob);
           setVideoUrl(newUrl);
           setRecordedBlob(blob);
           setOriginalSize(blob.size);
-          setDuration(recordingTime);
-          setCurrentTime(0);
           setStatus("preview");
+          setCurrentTime(0);
 
-          setTimeout(() => {
-            if (previewVideoRef.current) {
-              previewVideoRef.current.load();
-              previewVideoRef.current
-                .play()
-                .catch((e) => console.log("Autoplay prevented"));
-            }
-          }, 100);
+          // The useEffect watching videoUrl will handle metadata loading
         } catch (error) {
           console.error("Error in recorder.onstop:", error);
           Swal.fire({
@@ -210,6 +570,7 @@ const CameraOrBrowse = ({
           setStatus("ready");
         }
       };
+
       recorder.onerror = (event) => {
         console.error("MediaRecorder error:", event.error);
         Swal.fire({
@@ -224,6 +585,7 @@ const CameraOrBrowse = ({
         () => setRecordingTime((prev) => prev + 1),
         1000,
       );
+
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
       setRecording(true);
@@ -248,67 +610,25 @@ const CameraOrBrowse = ({
     stopCamera();
   };
 
-  const formatTime = (seconds) => {
-    if (isNaN(seconds) || seconds === Infinity) {
-      seconds = 0;
-    }
-    const roundedSeconds = Math.round(seconds);
-    const mins = Math.floor(roundedSeconds / 60);
-    const secs = roundedSeconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  // ============================================================
+  // FILE UPLOAD FUNCTIONS - IMPROVED MOBILE SUPPORT
+  // ============================================================
 
-  const requestFullscreen = (element) => {
-    if (element.requestFullscreen) element.requestFullscreen();
-    else if (element.webkitRequestFullscreen) element.webkitRequestFullscreen();
-    else if (element.msRequestFullscreen) element.msRequestFullscreen();
-  };
-
-  const exitFullscreen = () => {
-    if (document.exitFullscreen) document.exitFullscreen();
-    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    else if (document.msExitFullscreen) document.msExitFullscreen();
-  };
-
-  const toggleFullscreen = () => {
-    const element = previewVideoRef.current || cameraVideoRef.current;
-    if (!element) return;
-    if (!isFullscreen) requestFullscreen(element);
-    else exitFullscreen();
-  };
-
-  const togglePlayPause = () => {
-    if (previewVideoRef.current) {
-      if (isPlaying) previewVideoRef.current.pause();
-      else previewVideoRef.current.play().catch(console.error);
-    }
-  };
-
-  const handleTimeUpdate = () => {
-    if (previewVideoRef.current) {
-      const time = previewVideoRef.current.currentTime;
-      setCurrentTime(time);
-      if (
-        previewVideoRef.current.duration &&
-        isFinite(previewVideoRef.current.duration)
-      ) {
-        setDuration(previewVideoRef.current.duration);
-      }
-    }
-  };
-
-  const handleSeek = (e) => {
-    const seekTime = parseFloat(e.target.value);
-    setCurrentTime(seekTime);
-    if (previewVideoRef.current) {
-      previewVideoRef.current.currentTime = seekTime;
-    }
-  };
-
-  // FIXED: The upload button was disappearing because of videoError state and status not being set correctly
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
+    // Validate file
+    const validation = mediaManagerRef.current?.validateVideoFile(file);
+    if (validation && !validation.valid) {
+      Swal.fire({
+        title: "Invalid Video File",
+        text: validation.errors.join("\n"),
+        icon: "error",
+      });
+      event.target.value = null;
+      return;
+    }
 
     if (!file.type.includes("video")) {
       Swal.fire({
@@ -320,45 +640,40 @@ const CameraOrBrowse = ({
       return;
     }
 
-    // CRITICAL FIX: Reset error state FIRST
-    setVideoError(false);
+    // Show validation warnings if any
+    if (validation?.warnings.length > 0) {
+      console.warn("Video validation warnings:", validation.warnings);
+    }
 
-    // Revoke old URL to prevent memory leaks
+    // Reset error state
+    setVideoError(false);
+    setMetadataLoaded(false);
+
+    // Clean up old URL
     if (videoUrl) {
+      mediaManagerRef.current?.cleanupURL();
       URL.revokeObjectURL(videoUrl);
     }
 
-    // Create new object URL
-    const newUrl = URL.createObjectURL(file);
+    // Create new URL using MediaManager
+    const newUrl =
+      mediaManagerRef.current?.createPreviewURL(file) ||
+      URL.createObjectURL(file);
     setVideoUrl(newUrl);
     setRecordedBlob(file);
     setOriginalSize(file.size);
-
-    // CRITICAL FIX: Set status to preview IMMEDIATELY so buttons show
     setStatus("preview");
+    setDuration(0);
+    setCurrentTime(0);
 
-    // Get duration from metadata (async, but won't affect button visibility)
-    const tempVideo = document.createElement("video");
-    tempVideo.preload = "metadata";
-    tempVideo.onloadedmetadata = () => {
-      if (tempVideo.duration && isFinite(tempVideo.duration)) {
-        setDuration(tempVideo.duration);
-        setRecordingTime(Math.floor(tempVideo.duration));
-      }
-      tempVideo.remove();
-    };
-    tempVideo.onerror = () => {
-      // Even if metadata fails, we STILL show the video preview with buttons
-      console.warn(
-        "Could not load video metadata, but preview is still available",
-      );
-      tempVideo.remove();
-    };
-    tempVideo.src = newUrl;
+    // The useEffect watching videoUrl will handle metadata loading
 
-    // Clear the input value so same file can be selected again
     event.target.value = null;
   };
+
+  // ============================================================
+  // UPLOAD FUNCTIONS - UNCHANGED
+  // ============================================================
 
   const validateUploadData = () => {
     if (!uploadingData) {
@@ -531,8 +846,75 @@ const CameraOrBrowse = ({
     }
   };
 
+  // ============================================================
+  // UI HELPER FUNCTIONS - UNCHANGED
+  // ============================================================
+
+  const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds === Infinity) {
+      seconds = 0;
+    }
+    const roundedSeconds = Math.round(seconds);
+    const mins = Math.floor(roundedSeconds / 60);
+    const secs = roundedSeconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  const requestFullscreen = (element) => {
+    if (element.requestFullscreen) element.requestFullscreen();
+    else if (element.webkitRequestFullscreen) element.webkitRequestFullscreen();
+    else if (element.msRequestFullscreen) element.msRequestFullscreen();
+  };
+
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
+  };
+
+  const toggleFullscreen = () => {
+    const element = previewVideoRef.current || cameraVideoRef.current;
+    if (!element) return;
+    if (!isFullscreen) requestFullscreen(element);
+    else exitFullscreen();
+  };
+
+  const togglePlayPause = () => {
+    if (previewVideoRef.current) {
+      if (isPlaying) previewVideoRef.current.pause();
+      else previewVideoRef.current.play().catch(console.error);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (previewVideoRef.current) {
+      const time = previewVideoRef.current.currentTime;
+      setCurrentTime(time);
+      if (
+        previewVideoRef.current.duration &&
+        isFinite(previewVideoRef.current.duration)
+      ) {
+        setDuration(previewVideoRef.current.duration);
+      }
+    }
+  };
+
+  const handleSeek = (e) => {
+    const seekTime = parseFloat(e.target.value);
+    setCurrentTime(seekTime);
+    if (previewVideoRef.current) {
+      previewVideoRef.current.currentTime = seekTime;
+    }
+  };
+
+  const switchCamera = () =>
+    setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
+
   const resetState = () => {
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
+    if (videoUrl) {
+      mediaManagerRef.current?.cleanupURL();
+      URL.revokeObjectURL(videoUrl);
+    }
     setVideoUrl(null);
     setRecordedBlob(null);
     setStatus("idle");
@@ -542,18 +924,23 @@ const CameraOrBrowse = ({
     setDuration(0);
     setCurrentTime(0);
     setVideoError(false);
+    setMetadataLoaded(false);
     setIsPlaying(false);
     stopCamera();
     if (timerRef.current) clearInterval(timerRef.current);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const switchCamera = () =>
-    setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
-
+  // Effect for camera switching
   useEffect(() => {
-    if (status === "ready" || status === "recording") startCamera();
+    if (status === "ready" || status === "recording") {
+      startCamera();
+    }
   }, [cameraFacing]);
+
+  // ============================================================
+  // RENDER - UNCHANGED UI
+  // ============================================================
 
   return (
     <div className="bg-gray-900 min-h-screen p-4 w-full mx-auto text-white">
@@ -649,6 +1036,8 @@ const CameraOrBrowse = ({
                 ref={previewVideoRef}
                 src={videoUrl}
                 className="w-full h-full object-contain"
+                playsInline
+                preload="metadata"
                 onTimeUpdate={handleTimeUpdate}
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
@@ -659,13 +1048,12 @@ const CameraOrBrowse = ({
                     isFinite(previewVideoRef.current.duration)
                   ) {
                     setDuration(previewVideoRef.current.duration);
+                    setMetadataLoaded(true);
                   }
                 }}
                 onError={() => {
-                  // Don't set videoError to true - just log it
-                  console.warn(
-                    "Video preview error, but buttons will still work",
-                  );
+                  console.warn("Video preview error");
+                  setVideoError(true);
                 }}
               />
 
@@ -706,7 +1094,6 @@ const CameraOrBrowse = ({
         )}
       </div>
 
-      {/* ALWAYS show this section when status is preview - regardless of videoError */}
       {status === "preview" && recordedBlob && (
         <div className="bg-gray-800/30 rounded-lg p-3 mb-4">
           <div className="grid grid-cols-3 gap-4 text-sm">
@@ -807,7 +1194,6 @@ const CameraOrBrowse = ({
           </button>
         )}
 
-        {/* FIXED: Buttons will ALWAYS show when status is preview - removed the && !videoError condition */}
         {status === "preview" && (
           <div className="flex gap-3">
             <button
