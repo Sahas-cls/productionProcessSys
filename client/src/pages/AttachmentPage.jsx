@@ -287,6 +287,12 @@ const AttachmentPage = () => {
     const error = videoErrors[mediaId];
     const mediaUrl = getMediaUrl(media);
 
+    const handleImageClick = () => {
+      if (mediaUrl) {
+        window.open(mediaUrl, "_blank");
+      }
+    };
+
     return (
       <motion.div
         key={mediaId}
@@ -302,6 +308,7 @@ const AttachmentPage = () => {
               src={mediaUrl}
               alt={media.file_name}
               className="w-full h-full object-cover"
+              onClick={handleImageClick}
               onError={(e) => {
                 e.target.src =
                   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24"%3E%3Cpath fill="%23999" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4-6h2v13h-2z"/%3E%3C/svg%3E';

@@ -55,6 +55,8 @@ const JigOperationsMediaPage = () => {
         },
       );
 
+      console.log("response media: ", response);
+
       if (response.data.success) {
         const data = response.data.data;
         setMediaData({
@@ -320,6 +322,12 @@ const JigOperationsMediaPage = () => {
     const mediaUrl = getMediaUrl(media);
     const isVideo = media.media_type === "video";
 
+    const handleImageClick = () => {
+      if (mediaUrl) {
+        window.open(mediaUrl, "_blank");
+      }
+    };
+
     return (
       <motion.div
         key={mediaId}
@@ -334,6 +342,7 @@ const JigOperationsMediaPage = () => {
             <img
               src={mediaUrl}
               alt={media.file_name}
+              onClick={handleImageClick}
               className="w-full h-full object-cover"
               onError={(e) => {
                 e.target.src =
@@ -441,8 +450,15 @@ const JigOperationsMediaPage = () => {
 
         {/* Media Info */}
         <div className="p-4">
-          <h3 className="font-medium text-sm truncate" title={media.file_name}>
+          <h3
+            className="font-medium text-sm truncate"
+            title={media.file_name || "N/A"}
+          >
             {media.file_name}
+          </h3>
+          <h3 className="grid grid-cols-2 text-sm text-gray-500">
+            <span>Style No</span>
+            <span className="text-end">{media.style.style_no}</span>
           </h3>
           {media.description && (
             <p className="text-sm text-gray-600 mt-1 line-clamp-2">

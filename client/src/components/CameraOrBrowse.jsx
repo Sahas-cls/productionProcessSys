@@ -909,12 +909,7 @@ const CameraOrBrowse = ({
 
   const switchCamera = () =>
     setCameraFacing((prev) => (prev === "user" ? "environment" : "user"));
-
   const resetState = () => {
-    if (videoUrl) {
-      mediaManagerRef.current?.cleanupURL();
-      URL.revokeObjectURL(videoUrl);
-    }
     setVideoUrl(null);
     setRecordedBlob(null);
     setStatus("idle");
