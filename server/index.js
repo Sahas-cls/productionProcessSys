@@ -686,6 +686,10 @@ app.get("/api/b2-files/*", async (req, res) => {
 const attachmentMediaRoutes = require("./Routes/AttachmentMediaRoutes.js");
 app.use("/api/attachment", attachmentMediaRoutes);
 
+// attachment folder route
+const attachmentFolderRoutes = require("./Routes/AttachmentFolderRoutes.js");
+app.use("/api/attachment-folder", attachmentFolderRoutes);
+
 // **CRITICAL: Add these options handler**
 app.options("/api/b2-files/*", (req, res) => {
   res.set({

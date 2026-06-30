@@ -161,7 +161,7 @@ const App = () => {
           {/* attachments */}
           <Route path="/innovations/attachments" element={<AttachmentPage />} />
           <Route
-            path="/innovations/attachments/:opId"
+            path="/innovations/attachments/:folderId"
             element={<AttachmentMediaPage />}
           />
 

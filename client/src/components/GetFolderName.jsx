@@ -1,0 +1,218 @@
+import React, { useEffect, useRef, useState } from "react";
+import { CgClose } from "react-icons/cg";
+import axios from "axios";
+
+const GetFolderName = ({ isOpen, onClose, onCreate }) => {
+  const [folderName, setFolderName] = useState("");
+  const inputRef = useRef(null);
+  const modalRef = useRef(null);
+  const [sMessage, setSMessage] = useState({ status: "", msg: "" });
+  const apiUrl = import.meta.env.VITE_API_URL;
+  const createEndPoint = "/api/attachment-folder/create-att-folder";
+  const [countdown, setCountdown] = useState(null);
+
+  // Focus input when popup opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current.focus(), 100);
+    }
+  }, [isOpen]);
+
+  // Handle Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+      // Prevent body scroll when modal is open
+      document.body.style.overflow = "hidden";
+    }
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
+    };
+  }, [isOpen, onClose]);
+
+  //   const handleSubmit = (e) => {
+  // };
+
+  // e.preventDefault();
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!folderName.trim()) {
+      return;
+    }
+
+    try {
+      const response = await axios.post(
+        apiUrl + createEndPoint,
+        { folderName: folderName },
+        { withCredentials: true },
+      );
+
+      if (response.status === 200 || response.status === 201) {
+        setSMessage({ status: response.data.status, msg: response.data.msg });
+      }
+
+      setCountdown(3);
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setFolderName("");
+            setSMessage({ status: "", msg: "" });
+            onClose();
+            return 0;
+          }
+
+          return prev - 1;
+        });
+      }, 1000);
+
+      console.log(response);
+    } catch (error) {
+      console.warn("warn: ", error.response.data.msg);
+      setSMessage({
+        status: error.response.data.status,
+        msg: error.response.data.msg,
+      });
+      console.log("Error while creating new folder", error.message);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center 
+                 bg-black/20 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="folder-modal-title"
+    >
+      <div
+        ref={modalRef}
+        className="relative w-full max-w-md sm:max-w-lg md:max-w-xl 
+                   bg-white rounded-md shadow-2xl 
+                   transform transition-all duration-300
+                   animate-in fade-in zoom-in-95
+                   p-6 sm:p-8 md:p-10"
+      >
+        {/* Close Button */}
+        <button
+          className="absolute right-2 top-2 sm:right-3 sm:top-3 
+                     p-2 rounded-full 
+                     bg-red-50 hover:bg-red-100 
+                     text-red-500 hover:text-red-700
+                     transition-all duration-200 
+                     focus:outline-none focus:ring-2 focus:ring-red-400
+                     group"
+          onClick={onClose}
+          aria-label="Close modal"
+        >
+          <CgClose
+            size={20}
+            className="group-hover:rotate-90 transition-transform duration-200"
+          />
+        </button>
+
+        {/* Header */}
+        <h2
+          id="folder-modal-title"
+          className="text-center text-xl sm:text-xl md:text-2xl 
+                     font-semibold text-gray-800 
+                     mb-6 sm:mb-8"
+        >
+          Enter Folder Name
+        </h2>
+
+        {/* Input Field */}
+        <form onSubmit={onSubmit}>
+          <div className="mb-6 sm:mb-8">
+            <input
+              ref={inputRef}
+              type="text"
+              value={folderName}
+              onChange={(e) => setFolderName(e.target.value)}
+              //   onKeyDown={handleKeyDown}
+              className="w-full p-2 sm:p-2 
+                         border-2 border-gray-300 
+                         rounded-lg 
+                         focus:border-blue-500 
+                         focus:ring-2 focus:ring-blue-200 
+                         outline-none transition-all duration-200
+                         text-base sm:text-lg
+                         placeholder:text-gray-400"
+              placeholder="Ex: Project Assets, Team Photos, etc."
+              maxLength={50}
+              aria-label="Folder name"
+            />
+            {sMessage.msg === "" ? (
+              <p className="mt-2 text-xs sm:text-sm text-gray-500">
+                {folderName.length}/50 characters
+              </p>
+            ) : (
+              <div className="flex gap-x-3 mt-2">
+                {sMessage.msg && (
+                  <p
+                    className={
+                      sMessage.status === "Ok"
+                        ? "text-green-500"
+                        : "text-red-500"
+                    }
+                  >
+                    {sMessage.msg}
+
+                    {sMessage.status === "Ok" && countdown > 0 && (
+                      <> Closing in {countdown}...</>
+                    )}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Buttons - Improved responsive layout */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <button
+              type="submit"
+              className="flex-1 py-2 sm:py-2
+                         bg-green-500 hover:bg-green-600 
+                         disabled:bg-green-300 disabled:cursor-not-allowed
+                         text-white font-semibold 
+                         rounded-md
+                         transition-all duration-200 
+                         hover:shadow-lg 
+                         focus:outline-none focus:ring-2 focus:ring-green-400
+                         text-base sm:text-lg"
+            >
+              Create Folder
+            </button>
+
+            <button
+              type="button"
+              className="flex-1 py-2 sm:py-2 
+                         border-2 hover:bg-gray-100/40 
+                         text-gray-700 font-semibold 
+                         rounded-lg 
+                         transition-all duration-200 
+                         hover:shadow-md
+                         focus:outline-none focus:ring-2 focus:ring-gray-400
+                         text-base sm:text-lg"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default GetFolderName;

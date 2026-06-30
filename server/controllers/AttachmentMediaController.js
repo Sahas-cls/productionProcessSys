@@ -8,65 +8,19 @@ const { Op } = require("sequelize");
  * Get all attachment media with filters
  */
 exports.getAttachmentMedia = async (req, res) => {
+  console.log(req.params);
+  const { folderId } = req.params;
   try {
-    const { page = 1, limit = 20, media_type, style_no, search } = req.query;
-
-    const offset = (page - 1) * limit;
-
-    // Build where clause
-    const whereClause = {
-      is_active: true,
-    };
-
-    if (media_type && ["image", "video"].includes(media_type)) {
-      whereClause.media_type = media_type;
-    }
-
-    if (style_no) {
-      whereClause.style_no = {
-        [Op.like]: `%${style_no}%`,
-      };
-    }
-
-    if (search) {
-      whereClause[Op.or] = [
-        { file_name: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } },
-        { style_no: { [Op.like]: `%${search}%` } },
-      ];
-    }
-
-    const { count, rows } = await AttachmentMedia.findAndCountAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "uploaded_user",
-          attributes: ["user_id", "user_name", "user_email"],
-        },
-      ],
-      order: [["created_at", "DESC"]],
-      limit: parseInt(limit),
-      offset: parseInt(offset),
+    const medias = await AttachmentMedia.findAll({
+      where: { folder_id: folderId },
     });
 
-    res.status(200).json({
-      success: true,
-      data: {
-        media: rows,
-        total: count,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(count / limit),
-      },
-    });
+    const images = medias.filter((media) => media.media_type === "image");
+    const videos = medias.filter((media) => media.media_type === "video");
+
+    res.status(200).json({ status: "Ok", images: images, videos: videos });
   } catch (error) {
-    console.error("❌ Get attachment media error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch attachment media",
-      error: error.message,
-    });
+    console.log(error);
   }
 };
 
@@ -162,6 +116,7 @@ exports.getAttachmentMediaByStyle = async (req, res) => {
  * Upload attachment media (image or video)
  */
 exports.uploadAttachmentMedia = async (req, res) => {
+  console.log(req.body);
   // Check if file exists
   if (!req.file) {
     return res.status(400).json({
@@ -171,7 +126,20 @@ exports.uploadAttachmentMedia = async (req, res) => {
   }
 
   // Extract form data
-  const { styleNo, description, mediaType: bodyMediaType } = req.body;
+  const {
+    styleNo,
+    description,
+    mediaType: bodyMediaType,
+    folderName: folderId,
+  } = req.body;
+
+  if (!folderId) {
+    return res.status(400).json({
+      success: false,
+      message: "Folder ID required",
+    });
+    return;
+  }
 
   // Validate required fields
   //   if (!styleNo) {
@@ -226,6 +194,7 @@ exports.uploadAttachmentMedia = async (req, res) => {
       mime_type: req.file.mimetype.split(";")[0],
       media_type: mediaType,
       description: description.trim() || "",
+      folder_id: parseInt(folderId),
       style_no: styleNo,
       uploaded_by: req.user?.userId,
       is_active: true,

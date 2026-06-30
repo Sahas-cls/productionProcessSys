@@ -75,7 +75,7 @@ exports.userLogin = async (req, res, next) => {
     // check user status
     if (isUser.status !== "Active") {
       const error = new Error(
-        "Your account has been blocked by the administrator. Please contact support."
+        "Your account has been blocked by the administrator. Please contact support.",
       );
       error.status = 403;
       throw error;
@@ -160,7 +160,7 @@ exports.authCheck = async (req, res, next) => {
   if (!token) {
     const error = new Error("No token, authorization denied");
     error.status = 401;
-    return next(error); // ✅ added return
+    return next(error);
   }
 
   try {
@@ -169,7 +169,7 @@ exports.authCheck = async (req, res, next) => {
 
     const user = {
       userId: decode.userId,
-      userRole: decode.userCategoryN, // ✅ keep consistent naming
+      userRole: decode.userCategoryN,
     };
 
     return res.status(200).json({
@@ -177,24 +177,22 @@ exports.authCheck = async (req, res, next) => {
       user,
     });
   } catch (error) {
-    console.error("Auth Error:", error.message);
+    // console.error("Auth Error:", error.message);
     error.status = 403;
-    return next(error); // ✅ let global handler handle it
+    return next(error);
   }
 };
 
 // to user logout
 exports.logoutUser = async (req, res, next) => {
   try {
-    // Clear the JWT cookie by setting it to an empty value and expiring it immediately
     res.cookie("jwt", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
-      expires: new Date(0), // Expire the cookie immediately
+      expires: new Date(0),
     });
 
-    // Optionally, send a response
     res.status(200).json({
       success: true,
       message: "User logged out successfully",
@@ -328,7 +326,7 @@ exports.resetPassword = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     await user.update({ user_password: hashedPassword });
     console.log(
-      "password reset success ====================== =============== = = = = = "
+      "password reset success ====================== =============== = = = = = ",
     );
     res.status(200).json({
       status: "Ok",

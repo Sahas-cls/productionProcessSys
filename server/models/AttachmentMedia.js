@@ -75,6 +75,14 @@ module.exports = (sequelize, DataTypes) => {
         },
         comment: "User ID who uploaded the file (from auth middleware)",
       },
+      folder_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "attachment_folders",
+          key: "folder_id",
+        },
+      },
       is_active: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -118,6 +126,11 @@ module.exports = (sequelize, DataTypes) => {
     AttachmentMedia.belongsTo(models.User, {
       foreignKey: "uploaded_by",
       as: "uploaded_user",
+    });
+
+    AttachmentMedia.belongsTo(models.AttachmentFolder, {
+      foreignKey: "folder_id",
+      as: "folder",
     });
   };
 

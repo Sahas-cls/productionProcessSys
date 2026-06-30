@@ -869,7 +869,6 @@ exports.getOperationsWithMedia = async (req, res) => {
       ],
     });
 
-    // Group operations by name
     const groupedOperations = {};
 
     operations.forEach((op) => {
@@ -918,7 +917,7 @@ exports.getOperationsWithMedia = async (req, res) => {
           group.media_types.video += 1;
         }
 
-        // Add style if exists (avoid duplicates)
+        // Add style if exists 
         if (media.style) {
           const styleExists = group.styles.some(
             (s) => s.style_id === media.style.style_id,

@@ -121,7 +121,7 @@ const attachmentMediaUpload = multer({
 
 // GET all attachment media (with filters)
 router.get(
-  "/attachment-media",
+  "/attachment-media/:folderId",
   authMiddleware,
   attachmentMediaController.getAttachmentMedia,
 );

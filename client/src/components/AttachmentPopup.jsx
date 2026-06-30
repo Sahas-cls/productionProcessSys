@@ -1,4 +1,3 @@
-// components/AttachmentPopup.jsx
 import React, { useState, useRef, useEffect } from "react";
 import { FaTimes, FaUpload, FaSpinner, FaImage, FaVideo } from "react-icons/fa";
 import { Formik, Form, Field, ErrorMessage } from "formik";
@@ -6,8 +5,69 @@ import * as Yup from "yup";
 import axios from "axios";
 import Swal from "sweetalert2";
 
-const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
+const AttachmentPopup = ({
+  isOpen,
+  onClose,
+  isVideo,
+  onUploadSuccess,
+  folderId,
+}) => {
   const fileInputRef = useRef(null);
+  const apiUrl = import.meta.env.VITE_API_URL;
+
+  // folder name live search
+  const [keyWord, setKeyWord] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [folderData, setFolderData] = useState([]);
+
+  const suggestionsRef = useRef();
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(event.target)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const searchFolders = async () => {
+    if (keyWord.trim().length <= 2) {
+      console.log("returning");
+      return;
+    }
+
+    try {
+      console.log("calling api");
+      setIsSearching(true);
+      const response = await axios.get(
+        `${apiUrl}/api/attachment-folder/get-folders/${keyWord}`,
+        { withCredentials: true },
+      );
+      setFolderData(response.data.data);
+      console.log(response);
+    } catch (error) {
+      console.error("Error while finding folders:", error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    console.log("calling search folder function");
+    const timeOut = setTimeout(searchFolders, 300);
+
+    return () => clearTimeout(timeOut);
+  }, [keyWord]);
 
   const validationSchema = Yup.object({
     attachment: Yup.mixed()
@@ -39,6 +99,7 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
         /^[a-zA-Z0-9\s\-_\.]+$/,
         "File name can only contain letters, numbers, spaces, and - _ .",
       ),
+    folderName: Yup.number().required("Folder Name is required"),
   });
 
   // Reset form when popup closes
@@ -79,6 +140,7 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
             attachment: null,
             fileName: "",
             description: "",
+            folderName: folderId,
           }}
           validationSchema={validationSchema}
           onSubmit={async (
@@ -89,11 +151,12 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
               const formData = new FormData();
               formData.append("attachment", values.attachment);
               formData.append("fileName", values.fileName);
+              formData.append("folderName", values.folderName);
               formData.append("description", values.description);
               formData.append("mediaType", isVideo ? "video" : "image");
 
               const response = await axios.post(
-                `${import.meta.env.VITE_API_URL}/api/attachment/attachment-media/upload`,
+                `${apiUrl}/api/attachment/attachment-media/upload`,
                 formData,
                 {
                   withCredentials: true,
@@ -157,7 +220,7 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
         >
           {({ values, setFieldValue, isSubmitting }) => (
             <Form>
-              {/* Body */}
+              {console.log("formik values: ", values)};{/* Body */}
               <div className="space-y-5 p-6">
                 {/* File Upload */}
                 <div>
@@ -219,6 +282,62 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
                   />
                 </div>
 
+                {/* folder name */}
+                {!folderId && (
+                  <div>
+                    <label className="mb-2 block text-sm font-medium">
+                      Folder Name <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative" ref={suggestionsRef}>
+                      <input
+                        type="text"
+                        value={keyWord}
+                        placeholder="Enter a name for the file..."
+                        className="w-full rounded-md border p-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                        onFocus={() => setShowSuggestions(true)}
+                        onChange={(e) => setKeyWord(e.target.value)}
+                      />
+
+                      {showSuggestions && (
+                        <div className="absolute left-0 top-full mt-1 w-full z-50 bg-white shadow-md rounded-md border">
+                          {folderData.length > 0 ? (
+                            <ul>
+                              {folderData.map((folder) => (
+                                <li
+                                  key={folder.id}
+                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => {
+                                    setFieldValue(
+                                      "folderName",
+                                      folder.folder_id,
+                                    );
+                                    setKeyWord(folder.folder_name);
+                                    setShowSuggestions(false);
+                                  }}
+                                >
+                                  {folder.folder_name}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="px-3 py-2 text-gray-500">
+                              No folder found
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      Choose a descriptive name for your file (3-100 characters)
+                    </p>
+                    <ErrorMessage
+                      name="folderName"
+                      component="p"
+                      className="mt-1 text-sm text-red-500"
+                    />
+                  </div>
+                )}
+
                 {/* Description */}
                 <div>
                   <label className="mb-2 block text-sm font-medium">
@@ -241,7 +360,6 @@ const AttachmentPopup = ({ isOpen, onClose, isVideo, onUploadSuccess }) => {
                   />
                 </div>
               </div>
-
               {/* Footer */}
               <div className="flex justify-end gap-3 border-t px-6 py-4">
                 <button

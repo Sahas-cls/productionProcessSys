@@ -662,7 +662,7 @@ exports.deleteImage = async (req, res, next) => {
       message: "Invalid image ID",
       success: false,
     });
-  }
+  }  
 
   let imageRecord = null;
 

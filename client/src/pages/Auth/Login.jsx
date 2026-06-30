@@ -186,7 +186,6 @@ const Login = () => {
             </h1>
           </motion.div>
 
-
           <form onSubmit={formik.handleSubmit}>
             {/* Email Field */}
             <motion.div className="flex flex-col mb-6" variants={itemVariants}>
