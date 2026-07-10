@@ -280,7 +280,7 @@ app.use("/api/media", mediaRoutes);
 
 // Sub operation media
 const subOperationRoutes = require("./Routes/SubOperationMediaRoutes.js");
-app.use(".e", subOperationRoutes);
+app.use("/api/subOperationMedia", subOperationRoutes);
 
 // helper operation routes
 const helperOp = require("./Routes/HelperOperationRoutes.js");
@@ -317,7 +317,7 @@ app.use("/api/sub-op", subOperations);
 const jigOperations = require("../server/Routes/JigOperationMediaRoutes.js");
 app.use("/api/jig-operations", jigOperations);
 
-const jigFolderRoutes = require("./routes/JigFolderRoutes");
+const jigFolderRoutes = require("./Routes/JigFolderRoutes");
 app.use("/api/jig-folders", jigFolderRoutes);
 
 // This replaces the old /media UNC path
