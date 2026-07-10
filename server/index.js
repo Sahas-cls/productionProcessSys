@@ -280,7 +280,7 @@ app.use("/api/media", mediaRoutes);
 
 // Sub operation media
 const subOperationRoutes = require("./Routes/SubOperationMediaRoutes.js");
-app.use("/api/subOperationMedia", subOperationRoutes);
+app.use(".e", subOperationRoutes);
 
 // helper operation routes
 const helperOp = require("./Routes/HelperOperationRoutes.js");
