@@ -10,7 +10,7 @@ router.post("/addEmptyWorkstation/:layoutId", controllers.createEmptyWS);
 router.get("/getWorkstation/:id", controllers.getWorkstation);
 
 // to get workstations based on the layout id
-router.get("/getWorkstations/:id", controllers.getWorkstations);
+router.get("/getWorkstations/:styleId", controllers.getWorkstations);
 
 // to edit specific workstation
 router.put("/createWorkstation/:id", controllers.createWS);

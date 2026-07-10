@@ -63,7 +63,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
     },
-    { tableName: "suboperation_media", timestamps: true }
+    { tableName: "suboperation_media", timestamps: true },
   );
 
   SubOperationMedia.associate = (models) => {

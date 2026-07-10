@@ -255,24 +255,6 @@ routes.post(
 );
 routes.delete("/deleteTechPack/:so_tech_id", controller.deleteTechPack);
 
-// !=============================== FOLDER/DOCUMENTS ROUTES ===============================
-routes.get("/getFolderDocuments/:styleId", controller.getFolderDocuments);
-routes.post(
-  "/uploadFolder",
-  folderUpload.array("documents", 10), // max 10 files
-  handleMulterError,
-  generateFilenames, // Add filename generation
-  controller.uploadFolder,
-);
-routes.delete(
-  "/deleteFolderDocument/:so_folder_id",
-  controller.deleteFolderDocument,
-);
-routes.delete(
-  "/deleteMultipleFolderDocuments",
-  controller.deleteMultipleFolderDocuments,
-);
-
 // !=============================== BULK MEDIA ROUTES ===============================
 // routes.get("/getAllMedia/:subOpId", controller.getAllMedia);
 

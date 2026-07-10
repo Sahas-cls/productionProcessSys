@@ -1,6 +1,12 @@
 // controllers/jigOperationMediaController.js
 const { group } = require("console");
-const { JigOperationMedia, SubOperation, Style, User } = require("../models");
+const {
+  JigOperationMedia,
+  SubOperation,
+  Style,
+  User,
+  JigFolder,
+} = require("../models");
 const b2JigOperationStorage = require("../utils/b2JigOperationStorage");
 const path = require("path");
 
@@ -9,13 +15,7 @@ const path = require("path");
  */
 exports.getJigOperationMedia = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      operation_id,
-      style_id,
-      media_type,
-    } = req.query;
+    const { page = 1, limit = 20, folderId, style_id, media_type } = req.query;
 
     const offset = (page - 1) * limit;
 
@@ -24,8 +24,8 @@ exports.getJigOperationMedia = async (req, res) => {
       is_active: true,
     };
 
-    if (operation_id) {
-      whereClause.operation_id = parseInt(operation_id);
+    if (folderId) {
+      whereClause.folderId = parseInt(folderId);
     }
 
     if (style_id) {
@@ -43,7 +43,7 @@ exports.getJigOperationMedia = async (req, res) => {
           model: SubOperation,
           as: "operation",
           attributes: [
-            "sub_operation_id",
+            "sub_folderId",
             "sub_operation_name",
             "sub_operation_code",
           ],
@@ -98,24 +98,24 @@ exports.uploadJigOperationMedia = async (req, res) => {
 
   // Extract form data
   const {
-    operation,
-    styleNo,
+    fileName,
     description,
-    mediaType: bodyMediaType, // Rename to avoid conflict
+    folderName, // folder ID from the form
+    mediaType: bodyMediaType,
   } = req.body;
 
   // Validate required fields
-  if (!operation) {
+  if (!fileName || !fileName.trim()) {
     return res.status(400).json({
       success: false,
-      message: "Operation ID is required",
+      message: "File name is required",
     });
   }
 
-  if (!styleNo) {
+  if (!folderName) {
     return res.status(400).json({
       success: false,
-      message: "Style Number is required",
+      message: "Folder ID is required",
     });
   }
 
@@ -132,54 +132,40 @@ exports.uploadJigOperationMedia = async (req, res) => {
     (req.file.mimetype.startsWith("video/") ? "video" : "image");
 
   try {
-    // STEP 1: Validate operation exists
-    const operationRecord = await SubOperation.findByPk(parseInt(operation));
-    if (!operationRecord) {
+    // STEP 1: Validate folder exists
+    const folderRecord = await JigFolder.findByPk(parseInt(folderName));
+    if (!folderRecord) {
       return res.status(404).json({
         success: false,
-        message: "Operation not found",
+        message: "Folder not found",
       });
     }
 
-    // STEP 2: Validate style exists
-    const styleRecord = await Style.findOne({
-      where: {
-        style_no: styleNo,
-      },
-    });
-
-    if (!styleRecord) {
-      return res.status(404).json({
-        success: false,
-        message: "Style not found",
-      });
-    }
-
-    // STEP 3: Prepare filename
+    // STEP 2: Prepare filename
     const timestamp = Date.now();
     const originalExt = path.extname(req.file.originalname);
     const sanitizedName =
-      `${operationRecord.sub_operation_name}_${styleNo}_${timestamp}${originalExt}`
+      `${fileName.trim().replace(/[^a-zA-Z0-9]/g, "_")}_${timestamp}${originalExt}`
         .replace(/[^a-zA-Z0-9._-]/g, "_")
-        .substring(0, 200); // Limit filename length
+        .substring(0, 200);
 
     console.log(`📤 Starting jig operation ${mediaType} upload:`, {
-      operation: operationRecord.sub_operation_name,
-      styleNo: styleNo,
+      folderId: folderName,
+      fileName: fileName,
       originalName: req.file.originalname,
       generatedName: sanitizedName,
       size: req.file.size,
       mediaType: mediaType,
     });
 
-    // STEP 4: Upload to B2
+    // STEP 3: Upload to B2
     const uploadResult = await b2JigOperationStorage.uploadJigOperationMedia(
       req.file.buffer,
       sanitizedName,
       mediaType,
     );
 
-    // STEP 5: Save to database
+    // STEP 4: Save to database
     const dbRecord = await JigOperationMedia.create({
       file_name: req.file.originalname,
       media_url: uploadResult.filePath,
@@ -187,14 +173,13 @@ exports.uploadJigOperationMedia = async (req, res) => {
       file_size: req.file.size,
       mime_type: req.file.mimetype.split(";")[0],
       media_type: mediaType,
-      description: description.trim() || "",
-      operation_id: parseInt(operation),
-      style_id: styleRecord.style_id,
+      description: description.trim(),
+      folder_id: parseInt(folderName),
       uploaded_by: req.user?.userId,
       is_active: true,
     });
 
-    // STEP 6: Return success response
+    // STEP 5: Return success response
     res.status(201).json({
       success: true,
       message: `Jig operation ${mediaType} uploaded successfully`,
@@ -205,14 +190,9 @@ exports.uploadJigOperationMedia = async (req, res) => {
         file_size: dbRecord.file_size,
         media_type: dbRecord.media_type,
         description: dbRecord.description,
-        operation: {
-          id: operationRecord.sub_operation_id,
-          name: operationRecord.sub_operation_name,
-        },
-        style: {
-          id: styleRecord.style_id,
-          no: styleRecord.style_no,
-          name: styleRecord.style_name,
+        folder: {
+          id: folderRecord.folder_id,
+          name: folderRecord.folder_name,
         },
         uploaded_by: dbRecord.uploaded_by,
         created_at: dbRecord.created_at,
@@ -258,7 +238,7 @@ exports.deleteJigOperationMedia = async (req, res) => {
       });
     }
 
-    // STEP 2: Check if user owns this media
+    // STEP 2: Check ownership
     if (mediaRecord.uploaded_by !== req.user?.userId) {
       return res.status(403).json({
         success: false,
@@ -266,44 +246,46 @@ exports.deleteJigOperationMedia = async (req, res) => {
       });
     }
 
-    // STEP 3: Delete from B2 storage
+    // STEP 3: Delete from B2 (if exists)
     if (mediaRecord.b2_file_id && mediaRecord.media_url) {
       try {
         await b2JigOperationStorage.deleteFile(
           mediaRecord.b2_file_id,
           mediaRecord.media_url,
         );
+
         console.log(`✅ Deleted from B2: ${mediaRecord.media_url}`);
       } catch (b2Error) {
-        console.error(
-          "⚠️ B2 deletion failed but continuing with soft delete:",
-          b2Error,
-        );
-        // Continue with soft delete even if B2 deletion fails
+        // Ignore if file is already missing
+        if (b2Error.code === "NotFound" || b2Error.statusCode === 404) {
+          console.warn(
+            `⚠️ File already missing from B2: ${mediaRecord.media_url}`,
+          );
+        } else {
+          console.error("⚠️ Failed to delete file from B2:", b2Error.message);
+        }
       }
     }
 
-    // STEP 4: Soft delete from database
-    await mediaRecord.update({
-      is_active: false,
-      deleted_at: new Date(),
-    });
+    // STEP 4: Hard delete database record
+    await mediaRecord.destroy();
 
-    // STEP 5: Return success
-    res.status(200).json({
+    // STEP 5: Success response
+    return res.status(200).json({
       success: true,
-      message: "Jig operation media deleted successfully",
+      message: "Jig operation media deleted successfully.",
       data: {
-        jig_media_id: parseInt(media_id),
+        jig_media_id: mediaRecord.jig_media_id,
         file_name: mediaRecord.file_name,
         media_type: mediaRecord.media_type,
       },
     });
   } catch (error) {
     console.error("❌ Delete jig operation media error:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
-      message: "Failed to delete media",
+      message: "Failed to delete media.",
       error: error.message,
     });
   }
@@ -326,7 +308,7 @@ exports.getJigOperationMediaById = async (req, res) => {
           model: SubOperation,
           as: "operation",
           attributes: [
-            "sub_operation_id",
+            "sub_folderId",
             "sub_operation_name",
             "sub_operation_code",
           ],
@@ -368,95 +350,30 @@ exports.getJigOperationMediaById = async (req, res) => {
 /**
  * Get media by operation ID
  */
-exports.getMediaByOperation = async (req, res) => {
-  const { operation_id } = req.params;
+exports.getMediaByFolder = async (req, res) => {
+  console.log("from media controller: ", req.params);
+
+  const { folderId } = req.params;
   const { media_type } = req.query;
 
   try {
-    const whereClause = {
-      operation_id: parseInt(operation_id),
-      is_active: true,
-    };
-
-    if (media_type && ["image", "video"].includes(media_type)) {
-      whereClause.media_type = media_type;
-    }
-
-    const mediaRecords = await JigOperationMedia.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: Style,
-          as: "style",
-          attributes: ["style_id", "style_no", "style_name"],
-        },
-        {
-          model: User,
-          as: "uploaded_user",
-          attributes: ["user_id", "user_name"],
-        },
-        {
-          model: JigOperation, // Include the Operation model
-          as: "operation", // Make sure this matches your association name
-          attributes: ["operation_id", "operation_name", "operation_code"], // Add any other fields you need
-        },
-      ],
-      order: [["created_at", "DESC"]],
+    const media = await JigOperationMedia.findAll({
+      where: { folder_id: folderId },
     });
 
-    // Group media by operation name
-    const groupedByOperation = mediaRecords.reduce((acc, record) => {
-      const operationName =
-        record.operation?.operation_name || "Unnamed Operation";
-      const operationId = record.operation?.operation_id || "unknown";
-
-      // Create a unique key combining operation name and ID to handle same names from different operations
-      const key = `${operationName}_${operationId}`;
-
-      if (!acc[key]) {
-        acc[key] = {
-          operation_name: operationName,
-          operation_id: operationId,
-          operation_code: record.operation?.operation_code || null,
-          total_count: 0,
-          images: [],
-          videos: [],
-          all_media: [],
-        };
-      }
-
-      // Add to all_media
-      acc[key].all_media.push(record);
-      acc[key].total_count += 1;
-
-      // Separate by media type
-      if (record.media_type === "image") {
-        acc[key].images.push(record);
-      } else if (record.media_type === "video") {
-        acc[key].videos.push(record);
-      }
-
-      return acc;
-    }, {});
-
-    // Convert to array and sort by operation name
-    const groupedData = Object.values(groupedByOperation).sort((a, b) =>
-      a.operation_name.localeCompare(b.operation_name),
-    );
-
-    res.status(200).json({
-      success: true,
-      data: groupedData,
-      total_operations: groupedData.length,
-      total_media: mediaRecords.length,
+    const videos = media.filter((m) => {
+      return m.media_type === "video";
     });
+
+    const images = media.filter((m) => {
+      return m.media_type === "image";
+    });
+
+    res
+      .status(200)
+      .json({ status: "Ok", videos: videos || [], images: images || [] });
   } catch (error) {
-    console.error("❌ Get media by operation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch media",
-      error: error.message,
-    });
+    console.log(error);
   }
 };
 
@@ -484,7 +401,7 @@ exports.getMediaByStyle = async (req, res) => {
           model: SubOperation,
           as: "operation",
           attributes: [
-            "sub_operation_id",
+            "sub_folderId",
             "sub_operation_name",
             "sub_operation_code",
           ],
@@ -538,7 +455,7 @@ exports.getOperationsWithMedia = async (req, res) => {
     // Get all operations with their media
     const operations = await SubOperation.findAll({
       attributes: [
-        "sub_operation_id",
+        "sub_folderId",
         "sub_operation_name",
         "sub_operation_number",
       ],
@@ -583,7 +500,7 @@ exports.getOperationsWithMedia = async (req, res) => {
       if (!acc[operationName]) {
         acc[operationName] = {
           operation_name: operationName,
-          operation_ids: [],
+          folderIds: [],
           operation_numbers: [],
           total_media: 0,
           styles: new Map(), // Use Map to avoid duplicates
@@ -596,7 +513,7 @@ exports.getOperationsWithMedia = async (req, res) => {
       }
 
       // Add operation details
-      acc[operationName].operation_ids.push(opData.sub_operation_id);
+      acc[operationName].folderIds.push(opData.sub_folderId);
       if (opData.sub_operation_number) {
         acc[operationName].operation_numbers.push(opData.sub_operation_number);
       }
@@ -609,7 +526,7 @@ exports.getOperationsWithMedia = async (req, res) => {
       mediaItems.forEach((media) => {
         acc[operationName].all_media.push({
           ...media,
-          operation_id: opData.sub_operation_id,
+          folderId: opData.sub_folderId,
         });
 
         // Count media by type
@@ -638,9 +555,9 @@ exports.getOperationsWithMedia = async (req, res) => {
     // Convert grouped operations to array format
     const formattedResult = Object.values(groupedOperations).map((group) => ({
       operation_name: group.operation_name,
-      operation_ids: group.operation_ids,
+      folderIds: group.folderIds,
       operation_numbers: group.operation_numbers,
-      operation_count: group.operation_ids.length,
+      operation_count: group.folderIds.length,
       total_media: group.total_media,
       media_types: group.media_types,
       styles: Array.from(group.styles.values()),
@@ -672,17 +589,13 @@ exports.getOperationsWithMedia = async (req, res) => {
  * Get all media for a specific operation
  */
 exports.getMediaByOperationId = async (req, res) => {
-  const { operation_id } = req.params;
+  const { folderId } = req.params;
   const { media_type } = req.query;
   console.log("getting media 📸🎥🎥🎥");
   try {
     // Validate operation exists
-    const operation = await SubOperation.findByPk(operation_id, {
-      attributes: [
-        "sub_operation_id",
-        "sub_operation_name",
-        "sub_operation_code",
-      ],
+    const operation = await SubOperation.findByPk(folderId, {
+      attributes: ["sub_folderId", "sub_operation_name", "sub_operation_code"],
     });
 
     if (!operation) {
@@ -694,7 +607,7 @@ exports.getMediaByOperationId = async (req, res) => {
 
     // Build where clause
     const whereClause = {
-      operation_id: parseInt(operation_id),
+      folderId: parseInt(folderId),
       is_active: true,
     };
 
@@ -731,7 +644,7 @@ exports.getMediaByOperationId = async (req, res) => {
       success: true,
       data: {
         operation: {
-          id: operation.sub_operation_id,
+          id: operation.sub_folderId,
           name: operation.sub_operation_name,
           code: operation.sub_operation_code,
         },
@@ -755,12 +668,12 @@ exports.getMediaByOperationId = async (req, res) => {
  * Get media by style for a specific operation
  */
 exports.getMediaByOperationAndStyle = async (req, res) => {
-  const { operation_id, style_id } = req.params;
+  const { folderId, style_id } = req.params;
   const { media_type } = req.query;
   console.log("getting media 222 📸🎥🎥🎥");
   try {
     const whereClause = {
-      operation_id: parseInt(operation_id),
+      folderId: parseInt(folderId),
       style_id: parseInt(style_id),
       is_active: true,
     };
@@ -831,7 +744,7 @@ exports.getOperationsWithMedia = async (req, res) => {
     // Get all operations with their media
     const operations = await SubOperation.findAll({
       attributes: [
-        "sub_operation_id",
+        "sub_folderId",
         "sub_operation_name",
         "sub_operation_number",
       ],
@@ -878,7 +791,7 @@ exports.getOperationsWithMedia = async (req, res) => {
       if (!groupedOperations[operationName]) {
         groupedOperations[operationName] = {
           operation_name: operationName,
-          operation_ids: [],
+          folderIds: [],
           operation_numbers: [],
           total_media: 0,
           media_types: {
@@ -893,7 +806,7 @@ exports.getOperationsWithMedia = async (req, res) => {
       const group = groupedOperations[operationName];
 
       // Add operation details
-      group.operation_ids.push(opData.sub_operation_id);
+      group.folderIds.push(opData.sub_folderId);
       if (opData.sub_operation_number) {
         group.operation_numbers.push(opData.sub_operation_number);
       }
@@ -907,7 +820,7 @@ exports.getOperationsWithMedia = async (req, res) => {
         // Add media with operation info
         group.media.push({
           ...media,
-          operation_id: opData.sub_operation_id,
+          folderId: opData.sub_folderId,
         });
 
         // Count media types
@@ -917,7 +830,7 @@ exports.getOperationsWithMedia = async (req, res) => {
           group.media_types.video += 1;
         }
 
-        // Add style if exists 
+        // Add style if exists
         if (media.style) {
           const styleExists = group.styles.some(
             (s) => s.style_id === media.style.style_id,
@@ -936,7 +849,7 @@ exports.getOperationsWithMedia = async (req, res) => {
     // Convert to array and add operation count
     const formattedResult = Object.values(groupedOperations).map((group) => ({
       ...group,
-      operation_count: group.operation_ids.length,
+      operation_count: group.folderIds.length,
     }));
 
     // Sort by operation name
@@ -975,7 +888,7 @@ exports.getMediaByOperationName = async (req, res) => {
         sub_operation_name: operation_name,
       },
       attributes: [
-        "sub_operation_id",
+        "sub_folderId",
         "sub_operation_name",
         "sub_operation_number",
       ],
@@ -988,15 +901,15 @@ exports.getMediaByOperationName = async (req, res) => {
       });
     }
 
-    const operationIds = operations.map((op) => op.sub_operation_id);
+    const operationIds = operations.map((op) => op.sub_folderId);
     const operationInfo = operations.map((op) => ({
-      id: op.sub_operation_id,
+      id: op.sub_folderId,
       number: op.sub_operation_number,
     }));
 
     // Build where clause for media - use IN clause for multiple operation IDs
     const whereClause = {
-      operation_id: operationIds,
+      folderId: operationIds,
       is_active: true,
     };
 
@@ -1022,7 +935,7 @@ exports.getMediaByOperationName = async (req, res) => {
           model: SubOperation,
           as: "operation",
           attributes: [
-            "sub_operation_id",
+            "sub_folderId",
             "sub_operation_name",
             "sub_operation_number",
           ],
@@ -1039,7 +952,7 @@ exports.getMediaByOperationName = async (req, res) => {
       success: true,
       data: {
         operation_name: operation_name,
-        operation_ids: operationIds,
+        folderIds: operationIds,
         operation_info: operationInfo,
         operation_count: operations.length,
         total_media: mediaRecords.length,
@@ -1064,15 +977,15 @@ exports.getMediaByOperationName = async (req, res) => {
 
 // Keep the existing getMediaByOperationId for backward compatibility
 exports.getMediaByOperationId = async (req, res) => {
-  const { operation_id } = req.params;
+  const { folderId } = req.params;
   const { media_type } = req.query;
   console.log("getting media 📸🎥🎥🎥");
 
   try {
     // Validate operation exists
-    const operation = await SubOperation.findByPk(operation_id, {
+    const operation = await SubOperation.findByPk(folderId, {
       attributes: [
-        "sub_operation_id",
+        "sub_folderId",
         "sub_operation_name",
         "sub_operation_number",
       ],
@@ -1087,7 +1000,7 @@ exports.getMediaByOperationId = async (req, res) => {
 
     // Build where clause
     const whereClause = {
-      operation_id: parseInt(operation_id),
+      folderId: parseInt(folderId),
       is_active: true,
     };
 
@@ -1124,7 +1037,7 @@ exports.getMediaByOperationId = async (req, res) => {
       success: true,
       data: {
         operation: {
-          id: operation.sub_operation_id,
+          id: operation.sub_folderId,
           name: operation.sub_operation_name,
           number: operation.sub_operation_number,
         },

@@ -50,6 +50,8 @@ import AttachmentPage from "./pages/AttachmentPage";
 import JigOperationsPage from "./pages/JigOperationsPage";
 import AttachmentMediaPage from "./pages/AttachmentMediaPage";
 import JigOperationsMediaPage from "./pages/JigOperationsMediaPage";
+import LayoutPage from "./pages/LayoutPage";
+import { LayoutAttachmentPage } from "./pages/LayoutAttachmentPage";
 
 const App = () => {
   const { user, loading } = useAuth(); // ✅ use inside component
@@ -85,6 +87,11 @@ const App = () => {
             path="/operation-bulletin/list"
             element={<ViewOperationBulletingPage />}
           />
+          <Route path="/Layout" element={<LayoutPage />} />
+
+          {/* layout attachments */}
+          <Route path="/layout/:styleId" element={<LayoutAttachmentPage />} />
+
           <Route
             path="/operation-bulletin/operation-details"
             element={<ViewOperation />}
@@ -113,7 +120,7 @@ const App = () => {
           />
 
           {/* to display all layouts */}
-          <Route path="/layout/list-view" element={<ViewLayoutPage />} />
+          <Route path="/bulletin/list-view" element={<ViewLayoutPage />} />
 
           {/* to display workstations */}
           <Route
@@ -121,7 +128,7 @@ const App = () => {
             element={<ViewWorkstationPage userRole={user?.userRole} />}
           />
           <Route
-            path="/workstation/list-view"
+            path="/bulletin/:styleId"
             element={<ViewWorkstationPage userRole={user?.userRole} />}
           />
 
@@ -181,7 +188,7 @@ const App = () => {
             element={<JigOperationsPage />}
           />
           <Route
-            path="/innovations/jig-operations/:operationName"
+            path="/innovations/jig-operations/:folderId"
             element={<JigOperationsMediaPage />}
           />
 

@@ -175,16 +175,29 @@ const FolderDocumentsUploader = ({
     try {
       const formData = new FormData();
 
-      // Append the metadata - ADD subOpId HERE!
-      // formData.append("styleId", uploadingData.style_id || 1);
+      // IMPORTANT: Only send style_id (required)
+      if (!uploadingData.styleId) {
+        throw new Error("Style ID is required");
+      }
+
       formData.append("styleId", uploadingData.styleId);
-      formData.append("styleNo", uploadingData.styleNo);
-      // formData.append("moId", uploadingData.moId);
-      // formData.append("sopId", uploadingData.sopId);
-      // formData.append("sopName", uploadingData.sopName);
-      // formData.append("subOpId", uploadingData.subOpId || uploadingData.sopId);
+
+      // Optional fields
+      if (uploadingData.styleNo) {
+        formData.append("styleNo", uploadingData.styleNo);
+      }
+
+      if (uploadingData.folderName) {
+        formData.append("folderName", uploadingData.folderName);
+      } else {
+        // Default folder name if not provided
+        formData.append(
+          "folderName",
+          `Style_${uploadingData.styleNo || "DOCS"}_Documents`,
+        );
+      }
+
       formData.append("totalFiles", selectedFiles.length);
-      formData.append("folderName", `Style_${uploadingData.styleNo}_Documents`);
 
       // Calculate total file size for validation
       const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
@@ -214,9 +227,9 @@ const FolderDocumentsUploader = ({
 
       formData.append("totalSize", totalSize);
 
-      // Append each file - field name should be "documents" or check what backend expects
+      // Append each file
       selectedFiles.forEach((file, index) => {
-        formData.append("documents", file); // or "files" based on your backend
+        formData.append("documents", file);
         console.log(
           `📤 Appending file ${index + 1}: ${file.name} (${(
             file.size / 1024
@@ -229,10 +242,9 @@ const FolderDocumentsUploader = ({
       console.log(
         `📦 Starting upload of ${selectedFiles.length} files to Backblaze B2...`,
       );
-      console.log("form data: ", formData);
-      // return;
+
       const response = await axios.post(
-        `${apiUrl}/api/subOperationMedia/uploadFolder`,
+        `${apiUrl}/api/subOperationMedia/uploadFolder`, // Updated endpoint path
         formData,
         {
           withCredentials: true,
@@ -248,7 +260,7 @@ const FolderDocumentsUploader = ({
               console.log(`📊 Upload progress: ${percentCompleted}%`);
             }
           },
-          timeout: 300000, // Increased to 5 minutes for multiple files
+          timeout: 300000, // 5 minutes for multiple files
         },
       );
 
@@ -273,7 +285,6 @@ const FolderDocumentsUploader = ({
                 iconType = "warning";
                 successText += `. ${results.failedFiles} files failed`;
 
-                // Show details of failed files
                 if (response.data.failedFiles) {
                   console.log(
                     "❌ Failed files details:",
@@ -282,7 +293,6 @@ const FolderDocumentsUploader = ({
                 }
               }
 
-              // Add size info if available
               if (results.totalSize) {
                 successText += ` (Total: ${(
                   results.totalSize /
@@ -308,10 +318,7 @@ const FolderDocumentsUploader = ({
               filesProcessed: response.data.uploadResults?.filesProcessed,
               totalSize: response.data.uploadResults?.totalSize,
             });
-          }
-
-          // Check for any warnings
-          else if (response.data.warnings || response.data.warning) {
+          } else if (response.data.warnings || response.data.warning) {
             successTitle = "Uploaded with Note";
             successText = response.data.warnings || response.data.warning;
             iconType = "warning";
@@ -328,18 +335,12 @@ const FolderDocumentsUploader = ({
           });
 
           console.log("✅ Folder documents upload successful:", response.data);
-          console.log(
-            "📁 Storage provider:",
-            response.data.storage?.type ||
-              response.data.storageProvider ||
-              "Backblaze B2",
-          );
 
           // Log successful files details
-          if (response.data.data && Array.isArray(response.data.data)) {
+          if (response.data.files && Array.isArray(response.data.files)) {
             console.log(
               "📦 Uploaded files details:",
-              response.data.data.map((file) => ({
+              response.data.files.map((file) => ({
                 id: file.id,
                 originalName: file.originalName,
                 savedName: file.savedName,
@@ -356,21 +357,20 @@ const FolderDocumentsUploader = ({
           setUploadProgress(0);
           setValidationError("");
 
-          // Optionally trigger a refresh of folder files list
+          // Trigger refresh of folder files list
           if (typeof onUploadSuccess === "function") {
-            onUploadSuccess(response.data.data);
+            onUploadSuccess(response.data.files);
           }
-        } else if (response.data.success === false) {
+
+          // Close the uploader after successful upload
+          if (typeof setIsUploading === "function") {
+            setTimeout(() => setIsUploading(false), 3000);
+          }
+        } else {
           console.error("❌ Server returned failure:", response.data);
           throw new Error(
             response.data.message || "Folder upload failed on server",
           );
-        } else {
-          console.error(
-            "❌ Malformed response - no success flag:",
-            response.data,
-          );
-          throw new Error("Server response format error");
         }
       } else {
         console.error("❌ Unexpected status code:", response.status);
@@ -392,13 +392,8 @@ const FolderDocumentsUploader = ({
 
         if (error.response.status === 400) {
           errorTitle = "Invalid Request";
-          if (errorMessage?.includes("Missing required fields")) {
-            // More specific error for missing subOpId
-            if (errorMessage?.includes("subOpId")) {
-              errorMessage = "Please provide sub-operation ID";
-            } else {
-              errorMessage = "Please fill all required fields";
-            }
+          if (errorMessage?.includes("styleId")) {
+            errorMessage = "Style ID is required";
           } else if (errorMessage?.includes("too large")) {
             errorMessage =
               "Some files are too large. Maximum size is 20MB per file";
@@ -468,12 +463,11 @@ const FolderDocumentsUploader = ({
   const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
 
   return (
-    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-4 lg:p-6 w-full mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
+    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] w-[60%] p-4 lg:p-6 mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
       <div className="text-right relative">
         <button
           className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
           onClick={() => {
-            // setIsUploading(false);
             setUploadingMaterial(null);
           }}
           disabled={uploading}
@@ -483,19 +477,17 @@ const FolderDocumentsUploader = ({
       </div>
 
       <h2 className="text-2xl font-bold mb-2 text-center">
-        Upload Production Folder
+        Upload Style Documents
       </h2>
       <p className="text-gray-400 text-center mb-6">
-        Upload all documents related to this production order
+        Upload all documents related to this style
       </p>
 
       {/* Upload progress */}
       {uploading && (
         <div className="mb-6">
           <div className="flex justify-between text-sm mb-1">
-            <span>
-              Uploading Folder Documents... ({selectedFiles.length} files)
-            </span>
+            <span>Uploading Documents... ({selectedFiles.length} files)</span>
             <span>{uploadProgress}%</span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-3">
@@ -523,7 +515,7 @@ const FolderDocumentsUploader = ({
           <>
             <FaFolder className="text-4xl text-gray-400 mx-auto mb-4" />
             <p className="text-lg mb-2">
-              Drag & Drop your production documents here
+              Drag & Drop your style documents here
             </p>
             <p className="text-gray-400 text-sm mb-4">
               Or click below to select multiple files
@@ -601,37 +593,6 @@ const FolderDocumentsUploader = ({
         </div>
       )}
 
-      {/* Instructions */}
-      {/* <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold mb-2 text-purple-300">
-          📁 Production Folder Contents:
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-purple-200">
-          <div>
-            <p className="font-medium mb-1">Recommended Documents:</p>
-            <ul className="space-y-1">
-              <li>• Cutting tickets & markers</li>
-              <li>• Operation breakdown sheets</li>
-              <li>• Quality control checklists</li>
-              <li>• Thread/trims consumption</li>
-            </ul>
-          </div>
-          <div>
-            <p className="font-medium mb-1">Supported Formats:</p>
-            <ul className="space-y-1">
-              <li>• PDF, Word, Excel files</li>
-              <li>• Images (JPG, PNG)</li>
-              <li>• ZIP archives</li>
-              <li>• Text files</li>
-            </ul>
-          </div>
-        </div>
-        <p className="text-xs text-purple-300 mt-2">
-          💡 <strong>Tip:</strong> You can upload individual files or a ZIP file
-          containing all documents
-        </p>
-      </div> */}
-
       {/* Quick Actions */}
       {selectedFiles.length === 0 && (
         <div className="flex gap-2 mb-6 justify-center">
@@ -644,15 +605,6 @@ const FolderDocumentsUploader = ({
               className="hidden"
             />
           </label>
-          {/* <label className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 px-4 py-2 rounded-lg text-sm cursor-pointer transition">
-            <FaFile /> Multiple Files
-            <input
-              type="file"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </label> */}
         </div>
       )}
 

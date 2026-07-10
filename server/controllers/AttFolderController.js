@@ -1,10 +1,12 @@
 const { where, Op } = require("sequelize");
-const { AttachmentFolder } = require("../models");
+const { AttachmentFolder, AttachmentMedia } = require("../models");
 
 // NOTE TO GET ALL FOLDERS
 exports.getAllFolders = async (req, res, next) => {
   try {
-    const folders = await AttachmentFolder.findAll();
+    const folders = await AttachmentFolder.findAll({
+      order: [["createdAt", "DESC"]],
+    });
     res.status(200).json({ status: "Ok", data: folders });
   } catch (error) {
     console.log(error);
@@ -88,10 +90,70 @@ exports.createNewFolder = async (req, res, next) => {
 
 // NOTE TO DELETE FOLDER
 exports.deleteFolder = async (req, res, next) => {
-  console.log("deleing folder");
+  const { folderId } = req.params;
+  console.log("deleing folder", folderId);
+
+  try {
+    const folder = await AttachmentFolder.findOne({
+      where: { folder_id: folderId },
+    });
+    if (!folder) {
+      return res.status(404).json({
+        status: "Error",
+        msg: "The requested folder was not found. It may have been deleted or does not exist.",
+      });
+    }
+
+    const isRelatedRecords = await AttachmentMedia.findOne({
+      where: { folder_id: folderId },
+    });
+
+    if (isRelatedRecords) {
+      return res.status(400).json({
+        status: "Error",
+        msg: "This folder have attachment media, first delete them and try again",
+      });
+    }
+
+    const deleteFolder = await folder.destroy();
+
+    res.status(200).json({ status: "Ok", msg: "Folder Delete success" });
+  } catch (error) {
+    console.log("error while deleting folder: ", error);
+  }
 };
 
 // NOTE TO RENAME A FOLDER
 exports.renameFolder = async (req, res, next) => {
-  console.log("renaming folder");
+  const { folderId } = req.params;
+  const { folderName } = req.body;
+
+  try {
+    const isExist = await AttachmentFolder.findOne({
+      where: { folder_name: folderName },
+    });
+    if (isExist) {
+      return res.status(400).json({
+        status: "Error",
+        msg: "The provided name is already exist in our records",
+      });
+    }
+
+    const folder = await AttachmentFolder.findOne({
+      where: { folder_id: folderId },
+    });
+
+    if (!folder) {
+      return res.status(404).json({
+        status: "Error",
+        msg: "The requested folder is no longer available",
+      });
+    }
+
+    await folder.update({ folder_name: folderName.trim() });
+
+    res.status(200).json({ status: "Ok", msg: "Folder rename success" });
+  } catch (error) {
+    console.log(error);
+  }
 };

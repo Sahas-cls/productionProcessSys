@@ -147,9 +147,9 @@ router.get(
 
 // GET media by operation ID
 router.get(
-  "/jig-operation-media/operation/:operation_id",
+  "/jig-operation-media/folder/:folderId",
   authMiddleware,
-  jigOperationMediaController.getMediaByOperation,
+  jigOperationMediaController.getMediaByFolder,
 );
 
 // GET media by style ID

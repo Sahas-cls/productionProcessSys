@@ -75,62 +75,140 @@ exports.getWorkstation = async (req, res, next) => {
   }
 };
 
-exports.getWorkstations = async (req, res, next) => {
-  //
-  console.log(req.params);
-  const { id } = req.params;
-  console.log("param id: ", id);
-  // const t = await sequelize.transaction();
-  try {
-    const workstations = await Workstation.findAll({
-      where: { layout_id: id, is_helper_operation: false },
+// exports.getWorkstations = async (req, res, next) => {
+//   //
+//   console.log(req.params);
+//   return;
+//   const { styleId } = req.params;
+//   console.log("param id: ", id);
+//   // const t = await sequelize.transaction();
+//   try {
+//     const workstations = await Workstation.findAll({
+//       where: { layout_id: id, is_helper_operation: false },
 
+//       include: [
+//         {
+//           model: WorkstationSubmenu,
+//           as: "subOperations",
+//           required: false,
+//           // where: {
+//           //   sub_operation_id: {
+//           //     [Op.ne]: null,
+//           //   },
+//           // },
+//           include: [
+//             {
+//               model: Helper,
+//               as: "helper",
+//               include: [
+//                 {
+//                   model: HelperVideo,
+//                   as: "videos",
+//                   attributes: ["helper_video_id"],
+//                 },
+//                 {
+//                   model: HelperImage,
+//                   as: "images",
+//                   attributes: ["helper_image_id"],
+//                 },
+//               ],
+//             },
+//             {
+//               model: SubOperation,
+//               as: "suboperatoin",
+//               attributes: {
+//                 include: [
+//                   [
+//                     Sequelize.literal(`(
+//                   SELECT COUNT(*)
+//                   FROM suboperation_media sm
+//                   WHERE sm.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
+//                 )`),
+//                     "media_count",
+//                   ],
+//                   [
+//                     Sequelize.literal(`(
+//                   SELECT COUNT(*)
+//                   FROM suboperation_images si
+//                   WHERE si.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
+//                 )`),
+//                     "image_count",
+//                   ],
+//                 ],
+//               },
+
+//               include: [
+//                 {
+//                   model: MainOperation,
+//                   as: "mainOperation",
+//                 },
+//                 {
+//                   model: Machine,
+//                   as: "machines",
+//                 },
+//               ],
+//             },
+//           ],
+//         },
+//       ],
+//       order: [["workstation_no", "ASC"]],
+//       // transaction: t,
+//     });
+
+//     res.status(200).json({
+//       status: "success",
+//       message: "data selected successfully",
+//       data: workstations,
+//       // helperOp: HWorkstations,
+//     });
+
+//     // console.log("workstations: ", workstations);
+//   } catch (error) {
+//     // await t.rollback();
+//     return next(error);
+//   }
+// };
+
+exports.getWorkstations = async (req, res, next) => {
+  const { styleId } = req.params;
+
+  if (!styleId) {
+    return res.status(400).json({
+      status: "failed",
+      message: "Style ID is required",
+    });
+  }
+
+  try {
+    const operationBulletin = await Style.findByPk(styleId, {
       include: [
         {
-          model: WorkstationSubmenu,
-          as: "subOperations",
-          required: false,
-          // where: {
-          //   sub_operation_id: {
-          //     [Op.ne]: null,
-          //   },
-          // },
+          model: MainOperation,
+          as: "operations",
+
           include: [
             {
-              model: Helper,
-              as: "helper",
-              include: [
-                {
-                  model: HelperVideo,
-                  as: "videos",
-                  attributes: ["helper_video_id"],
-                },
-                {
-                  model: HelperImage,
-                  as: "images",
-                  attributes: ["helper_image_id"],
-                },
-              ],
-            },
-            {
               model: SubOperation,
-              as: "suboperatoin",
+              as: "subOperations",
+
               attributes: {
                 include: [
                   [
                     Sequelize.literal(`(
-                  SELECT COUNT(*)
-                  FROM suboperation_media sm
-                  WHERE sm.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
-                )`),
+                      SELECT COUNT(*)
+                      FROM suboperation_media sm
+                      WHERE sm.sub_operation_id = 
+                      \`operations->subOperations\`.\`sub_operation_id\`
+                    )`),
                     "media_count",
                   ],
                   [
                     Sequelize.literal(`(
-                  SELECT COUNT(*)
-                  FROM suboperation_images si
-                  WHERE si.sub_operation_id = \`subOperations->suboperatoin\`.\`sub_operation_id\`
-                )`),
+                      SELECT COUNT(*)
+                      FROM suboperation_images si
+                      WHERE si.sub_operation_id = 
+                      \`operations->subOperations\`.\`sub_operation_id\`
+                    )`),
                     "image_count",
                   ],
                 ],
@@ -138,9 +216,17 @@ exports.getWorkstations = async (req, res, next) => {
 
               include: [
                 {
+                  model: SubOperationMedia,
+                  as: "medias",
+                  attributes: [],
+                  required: false,
+                },
+
+                {
                   model: MainOperation,
                   as: "mainOperation",
                 },
+
                 {
                   model: Machine,
                   as: "machines",
@@ -150,58 +236,61 @@ exports.getWorkstations = async (req, res, next) => {
           ],
         },
       ],
-      order: [["workstation_no", "ASC"]],
-      // transaction: t,
     });
 
-    // const HWorkstations = await Workstation.findAll({
-    //   where: { layout_id: id, is_helper_operation: true },
-    //   include: [
-    //     {
-    //       model: WorkstationSubmenu,
-    //       as: "subOperations",
-    //       required: false,
-    //       where: {
-    //         helper_id: {
-    //           [Op.ne]: null,
-    //         },
-    //       },
-    //       include: [
-    //         {
-    //           model: Helper,
-    //           as: "helper",
-    //           include: [
-    //             {
-    //               model: HelperVideo,
-    //               as: "videos",
-    //               attributes: ["helper_video_id"],
-    //             },
-    //             {
-    //               model: HelperImage,
-    //               as: "images",
-    //               attributes: ["helper_image_id"],
-    //             },
-    //           ],
-    //         },
-    //       ],
-    //     },
-    //   ],
-    //   transaction: t,
-    // });
+    const helperOp = await Style.findByPk(styleId, {
+      include: [
+        {
+          model: Helper,
+          as: "helpers",
 
-    // await t.commit();
+          attributes: {
+            include: [
+              [
+                Sequelize.literal(`(
+              SELECT COUNT(*)
+              FROM helper_videos hv
+              WHERE hv.helper_id = \`helpers\`.\`helper_id\`
+            )`),
+                "video_count",
+              ],
+              [
+                Sequelize.literal(`(
+              SELECT COUNT(*)
+              FROM helper_images hi
+              WHERE hi.helper_id = \`helpers\`.\`helper_id\`
+            )`),
+                "image_count",
+              ],
+            ],
+          },
+
+          include: [
+            {
+              model: HelperVideo,
+              as: "videos",
+              attributes: [],
+              required: false,
+            },
+            {
+              model: HelperImage,
+              as: "images",
+              attributes: [],
+              required: false,
+            },
+          ],
+        },
+      ],
+    });
 
     res.status(200).json({
-      status: "success",
-      message: "data selected successfully",
-      data: workstations,
-      // helperOp: HWorkstations,
+      status: "Ok",
+      data: operationBulletin,
+      helperOp,
     });
-
-    // console.log("workstations: ", workstations);
   } catch (error) {
-    // await t.rollback();
-    return next(error);
+    console.log(error);
+    next(error);
   }
 };
 

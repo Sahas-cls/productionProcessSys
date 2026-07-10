@@ -16,6 +16,7 @@ import { MdFolderSpecial } from "react-icons/md";
 import { RiVideoUploadFill } from "react-icons/ri";
 import { HiOutlineLightBulb } from "react-icons/hi";
 import { CgAttachment } from "react-icons/cg";
+import { AiTwotoneDatabase } from "react-icons/ai";
 
 export const adminSidebarData = [
   {
@@ -62,8 +63,9 @@ export const adminSidebarData = [
   },
   {
     id: 7,
-    title: "Operation Bulletin",
+    title: "Operation Details",
     icon: PiListBulletsFill,
+    navigateTo: "/operation-details",
     submenu: [
       {
         id: 71,
@@ -79,30 +81,17 @@ export const adminSidebarData = [
       },
     ],
   },
-  /*{
+  {
     id: 8,
-    title: "Technical Data",
-    icon: TbToolsOff,
-    navigateTo: "/technical-data",
-  },*/
+    title: "Operation Bulletin",
+    icon: AiTwotoneDatabase,
+    navigateTo: "/bulletin/list-view",
+  },
   {
     id: 9,
     title: "Layout",
     icon: RiLayoutMasonryFill,
-    submenu: [
-      {
-        id: 91,
-        title: "New Layout",
-        icon: IoAddCircleSharp,
-        navigateTo: "/layout/create-new-layout",
-      },
-      {
-        id: 92,
-        title: "View Layout",
-        icon: FaRegEye,
-        navigateTo: "/layout/list-view",
-      },
-    ],
+    navigateTo: "/Layout",
   },
   {
     id: 10,
@@ -110,13 +99,13 @@ export const adminSidebarData = [
     icon: HiOutlineLightBulb,
     submenu: [
       {
-        id: 91,
+        id: 100,
         title: "Attachments",
         icon: CgAttachment,
         navigateTo: "/innovations/attachments",
       },
       {
-        id: 92,
+        id: 101,
         title: "Jig Operations",
         icon: FaRegEye,
         navigateTo: "/innovations/jig-operations",
@@ -137,17 +126,17 @@ export const adminSidebarData = [
   },
 ];
 
-export const userSidebar = [
-  {
-    id: 1,
-    title: "Factory",
-    icon: MdFactory,
-    navigateTo: "/factory",
-  },
-  {
-    id: 2,
-    title: "Customer",
-    icon: MdGroups,
-    navigateTo: "/customer",
-  },
-];
+// export const userSidebar = [
+//   {
+//     id: 1,
+//     title: "Factory",
+//     icon: MdFactory,
+//     navigateTo: "/factory",
+//   },
+//   {
+//     id: 2,
+//     title: "Customer",
+//     icon: MdGroups,
+//     navigateTo: "/customer",
+//   },
+// ];

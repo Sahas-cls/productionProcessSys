@@ -16,6 +16,8 @@ const TechPackUploader = ({
   const [validationError, setValidationError] = useState("");
   const fileInputRef = useRef(null);
 
+  console.log("uploading data: ", uploadingData);
+
   // Allowed Excel file types
   const allowedFileTypes = [
     "application/vnd.ms-excel",
@@ -45,7 +47,7 @@ const TechPackUploader = ({
 
     if (!isValidType) {
       setValidationError(
-        "Please select a valid Excel file (.xls, .xlsx, .csv, .ods)"
+        "Please select a valid Excel file (.xls, .xlsx, .csv, .ods)",
       );
       setSelectedFile(null);
       return;
@@ -104,7 +106,7 @@ const TechPackUploader = ({
     }
 
     // Validate required data
-    if (!uploadingData.styleId) {
+    if (!uploadingData.style_id) {
       setValidationError("Style information is missing");
       return;
     }
@@ -116,7 +118,7 @@ const TechPackUploader = ({
       const formData = new FormData();
 
       // UPDATED: Only send styleId and styleNo (no moId, sopId, sopName, subOpId)
-      formData.append("styleId", uploadingData.styleId);
+      formData.append("styleId", uploadingData.style_id);
       formData.append("styleNo", uploadingData.styleNo || "");
       formData.append("originalFileName", selectedFile.name);
       formData.append("fileSize", selectedFile.size);
@@ -136,16 +138,16 @@ const TechPackUploader = ({
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
+                (progressEvent.loaded * 100) / progressEvent.total,
               );
               setUploadProgress(percentCompleted);
             }
           },
           timeout: 120000,
-        }
+        },
       );
 
-      console.log("🔍 Tech Pack upload response:", response.data);
+      console.log("🔍 Tech Pack upload response:", response);
 
       if (response.status === 201) {
         if (response.data.success === true) {
@@ -180,7 +182,7 @@ const TechPackUploader = ({
       console.error("❌ Tech Pack upload error:", error);
 
       let errorMessage = "Tech Pack upload failed";
-      
+
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.message) {
@@ -226,7 +228,7 @@ const TechPackUploader = ({
   };
 
   return (
-    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-4 lg:p-6 w-full mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
+    <div className="bg-gray-900 min-h-screen lg:min-h-[50vh] p-4 lg:p-6 w-[60%] mx-auto text-white lg:rounded-lg shadow-xl shadow-black/20">
       <div className="text-right relative">
         <button
           className="hover:bg-red-600 px-4 py-2 rounded-full absolute -top-2 -right-2 z-10"
@@ -239,7 +241,9 @@ const TechPackUploader = ({
         </button>
       </div>
 
-      <h2 className="text-2xl font-bold mb-2 text-center">Upload Style Tech Pack</h2>
+      <h2 className="text-2xl font-bold mb-2 text-center">
+        Upload Style Tech Pack
+      </h2>
       <p className="text-gray-400 text-center mb-6">
         Upload Excel files for the entire style (all operations)
       </p>
@@ -281,8 +285,8 @@ const TechPackUploader = ({
           validationError
             ? "border-red-500 bg-red-900/20"
             : selectedFile
-            ? "border-green-500 bg-green-900/20"
-            : "border-gray-600 bg-gray-800/50 hover:border-gray-500"
+              ? "border-green-500 bg-green-900/20"
+              : "border-gray-600 bg-gray-800/50 hover:border-gray-500"
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -341,14 +345,16 @@ const TechPackUploader = ({
 
       {/* Instructions */}
       <div className="bg-green-900/30 border border-green-700 rounded-lg p-4 mb-6">
-        <h3 className="font-semibold mb-2 text-green-300">
+        {/* <h3 className="font-semibold mb-2 text-green-300">
           ℹ️ Style Tech Pack Information:
-        </h3>
+        </h3> */}
         <ul className="text-sm text-green-200 space-y-1">
-          <li>• This tech pack will be available for ALL operations in this style</li>
+          {/* <li>
+            • This tech pack will be available for ALL operations in this style
+          </li> */}
           <li>• File must be in Excel format (.xls, .xlsx, .csv, .ods)</li>
           <li>• Maximum file size: 10MB</li>
-          <li>• File will be stored as a style-level document</li>
+          {/* <li>• File will be stored as a style-level document</li> */}
         </ul>
       </div>
 

@@ -12,41 +12,53 @@ import {
   FaExpand,
   FaTrash,
   FaExclamationTriangle,
+  FaChevronDown,
+  FaChevronRight,
+  FaUpload,
 } from "react-icons/fa";
 import { MdOutlineArrowBack } from "react-icons/md";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
+import AttachmentPopup from "../components/AttachmentPopup";
 
 const JigOperationsMediaPage = () => {
-  const { operationName } = useParams();
+  const { folderId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [mediaData, setMediaData] = useState(null);
+  // State
+  const [mediaData, setMediaData] = useState({
+    images: [],
+    videos: [],
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedSections, setExpandedSections] = useState({
     images: true,
     videos: true,
   });
-  const [showOperationDetails, setShowOperationDetails] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [videoErrors, setVideoErrors] = useState({});
   const [loadingStates, setLoadingStates] = useState({});
 
-  const videoRefs = useRef({});
+  // Upload states
+  const [isUploadExp, setIsUploadExp] = useState(false);
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isVideo, setIsVideo] = useState(true);
 
-  const displayName =
-    location.state?.operationName || operationName || "Operation";
+  const videoRefs = useRef({});
+  const uploadRef = useRef(null);
+
+  const displayName = location.state?.folderName || folderId || "Folder";
   const backendUrl = import.meta.env.VITE_API_URL;
 
-  // Fetch media for this operation name
+  // Fetch media for this folder
   const fetchOperationMedia = async () => {
     try {
       setLoading(true);
       const response = await axios.get(
-        `${backendUrl}/api/jig-operations/jig-operation-media/name/${encodeURIComponent(operationName)}`,
+        `${backendUrl}/api/jig-operations/jig-operation-media/folder/${folderId}`,
         {
           withCredentials: true,
           headers: {
@@ -57,15 +69,11 @@ const JigOperationsMediaPage = () => {
 
       console.log("response media: ", response);
 
-      if (response.data.success) {
-        const data = response.data.data;
+      if (response.data.status === "Ok") {
+        const data = response.data;
         setMediaData({
           images: data.images || [],
           videos: data.videos || [],
-          total: data.total_media || 0,
-          operation_count: data.operation_count || 1,
-          operation_ids: data.operation_ids || [],
-          operation_info: data.operation_info || [],
           all_media: data.all_media || [],
           media_types: data.media_types || { image: 0, video: 0 },
         });
@@ -81,10 +89,24 @@ const JigOperationsMediaPage = () => {
   };
 
   useEffect(() => {
-    if (operationName) {
+    if (folderId) {
       fetchOperationMedia();
     }
-  }, [operationName]);
+  }, [folderId]);
+
+  // Handle click outside when upload drop down expanded
+  useEffect(() => {
+    const handleOutSideClick = (event) => {
+      if (uploadRef.current && !uploadRef.current.contains(event.target)) {
+        setIsUploadExp(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutSideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutSideClick);
+    };
+  }, []);
 
   // Get the correct media URL using the B2 proxy
   const getMediaUrl = (media) => {
@@ -100,7 +122,6 @@ const JigOperationsMediaPage = () => {
     (id) => {
       if (!id) return;
 
-      // Pause the currently active video if different
       if (
         activeVideoId &&
         activeVideoId !== id &&
@@ -113,7 +134,6 @@ const JigOperationsMediaPage = () => {
       setActiveVideoId(id);
       setVideoErrors((prev) => ({ ...prev, [id]: null }));
 
-      // Small delay to ensure video element is ready
       setTimeout(() => {
         const video = videoRefs.current[id];
         if (video) {
@@ -273,6 +293,19 @@ const JigOperationsMediaPage = () => {
     }
   };
 
+  // Upload handlers
+  const handleVideoUpload = () => {
+    setIsUploadOpen(true);
+    setIsVideo(true);
+    setIsUploadExp(false);
+  };
+
+  const handleImageUpload = () => {
+    setIsUploadOpen(true);
+    setIsVideo(false);
+    setIsUploadExp(false);
+  };
+
   const renderVideoElement = (media, isActive, videoUrl) => {
     if (!isActive || !videoUrl || !media?.jig_media_id) return null;
 
@@ -334,7 +367,7 @@ const JigOperationsMediaPage = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow"
+        className="bg-white rounded-lg shadow-md overflow-hidden border border-gray-200 hover:shadow-lg transition-shadow group"
       >
         {/* Media Preview */}
         <div className="relative bg-gradient-to-br from-gray-100 to-gray-200 aspect-video">
@@ -343,7 +376,7 @@ const JigOperationsMediaPage = () => {
               src={mediaUrl}
               alt={media.file_name}
               onClick={handleImageClick}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover cursor-pointer"
               onError={(e) => {
                 e.target.src =
                   'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24"%3E%3Cpath fill="%23999" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4-6h2v13h-2z"/%3E%3C/svg%3E';
@@ -351,17 +384,14 @@ const JigOperationsMediaPage = () => {
             />
           ) : (
             <>
-              {/* Render video only when active */}
               {renderVideoElement(media, isActive, mediaUrl)}
 
-              {/* Loading Indicator */}
               {isActive && isLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
                 </div>
               )}
 
-              {/* Overlay UI for inactive state */}
               {!isActive && !error && (
                 <div
                   className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer bg-gradient-to-br from-purple-50/50 to-gray-100/50 hover:from-purple-100/50 hover:to-gray-200/50"
@@ -379,7 +409,6 @@ const JigOperationsMediaPage = () => {
                 </div>
               )}
 
-              {/* Error State */}
               {error && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 bg-red-50">
                   <FaExclamationTriangle className="text-red-500 text-3xl mb-2" />
@@ -405,7 +434,6 @@ const JigOperationsMediaPage = () => {
                 </div>
               )}
 
-              {/* Controls for active video */}
               {isActive && !error && !isLoading && (
                 <div className="absolute inset-0 bg-transparent pointer-events-none">
                   <div className="absolute top-2 right-2 pointer-events-auto flex gap-2">
@@ -429,7 +457,7 @@ const JigOperationsMediaPage = () => {
             </>
           )}
 
-          {/* Media type badge */}
+          {/* Badges */}
           <div className="absolute top-2 right-2 flex gap-2">
             <span
               className={`text-xs px-2 py-1 rounded-full text-white ${
@@ -440,12 +468,14 @@ const JigOperationsMediaPage = () => {
             </span>
           </div>
 
-          {/* Operation ID badge */}
-          {media.operation_id && (
-            <div className="absolute bottom-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-              Op #{media.operation_id}
-            </div>
-          )}
+          {/* Download button on hover */}
+          <button
+            onClick={() => handleDownload(media)}
+            className="absolute bottom-2 right-2 bg-white/90 hover:bg-white p-2 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+            title="Download"
+          >
+            <FaDownload className="text-gray-700" size={16} />
+          </button>
         </div>
 
         {/* Media Info */}
@@ -456,10 +486,6 @@ const JigOperationsMediaPage = () => {
           >
             {media.file_name}
           </h3>
-          <h3 className="grid grid-cols-2 text-sm text-gray-500">
-            <span>Style No</span>
-            <span className="text-end">{media.style.style_no}</span>
-          </h3>
           {media.description && (
             <p className="text-sm text-gray-600 mt-1 line-clamp-2">
               {media.description}
@@ -469,11 +495,6 @@ const JigOperationsMediaPage = () => {
             <span>{formatFileSize(media.file_size)}</span>
             <span>{formatDate(media.created_at)}</span>
           </div>
-          {media.style && (
-            <div className="mt-2 text-xs bg-gray-100 rounded px-2 py-1 inline-block">
-              Style: {media.style.style_no} - {media.style.style_name}
-            </div>
-          )}
 
           {/* Actions */}
           <div className="mt-4 flex justify-between items-center">
@@ -585,12 +606,8 @@ const JigOperationsMediaPage = () => {
     );
   }
 
-  const {
-    images = [],
-    videos = [],
-    operation_count = 1,
-    operation_info = [],
-  } = mediaData;
+  const { images = [], videos = [] } = mediaData;
+  const totalMedia = images.length + videos.length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -607,46 +624,58 @@ const JigOperationsMediaPage = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                 {displayName}
-                {operation_count > 1 && (
-                  <span className="text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                    {operation_count} operations
-                  </span>
-                )}
               </h1>
-              <div className="flex items-center gap-3 mt-1">
-                <p className="text-sm text-gray-500">
-                  {images.length} images • {videos.length} videos
-                </p>
-                {operation_count > 1 && (
-                  <button
-                    onClick={() =>
-                      setShowOperationDetails(!showOperationDetails)
-                    }
-                    className="text-xs text-blue-500 hover:text-blue-700 flex items-center gap-1"
-                  >
-                    <FaInfoCircle size={12} />
-                    {showOperationDetails ? "Hide" : "Show"} operation details
-                  </button>
-                )}
-              </div>
-              {showOperationDetails && operation_count > 1 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mt-2 text-xs text-gray-500 bg-gray-50 p-2 rounded"
-                >
-                  <p className="font-medium">Combined Operations:</p>
-                  {operation_info.map((op, index) => (
-                    <span key={index} className="inline-block mr-3">
-                      ID: {op.id} {op.number && `(${op.number})`}
-                    </span>
-                  ))}
-                </motion.div>
-              )}
+              <p className="text-sm text-gray-500">
+                {images.length} images • {videos.length} videos • Total:{" "}
+                {totalMedia} items
+              </p>
             </div>
           </div>
-          <div className="text-sm text-gray-400">
-            Total: {mediaData.total || 0} items
+
+          {/* Upload button with dropdown - Same as AttachmentMediaPage */}
+          <div className="relative" ref={uploadRef}>
+            <button
+              onClick={() => setIsUploadExp(!isUploadExp)}
+              className="w-[140px] h-[48px] bg-blue-600 text-white flex items-center justify-center gap-3 font-medium shadow-md hover:bg-blue-700 hover:shadow-lg active:scale-95 transition-all duration-200 rounded-md"
+            >
+              <FaUpload size={18} />
+              <span>Upload</span>
+            </button>
+            <AnimatePresence>
+              {isUploadExp && (
+                <motion.div
+                  className="absolute z-10 overflow-hidden right-0"
+                  initial={{ height: 0, opacity: 1 }}
+                  animate={{ height: 100, opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.35, ease: "easeInOut" }}
+                >
+                  <motion.button
+                    onClick={handleVideoUpload}
+                    initial={{ y: -20, scale: 0.8, opacity: 0 }}
+                    animate={{ y: 0, scale: 1, opacity: 1 }}
+                    exit={{ y: -20, scale: 0.8, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: "backOut" }}
+                    className="w-[140px] h-[48px] bg-green-600 text-white flex items-center justify-center gap-3 font-medium shadow-md hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200 rounded-b-none"
+                  >
+                    <FaVideo size={18} />
+                    <span>Video</span>
+                  </motion.button>
+
+                  <motion.button
+                    onClick={handleImageUpload}
+                    initial={{ y: -20, scale: 0.8, opacity: 0 }}
+                    animate={{ y: 0, scale: 1, opacity: 1 }}
+                    exit={{ y: -20, scale: 0.8, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: "backOut" }}
+                    className="w-[140px] h-[48px] bg-green-600 text-white flex items-center justify-center gap-3 font-medium shadow-md hover:bg-green-700 hover:shadow-lg active:scale-95 transition-all duration-200 rounded-t-none"
+                  >
+                    <FaImage size={18} />
+                    <span>Image</span>
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </header>
@@ -654,80 +683,131 @@ const JigOperationsMediaPage = () => {
       {/* Content */}
       <div className="p-6 max-w-7xl mx-auto">
         {/* Images Section */}
-        {images.length > 0 && (
-          <div className="mb-8">
-            <button
-              onClick={() => toggleSection("images")}
-              className="flex items-center gap-3 w-full text-left mb-4 hover:bg-gray-50 p-2 rounded transition-colors"
-            >
+        <div className="mb-8">
+          <button
+            onClick={() => toggleSection("images")}
+            className="flex items-center justify-between w-full p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200"
+          >
+            <div className="flex items-center gap-3">
               <FaImage className="text-blue-500" size={24} />
               <h2 className="text-xl font-semibold text-gray-800">
                 Images ({images.length})
               </h2>
-              <span className="text-gray-400">
-                {expandedSections.images ? "▼" : "▶"}
+            </div>
+            <div className="flex items-center gap-2 text-gray-500">
+              <span className="text-sm">
+                {expandedSections.images ? "Collapse" : "Expand"}
               </span>
-            </button>
-            <AnimatePresence>
-              {expandedSections.images && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                >
-                  {images.map(renderMediaItem)}
-                </motion.div>
+              {expandedSections.images ? (
+                <FaChevronDown size={18} />
+              ) : (
+                <FaChevronRight size={18} />
               )}
-            </AnimatePresence>
-          </div>
-        )}
+            </div>
+          </button>
+          <AnimatePresence>
+            {expandedSections.images && images.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              >
+                {images.map(renderMediaItem)}
+              </motion.div>
+            )}
+            {expandedSections.images && images.length === 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="mt-4 p-8 text-center text-gray-500 bg-white rounded-lg border border-gray-200"
+              >
+                <FaImage size={48} className="mx-auto text-gray-300 mb-2" />
+                <p>No images in this folder</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
         {/* Videos Section */}
-        {videos.length > 0 && (
-          <div className="mb-8">
-            <button
-              onClick={() => toggleSection("videos")}
-              className="flex items-center gap-3 w-full text-left mb-4 hover:bg-gray-50 p-2 rounded transition-colors"
-            >
+        <div className="mb-8">
+          <button
+            onClick={() => toggleSection("videos")}
+            className="flex items-center justify-between w-full p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow border border-gray-200"
+          >
+            <div className="flex items-center gap-3">
               <FaVideo className="text-purple-500" size={24} />
               <h2 className="text-xl font-semibold text-gray-800">
                 Videos ({videos.length})
               </h2>
-              <span className="text-gray-400">
-                {expandedSections.videos ? "▼" : "▶"}
+            </div>
+            <div className="flex items-center gap-2 text-gray-500">
+              <span className="text-sm">
+                {expandedSections.videos ? "Collapse" : "Expand"}
               </span>
-            </button>
-            <AnimatePresence>
-              {expandedSections.videos && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-                >
-                  {videos.map(renderMediaItem)}
-                </motion.div>
+              {expandedSections.videos ? (
+                <FaChevronDown size={18} />
+              ) : (
+                <FaChevronRight size={18} />
               )}
-            </AnimatePresence>
-          </div>
-        )}
+            </div>
+          </button>
+          <AnimatePresence>
+            {expandedSections.videos && videos.length > 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              >
+                {videos.map(renderMediaItem)}
+              </motion.div>
+            )}
+            {expandedSections.videos && videos.length === 0 && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="mt-4 p-8 text-center text-gray-500 bg-white rounded-lg border border-gray-200"
+              >
+                <FaVideo size={48} className="mx-auto text-gray-300 mb-2" />
+                <p>No videos in this folder</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
 
-        {/* Empty State */}
+        {/* Empty State - when both sections are empty */}
         {images.length === 0 && videos.length === 0 && (
           <div className="text-center py-12">
             <FaFileAlt size={48} className="mx-auto text-gray-300 mb-4" />
-            <p className="text-gray-500">No media found for this operation</p>
+            <p className="text-gray-500 text-lg">
+              No media found in this folder
+            </p>
             <p className="text-sm text-gray-400 mt-2">
-              {operation_count > 1
-                ? `${operation_count} operations with this name have no media`
-                : "Upload some media to get started"}
+              Upload some media to get started
             </p>
           </div>
         )}
       </div>
+
+      {/* Upload Popup */}
+      <AttachmentPopup
+        isOpen={isUploadOpen}
+        onClose={() => {
+          setIsUploadOpen(false);
+          fetchOperationMedia();
+        }}
+        isAttachment={false}
+        isVideo={isVideo}
+        onUploadSuccess={fetchOperationMedia}
+        folderId={folderId}
+      />
     </div>
   );
 };

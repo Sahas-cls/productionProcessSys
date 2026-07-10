@@ -1,6 +1,7 @@
 // pages/AttachmentPage.jsx
 import { AnimatePresence, motion } from "framer-motion";
 import React, { useState, useEffect, useRef } from "react";
+import { TbDotsVertical } from "react-icons/tb";
 import {
   FaUpload,
   FaVideo,
@@ -9,12 +10,14 @@ import {
   FaFolder,
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
-import { MdOutlineArrowBack } from "react-icons/md";
+import { MdDelete, MdOutlineArrowBack } from "react-icons/md";
 import Swal from "sweetalert2";
 import AttachmentPopup from "../components/AttachmentPopup";
 import GetFolderName from "../components/GetFolderName";
 import axios from "axios";
 import { FcFolder } from "react-icons/fc";
+import { MdOutlineDriveFileRenameOutline } from "react-icons/md";
+import { FastField } from "formik";
 
 const AttachmentPage = () => {
   // State
@@ -27,9 +30,130 @@ const AttachmentPage = () => {
   const uploadRef = useRef();
   const navigate = useNavigate();
   const apiUrl = import.meta.env.VITE_API_URL;
+  const [showOptions, setShowOptions] = useState("");
+  const showOptionRef = useRef();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleShowOptions = (e, folderId) => {
+    //
+    e.stopPropagation();
+    if (folderId == showOptions) {
+      setShowOptions("");
+      return;
+    }
+    setShowOptions(folderId);
+  };
+
+  const handleDeleteFolder = async (e, folderId) => {
+    e.stopPropagation();
+    console.log("folder id: ", folderId);
+
+    try {
+      setIsLoading(true);
+      const response = await axios.delete(
+        `${apiUrl}/api/attachment-folder/delete-att-folder/${folderId}`,
+      );
+      if (response.status === 200) {
+        Swal.fire({
+          title: "Success",
+          text: "Folder Delete Success",
+          icon: "success",
+        });
+      }
+      fetchFolders();
+    } catch (error) {
+      await Swal.fire({
+        title: "Error",
+        text: error.response.data.msg || "",
+        icon: "error",
+      });
+      console.log("Error while deleting folders: ", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRenameFolder = async (e, folderId, crrName) => {
+    e.stopPropagation();
+    let folderName = "";
+    const result = await Swal.fire({
+      title: `Rename Folder "${crrName}"`,
+      input: "text",
+      inputPlaceholder: "NewFolder-1",
+      showCancelButton: true,
+      inputValidator: (value) => {
+        if (!value) {
+          return "Folder name is required!";
+        }
+
+        if (value.length < 3) {
+          return "Folder name must be at least 3 characters";
+        }
+      },
+    });
+
+    if (result.isConfirmed) {
+      folderName = result.value;
+    }
+
+    if (!folderName) {
+      await Swal.fire({ title: "Renaming Canceled!", icon: "info" });
+      return;
+    }
+
+    // validate folder name
+    if (folderName.trim().length < 3) {
+      await Swal.fire({
+        title: "Provided name is too short!",
+        text: "Folder name at least should have 3 letters",
+        icon: "info",
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await axios.patch(
+        `${apiUrl}/api/attachment-folder/rename-att-folder/${folderId}`,
+        { folderName: folderName },
+        { withCredentials: true },
+      );
+
+      if (response.status === 200) {
+        await Swal.fire({ title: "Folder Rename Success", icon: "success" });
+        fetchFolders();
+      }
+      console.log(response);
+    } catch (error) {
+      console.log(error);
+      await Swal.fire({
+        title: "Folder Rename Failed",
+        text: error.response.data.msg,
+        icon: "error",
+      });
+      console.log("Error while renaming folder: ", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleOutSideClick = (e) => {
+      if (showOptionRef.current && !showOptionRef.current.contains(e.target)) {
+        setShowOptions("");
+      }
+    };
+
+    document.addEventListener("click", handleOutSideClick);
+
+    return () => {
+      document.removeEventListener("click", handleOutSideClick);
+    };
+  }, [showOptionRef]);
 
   // get all folders
   const fetchFolders = async () => {
+    setIsLoading(true);
     try {
       const response = await axios.get(
         `${apiUrl}/api/attachment-folder/get-folders`,
@@ -39,6 +163,8 @@ const AttachmentPage = () => {
       console.log(response.data.data);
     } catch (error) {
       console.log(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -91,6 +217,12 @@ const AttachmentPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {isLoading && (
+        <div className="absolute inset-0 backdrop-blur-[1px] bg-gray-200/40 z-50 flex items-center justify-center flex-col gap-y-4">
+          <div className="w-16 h-16 rounded-full bg-transparent border-2 border-blue-400 border-b-0 animate-spin"></div>
+          <div className="text-xl font-semibold">Loading</div>
+        </div>
+      )}
       <header className="bg-white shadow-sm p-4 sticky top-0 z-10">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
@@ -187,7 +319,7 @@ const AttachmentPage = () => {
       <div className="p-6 max-w-7xl mx-auto">
         <div className="">
           {Array.isArray(folders) && folders.length > 0 ? (
-            <div className="grid grid-cols-5 cursor-pointer">
+            <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 cursor-pointer relative z-40">
               {folders.map((folder) => (
                 <div
                   className="flex items-center flex-col relative p-4 hover:bg-blue-200/20"
@@ -195,6 +327,66 @@ const AttachmentPage = () => {
                     navigate(`/innovations/attachments/${folder.folder_id}`)
                   }
                 >
+                  <div className="absolute -right-4  md:right-2">
+                    <button
+                      title="Options"
+                      onClick={(e) => handleShowOptions(e, folder.folder_id)}
+                      className="z-50 p-4"
+                    >
+                      <TbDotsVertical />
+                    </button>
+                  </div>
+                  {/* options */}
+                  <AnimatePresence>
+                    {showOptions === folder.folder_id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0 }}
+                        transition={{
+                          duration: 0.4,
+                        }}
+                        className="absolute z-50 -right-24 top-12 mt-2 mr-2 bg-white rounded-lg shadow-lg border border-gray-200 min-w-[160px] overflow-hidden"
+                      >
+                        <ul className="py-1" ref={showOptionRef}>
+                          <li>
+                            <button
+                              className="w-full px-4 py-2 text-left transition-colors duration-150 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-50"
+                              onClick={(e) => {
+                                handleDeleteFolder(e, folder.folder_id);
+                              }}
+                            >
+                              <div className="flex items-center gap-x-2.5 text-red-500">
+                                <MdDelete className="text-lg" />
+                                <span className="text-sm font-medium">
+                                  Delete
+                                </span>
+                              </div>
+                            </button>
+                          </li>
+                          <li>
+                            <button
+                              className="w-full px-4 py-2 text-left transition-colors duration-150 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-50"
+                              onClick={(e) => {
+                                handleRenameFolder(
+                                  e,
+                                  folder.folder_id,
+                                  folder.folder_name,
+                                );
+                              }}
+                            >
+                              <div className="flex items-center gap-x-2.5 text-blue-500">
+                                <MdOutlineDriveFileRenameOutline className="text-lg" />
+                                <span className="text-sm font-medium">
+                                  Rename
+                                </span>
+                              </div>
+                            </button>
+                          </li>
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                   <div className="relative">
                     <FcFolder
                       size={90}
@@ -235,8 +427,9 @@ const AttachmentPage = () => {
         }}
         isVideo={isVideo}
         onUploadSuccess={() => {
-          // You can add logic here to refresh folder contents
+          fetchFolders();
         }}
+        isAttachment={true}
       />
 
       {/* Get folder name popup */}
@@ -245,6 +438,7 @@ const AttachmentPage = () => {
         onClose={() => {
           setIsGetName(false);
         }}
+        refresh={fetchFolders}
         onCreate={handleFolderCreated}
       />
     </div>

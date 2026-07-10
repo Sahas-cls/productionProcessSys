@@ -127,6 +127,12 @@ module.exports = (sequelize, DataTypes) => {
       as: "jig_operation_medias",
     });
 
+    // Has many folders
+    User.hasMany(models.JigFolder, {
+      foreignKey: "created_by",
+      as: "jig_folder",
+    });
+
     // Has created factories
     // User.hasMany(models.Factory, {
     //   foreignKey: "created_by",

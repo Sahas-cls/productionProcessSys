@@ -13,9 +13,9 @@ route.get("/get-folders/:keyword", controller.folderSearch);
 route.post("/create-att-folder", authUser, controller.createNewFolder);
 
 // TODO to delete existing folder
-route.delete("/delete-att-folder", controller.deleteFolder);
+route.delete("/delete-att-folder/:folderId", controller.deleteFolder);
 
 // TODO to rename existing folder
-route.patch("/rename-att-folder", controller.renameFolder);
+route.patch("/rename-att-folder/:folderId", controller.renameFolder);
 
 module.exports = route;

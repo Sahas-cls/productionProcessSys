@@ -18,12 +18,11 @@ const ViewLayout = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const itemsPerPage = 8; // 4 columns x 2 rows = 8 items per page
   const apiUrl = import.meta.env.VITE_API_URL;
-  // console.log("layout list: ", layoutList);
   const [lastVisit, setLastVisit] = useState(
     localStorage.getItem("lastLayout") || null,
   );
-  // console.log("layout list: ", layoutList);
-  // console.log("last visit: ", lastVisit);
+
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -48,9 +47,9 @@ const ViewLayout = () => {
       showCancelButton: true,
       confirmButtonText: "Yes, delete it",
       cancelButtonText: "Cancel",
-      confirmButtonColor: "#d33", // red for destructive action
-      cancelButtonColor: "#3085d6", // blue for safe action
-      reverseButtons: true, // places cancel button on the left
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      reverseButtons: true,
       background: "#f5f8fa",
       showClass: {
         popup: "animate__animated animate__fadeInDown",
@@ -65,12 +64,12 @@ const ViewLayout = () => {
     }
 
     try {
-      const respose = await axios.delete(
+      const response = await axios.delete(
         `${apiUrl}/api/layout/deleteLayout/${layoutId}`,
         { withCredentials: true },
       );
 
-      if (respose.status === 200) {
+      if (response.status === 200) {
         await Swal.fire({
           title: "Operation Successful!",
           text: "The Layout has been deleted successfully.",
@@ -85,7 +84,7 @@ const ViewLayout = () => {
         window.location.reload();
       }
     } catch (error) {
-      // console.log("Error while trying to delete layout: ", error);
+      console.error("Error while trying to delete layout: ", error);
     }
   };
 
@@ -100,10 +99,15 @@ const ViewLayout = () => {
     // Check if search starts with "layout "
     if (searchLower.startsWith("layout ")) {
       const idSearch = searchLower.replace("layout ", "").trim();
-      return layout.layout_id.toString().includes(idSearch);
+      return layout.layout_id?.toString().includes(idSearch);
     }
 
-    return layoutList;
+    // Search by style number or name
+    return (
+      layout.style_no?.toLowerCase().includes(searchLower) ||
+      layout.style_name?.toLowerCase().includes(searchLower) ||
+      layout.style_description?.toLowerCase().includes(searchLower)
+    );
   });
 
   // Pagination logic
@@ -112,10 +116,33 @@ const ViewLayout = () => {
   const currentItems =
     filteredLayouts?.slice(offset, offset + itemsPerPage) || [];
 
-  // console.log("current items: ", currentItems);
-
   const handlePageClick = ({ selected }) => {
     setCurrentPage(selected);
+  };
+
+  // Helper function to safely get operation counts
+  const getOperationCounts = (layout) => {
+    // If we have the new structure with counts
+    if (layout.mainOperationCount !== undefined) {
+      return {
+        mainOps: layout.mainOperationCount,
+        subOps: layout.subOperationCount,
+      };
+    }
+
+    // Fallback for old structure (if any)
+    if (layout.operations) {
+      return {
+        mainOps: layout.operations.length,
+        subOps: layout.operations.reduce(
+          (total, op) => total + (op.subOperations?.length || 0),
+          0,
+        ),
+      };
+    }
+
+    // If no operations data
+    return { mainOps: 0, subOps: 0 };
   };
 
   return (
@@ -123,18 +150,18 @@ const ViewLayout = () => {
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4 sm:mb-0">
-            Production Layouts
+            Operation Bulletin
           </h1>
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
               <input
                 type="text"
-                placeholder="Search layouts..."
+                placeholder="Search by style no, name, or description..."
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
-                  setCurrentPage(0); // Reset to first page when searching
+                  setCurrentPage(0);
                 }}
               />
               {searchTerm && (
@@ -226,146 +253,110 @@ const ViewLayout = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {currentItems.map((layout) => (
-                <div
-                  key={layout.layout_id}
-                  className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-gray-100 overflow-hidden relative"
-                >
-                  {/* Options Menu */}
-                  <div className="absolute right-2 top-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenu(
-                          activeMenu === layout.layout_id
-                            ? null
-                            : layout.layout_id,
-                        );
-                      }}
-                      className="p-1 rounded-full hover:bg-gray-100 transition-colors"
-                    >
-                      <HiOutlineDotsVertical className="text-gray-500" />
-                    </button>
+              {currentItems.map((layout) => {
+                const { mainOps, subOps } = getOperationCounts(layout);
 
-                    {activeMenu === layout.layout_id && (
-                      <div
-                        ref={(el) => (menuRefs.current[layout.layout_id] = el)}
-                        className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200"
-                      >
-                        <ul className="py-1">
-                          <li>
-                            {/* <button
-                              onClick={() => handleEdit(layout.layout_id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <MdModeEdit className="mr-2" />
-                              Edit Layout
-                            </button> */}
-                          </li>
-                          <li>
-                            <button
-                              onClick={() => handleDelete(layout.layout_id)}
-                              className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                            >
-                              <MdDeleteForever className="mr-2" />
-                              Delete Layout
-                            </button>
-                          </li>
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-5 cursor-pointer">
-                    <div className="flex justify-center items-center mb-3">
-                      <h2 className="text-lg md:text-lg font-bold text-gray-800 truncate text-center">
-                        Style {layout.style.style_no}
-                      </h2>
-                    </div>
-
-                    <div className="px-1 space-y-4">
-                      {/* <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Season ID
-                        </p>
-                        <p className="text-gray-700 font-medium">
-                          {layout.season_id}
-                        </p>
-                      </div> */}
-
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          MO Count
-                        </p>
-                        <p className="text-gray-700 font-medium">
-                          {layout.style.operations.length}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Sub OP Count
-                        </p>
-                        <p className="text-gray-700 font-medium">
-                          {layout.style.operations.reduce(
-                            (total, op) =>
-                              total + (op.subOperations?.length || 0),
-                            0,
-                          )}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between pb-4">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                          Workstations count
-                        </p>
-                        <p className="text-gray-700 font-medium">
-                          {layout.workstation_count < 0
-                            ? "4"
-                            : layout.workstation_count}
-                        </p>
-                      </div>
-                      <div
-                        className={`flex items-center text-white justify-between h-1.5 rounded-full bg-gradient-to-r ${layout.layout_id == lastVisit ? "from-blue-500/50 to-green-600/50" : "from-gray-500/20 to-gray-600/20"} hover:animate-pulse`}
-                      >
-                        {/* <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider"> */}
-                        {/* Style No */}
-                        {/* <hr className="" /> */}
-                        {/* </p> */}
-                        {/* <p className="text-white font-medium"> */}
-                        {/* {layout.style.style_no} */}.{/* </p> */}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-gray-100/90 px-5 py-3 border-t border-gray-300/50">
-                    <div className="flex justify-between items-center">
-                      <p className="text-xs text-gray-500">
-                        Created:{" "}
-                        <span className="font-medium">
-                          {new Date(layout.createdAt).toLocaleDateString(
-                            "en-US",
-                            {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            },
-                          )}
-                        </span>
-                      </p>
+                return (
+                  <div
+                    key={layout.style_id}
+                    className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-300 border border-gray-100 overflow-hidden relative"
+                  >
+                    {/* Options Menu - Note: This might need adjustment if you don't have layout_id */}
+                    <div className="absolute right-2 top-2">
                       <button
-                        type="button"
-                        onClick={() => {
-                          localStorage.setItem("lastLayout", layout.layout_id);
-                          navigate("/workstation/list-view", {
-                            state: { layout: layout.layout_id, style: layout },
-                          });
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveMenu(
+                            activeMenu === layout.style_id
+                              ? null
+                              : layout.style_id,
+                          );
                         }}
+                        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
                       >
-                        <FaArrowCircleRight className="text-xl text-blue-500 hover:scale-105 duration-150" />
+                        <HiOutlineDotsVertical className="text-gray-500" />
                       </button>
+
+                      {activeMenu === layout.style_id && (
+                        <div
+                          ref={(el) => (menuRefs.current[layout.style_id] = el)}
+                          className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg z-10 border border-gray-200"
+                        >
+                          <ul className="py-1">
+                            <li>
+                              <button
+                                onClick={() => handleDelete(layout.style_id)}
+                                className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                              >
+                                <MdDeleteForever className="mr-2" />
+                                Delete Layout
+                              </button>
+                            </li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 cursor-pointer">
+                      <div className="flex justify-center items-center mb-3">
+                        <h2 className="text-lg md:text-lg font-bold text-gray-800 truncate text-center">
+                          Style {layout.style_no}
+                        </h2>
+                      </div>
+
+                      <div className="px-1 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            MO Count
+                          </p>
+                          <p className="text-gray-700 font-medium">{mainOps}</p>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Sub OP Count
+                          </p>
+                          <p className="text-gray-700 font-medium">{subOps}</p>
+                        </div>
+
+                        <div
+                          className={`flex items-center text-white justify-between h-1.5 rounded-full bg-gradient-to-r ${layout.style_id == lastVisit ? "from-blue-500/50 to-green-600/50" : "from-gray-500/20 to-gray-600/20"} hover:animate-pulse`}
+                        />
+                      </div>
+                    </div>
+                    <div className="bg-gray-100/90 px-5 py-3 border-t border-gray-300/50">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs text-gray-500">
+                          Created:{" "}
+                          <span className="font-medium">
+                            {new Date(layout.createdAt).toLocaleDateString(
+                              "en-US",
+                              {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              },
+                            )}
+                          </span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            localStorage.setItem("lastLayout", layout.style_id);
+                            navigate(`/bulletin/${layout.style_id}`, {
+                              // state: {
+                              //   layout: layout.style_id,
+                              //   style: layout,
+                              // },
+                            });
+                          }}
+                        >
+                          <FaArrowCircleRight className="text-xl text-blue-500 hover:scale-105 duration-150" />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {/* Pagination */}

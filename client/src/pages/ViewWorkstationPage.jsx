@@ -1,26 +1,30 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Header from "../components/Header";
 import AddFactory from "../components/admin/AddFactory";
 import Sidebar from "../components/Sidebar";
 import { motion, AnimatePresence } from "framer-motion";
 import ViewWorkstations from "../components/ViewWorkstations";
 import { useNavigate, useParams } from "react-router-dom";
+import axios from "axios";
 
 const ViewWorkstationPage = () => {
   // alert("author role: ", userRole);
+  // const apiUrl = import.meta.evn.VITE_API_URL;
+  const apiUrl = import.meta.env.VITE_API_URL;
   const {
-    layoutId: pLayoutId,
-    layoutId: upLayoutId,
+    // layoutId: pLayoutId,
+    // layoutId: upLayoutId,
     styleId,
-    styleNo: pStyleNo,
+    // styleNo: pStyleNo,
   } = useParams();
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const navigator = useNavigate();
-  const [layoutId, setLayoutId] = useState(upLayoutId || null);
+
+  // const [layoutId, setLayoutId] = useState(upLayoutId || null);
   const [styleNo, setStyleNo] = useState(styleId || null);
   // const [currentPage, setCurrentPage] = useState("SO");
   // alert(currentPage);
-  console.log(`layout id: ${layoutId} && style no: ${styleNo}`);
+  // console.log(`layout id: ${layoutId} && style no: ${styleNo}`);
   return (
     <div className="flex overflow-x-hidden min-h-screen h-full">
       <Sidebar
@@ -62,7 +66,7 @@ const ViewWorkstationPage = () => {
               </div>
             </div> */}
             <ViewWorkstations
-              setLayoutId={setLayoutId}
+              styleNo={styleNo}
               setStyleNo={setStyleNo}
             />
           </motion.div>

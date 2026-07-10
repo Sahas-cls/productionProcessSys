@@ -179,10 +179,10 @@ module.exports = (sequelize, DataTypes) => {
     });
 
     // Has many jig operation media
-    SubOperation.hasMany(models.JigOperationMedia, {
-      foreignKey: "operation_id",
-      as: "jig_operation_medias",
-    });
+    // SubOperation.hasMany(models.JigOperationMedia, {
+    //   foreignKey: "operation_id",
+    //   as: "jig_operation_medias",
+    // });
 
     // // tech packs
     // SubOperation.hasMany(models.SubOperationTechPack, {

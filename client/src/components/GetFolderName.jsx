@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { CgClose } from "react-icons/cg";
 import axios from "axios";
 
-const GetFolderName = ({ isOpen, onClose, onCreate }) => {
+const GetFolderName = ({ isOpen, onClose, onCreate, refresh }) => {
   const [folderName, setFolderName] = useState("");
   const inputRef = useRef(null);
   const modalRef = useRef(null);
@@ -54,7 +54,6 @@ const GetFolderName = ({ isOpen, onClose, onCreate }) => {
         { folderName: folderName },
         { withCredentials: true },
       );
-
       if (response.status === 200 || response.status === 201) {
         setSMessage({ status: response.data.status, msg: response.data.msg });
       }
@@ -82,6 +81,8 @@ const GetFolderName = ({ isOpen, onClose, onCreate }) => {
         msg: error.response.data.msg,
       });
       console.log("Error while creating new folder", error.message);
+    } finally {
+      refresh();
     }
   };
 

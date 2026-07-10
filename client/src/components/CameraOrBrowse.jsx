@@ -693,14 +693,14 @@ const CameraOrBrowse = ({
         });
         return false;
       }
-      if (!uploadingData.styleNo) {
-        Swal.fire({
-          title: "Missing Data",
-          text: "Style number (styleNo) is missing",
-          icon: "error",
-        });
-        return false;
-      }
+      // if (!uploadingData.styleNo) {
+      //   Swal.fire({
+      //     title: "Missing Data",
+      //     text: "Style number (styleNo) is missing",
+      //     icon: "error",
+      //   });
+      //   return false;
+      // }
     }
     return true;
   };

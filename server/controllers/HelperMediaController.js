@@ -66,7 +66,7 @@ exports.getVideos = async (req, res, next) => {
 exports.uploadVideos = async (req, res, next) => {
   console.log("📤 [Helper] Video upload request received");
   console.log("📋 Request body:", req.body);
-  // return;
+
   console.log(
     "📁 File details:",
     req.file
@@ -90,8 +90,9 @@ exports.uploadVideos = async (req, res, next) => {
       });
     }
 
-    const { hOpName, hoId, styleNo } = req.body;
+    let { hOpName, hoId, styleId, styleNo } = req.body;
 
+    // ================= VALIDATION =================
     if (!hoId) {
       return res.status(400).json({
         message: "Missing required field: hoId",
@@ -99,31 +100,35 @@ exports.uploadVideos = async (req, res, next) => {
       });
     }
 
-    if (!styleNo) {
+    if (!styleId && !styleNo) {
       return res.status(400).json({
-        message: "Missing required field: styleNo",
+        message: "Missing required field: styleId (or styleNo)",
         success: false,
       });
     }
 
-    // ================= VALIDATIONS =================
-    const styleRecord = await Style.findOne({
-      where: { style_no: styleNo },
-    });
-
-    if (!styleRecord) {
-      return res.status(400).json({
-        message: `Style with styleNo "${styleNo}" not found`,
-        success: false,
+    // ================= GET STYLE ID =================
+    if (!styleId) {
+      const styleRecord = await Style.findOne({
+        where: { style_no: styleNo },
       });
+
+      if (!styleRecord) {
+        return res.status(404).json({
+          message: `Style "${styleNo}" not found`,
+          success: false,
+        });
+      }
+
+      styleId = styleRecord.style_id;
     }
 
-    const styleIdDb = styleRecord.style_id;
-
+    // ================= VALIDATE HELPER =================
     const helperOperationExists = await Helper.findByPk(hoId);
+
     if (!helperOperationExists) {
-      return res.status(400).json({
-        message: `Helper operation with ID "${hoId}" not found`,
+      return res.status(404).json({
+        message: `Helper operation "${hoId}" not found`,
         success: false,
       });
     }
@@ -132,15 +137,14 @@ exports.uploadVideos = async (req, res, next) => {
     const ext = path.extname(req.file.originalname).toLowerCase();
 
     const now = new Date();
-    const dateTime = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(
+    const dateTime = `${now.getFullYear()}${String(
+      now.getMonth() + 1,
+    ).padStart(2, "0")}${String(now.getDate()).padStart(
       2,
       "0",
-    )}${String(now.getDate()).padStart(2, "0")}_${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(
-      2,
-      "0",
-    )}${String(now.getSeconds()).padStart(2, "0")}`;
+    )}_${String(now.getHours()).padStart(2, "0")}${String(
+      now.getMinutes(),
+    ).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
 
     const sanitizedHOpName = (hOpName || "helper_op")
       .replace(/[/\\?%*:|"<>]/g, "_")
@@ -149,7 +153,7 @@ exports.uploadVideos = async (req, res, next) => {
 
     const finalFilename =
       req.file.generatedName ||
-      `helper_${hoId}_${styleNo}_${sanitizedHOpName}_${dateTime}${ext}`;
+      `helper_${hoId}_${styleId}_${sanitizedHOpName}_${dateTime}${ext}`;
 
     if (!req.file.buffer || req.file.buffer.length === 0) {
       return res.status(400).json({
@@ -168,20 +172,20 @@ exports.uploadVideos = async (req, res, next) => {
 
     // ================= DIRECT UPLOAD =================
     uploadResult = await b2HelperStorage.uploadHelperFile(
-      req.file.buffer, // 🔥 direct upload
+      req.file.buffer,
       finalFilename,
       "hVideo",
       hoId,
     );
 
-    // ================= DB SAVE =================
+    // ================= SAVE TO DATABASE =================
     dbRecord = await HelperVideo.create({
       helper_id: hoId,
-      style_id: styleIdDb,
+      style_id: styleId,
       original_file_name: req.file.originalname,
       video_url: uploadResult.filePath,
       b2_file_id: uploadResult.fileId,
-      file_size: req.file.size, // ✅ original size
+      file_size: req.file.size,
       file_type: req.file.mimetype,
       user_id: req.user?.userId || null,
     });
@@ -195,24 +199,36 @@ exports.uploadVideos = async (req, res, next) => {
   } catch (error) {
     console.error("❌ Unhandled error:", error);
 
-    // rollback upload
+    // Rollback uploaded file
     if (uploadResult?.fileId) {
-      await b2HelperStorage.deleteFile(
-        uploadResult.fileId,
-        uploadResult.filePath,
-      );
+      try {
+        await b2HelperStorage.deleteFile(
+          uploadResult.fileId,
+          uploadResult.filePath,
+        );
+      } catch (cleanupError) {
+        console.error("❌ Failed to delete uploaded B2 file:", cleanupError);
+      }
     }
 
-    // rollback DB
+    // Rollback database record
     if (dbRecord?.helper_video_id) {
-      await HelperVideo.destroy({
-        where: { helper_video_id: dbRecord.helper_video_id },
-      });
+      try {
+        await HelperVideo.destroy({
+          where: { helper_video_id: dbRecord.helper_video_id },
+        });
+      } catch (cleanupError) {
+        console.error("❌ Failed to delete DB record:", cleanupError);
+      }
     }
 
     res.status(500).json({
       message: "Failed to upload helper operation video",
       success: false,
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
     });
   }
 };
@@ -662,7 +678,7 @@ exports.deleteImage = async (req, res, next) => {
       message: "Invalid image ID",
       success: false,
     });
-  }  
+  }
 
   let imageRecord = null;
 

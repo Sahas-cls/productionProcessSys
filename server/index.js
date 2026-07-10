@@ -317,6 +317,9 @@ app.use("/api/sub-op", subOperations);
 const jigOperations = require("../server/Routes/JigOperationMediaRoutes.js");
 app.use("/api/jig-operations", jigOperations);
 
+const jigFolderRoutes = require("./routes/JigFolderRoutes");
+app.use("/api/jig-folders", jigFolderRoutes);
+
 // This replaces the old /media UNC path
 // Fixed backend route for video streaming with proper progressive playback support
 // app.get("/api/b2-files/*", async (req, res) => {

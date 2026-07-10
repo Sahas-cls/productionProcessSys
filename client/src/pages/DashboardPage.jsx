@@ -51,6 +51,11 @@ const DashboardPage = () => {
             className="bg-accent w-full min-h-screen"
           >
             <Dashboard />
+            {/* <iframe
+              src="https://m365.cloud.microsoft/chat/?titleId=T_c657806d-75ae-28fd-c55c-b7d96913c137&source=embedded-builder"
+              frameborder="0"
+              className="w-full h-screen"
+            ></iframe> */}
           </motion.div>
         </AnimatePresence>
       </div>

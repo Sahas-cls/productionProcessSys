@@ -58,8 +58,7 @@ const DraggingOverlay = ({ activeWorkstation }) => {
         <div className="flex items-center gap-2">
           <BsArrowsMove className="text-blue-600" />
           <h5 className="text-sm md:text-lg text-blue-900">
-            Workstation No #{" "}
-            {activeWorkstation.workstation_no || "Not assigned yet"}
+            Operation #{activeWorkstation.operation_name || "Not assigned yet"}
           </h5>
         </div>
       </div>
@@ -68,6 +67,27 @@ const DraggingOverlay = ({ activeWorkstation }) => {
 };
 
 const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
+  const [style, setStyle] = useState([]);
+  console.log("STYLE", style);
+  const getStyle = async () => {
+    // alert("calling get styles");
+    try {
+      const response = await axios.get(
+        `${apiUrl}/api/styles/getStyle/${styleId}`,
+        { withCredentials: true },
+      );
+      if (response.status == 200) {
+        setStyle(response.data.data);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    getStyle();
+  }, []);
+
   const { user, loading } = useAuth();
   const userRole = user?.userRole;
   const apiUrl = import.meta.env.VITE_API_URL;
@@ -77,19 +97,17 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const fileUploadRef = useRef();
   const { state } = location;
   const { layoutId, styleId, styleNo: pStyleNo } = useParams();
-  // console.log("state:;;;:;: ; ", state);
+  console.log("state: ", pStyleNo);
   useEffect(() => {
     if (state?.layout) {
-      // console.log("setting up parent values using useLocation");
-      setLayoutId(state.layout); //|| useParams.layoutId;
-      setStyleNo(state.style.style.style_no); //|| useParams.styleId;
+      setLayoutId(state.layout);
+      setStyleNo(state.style.style.style_no);
     }
   }, [state]);
 
-  // console.log("state:-- ", state?.style?.style_id);
-
   const [workstationList, setWorkstationList] = useState([]);
   const [originalWorkstationList, setOriginalWorkstationList] = useState([]);
+  const [helperList, setHelperList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAddingSubM, setIsAddingSubM] = useState(false);
@@ -103,13 +121,8 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
 
   // FIXED: Proper uploading data structure - RESTORED from working code
   const [uploadingData, setUploadingData] = useState({
-    style_id: "",
+    styleId: "",
     styleNo: "",
-    moId: "",
-    sopId: "",
-    sopName: "",
-    subOpId: "",
-    operationType: "",
   });
 
   const [showEUploadOrView, setShowEUploadOrView] = useState(false);
@@ -185,18 +198,15 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   }, [fileUploadRef]);
 
   // FIXED: Initialize uploading data with style info - RESTORED from working code
+  console.log("style 👖: ", style);
   useEffect(() => {
-    if (state?.style?.style) {
+    if (style && style.style_id) {
       setUploadingData({
-        style_id: state.style.style.style_id || styleId,
-        styleNo: state.style.style.style_no || pStyleNo,
-        moId: "",
-        sopId: "",
-        sopName: "",
-        subOpId: "",
+        styleId: style.style_id,
+        styleNo: style.style_no || "",
       });
     }
-  }, [state]);
+  }, [style]);
 
   const workstatoinVarient = {
     hidden: {
@@ -224,23 +234,101 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     },
   };
 
+  // MODIFIED: Updated to handle new backend response format with helpers
   const getWorkstations = async () => {
     try {
       setIsLoading(true);
       const response = await axios.get(
-        `${apiUrl}/api/workstations/getWorkstations/${layoutId || state.layout}`,
+        `${apiUrl}/api/workstations/getWorkstations/${styleId}`,
       );
-      // console.log("workstation list----: ", response);
-      const sortedWorkstations = response.data.data.sort((a, b) => {
-        const seqA = a.sequence_number !== null ? a.sequence_number : 9999;
-        const seqB = b.sequence_number !== null ? b.sequence_number : 9999;
-        return seqA - seqB;
-      });
-      setWorkstationList(sortedWorkstations);
-      setOriginalWorkstationList([...sortedWorkstations]);
+      console.log("API response: ", response);
+
+      const styleData = response.data.data;
+      const helperData = response.data.helperOp;
+
+      // Process operations
+      if (styleData?.operations && styleData.operations.length > 0) {
+        // Transform operations into workstation-like structure
+        const transformedWorkstations = styleData.operations.map(
+          (operation, index) => {
+            // Transform subOperations to match expected format
+            const subOperations = (operation.subOperations || []).map(
+              (subOp) => ({
+                sub_operation_id: subOp.sub_operation_id,
+                main_operation_id: subOp.main_operation_id,
+                sub_operation_number: subOp.sub_operation_number,
+                sub_operation_name: subOp.sub_operation_name,
+                smv: subOp.smv,
+                machine_type: subOp.machine_type,
+                remark: subOp.remark,
+                needle_count: subOp.needle_count,
+                spi: subOp.spi,
+                thread_id: subOp.thread_id,
+                looper_id: subOp.looper_id,
+                bobbin_id: subOp.bobbin_id,
+                cuttable_width: subOp.cuttable_width,
+                folder_type: subOp.folder_type,
+                finish_width: subOp.finish_width,
+                needle_gauge: subOp.needle_gauge,
+                created_by: subOp.created_by,
+                createdAt: subOp.createdAt,
+                updatedAt: subOp.updatedAt,
+                // Pass through media_count and image_count from the backend
+                media_count: subOp.media_count || 0,
+                image_count: subOp.image_count || 0,
+                // For backward compatibility with existing code
+                suboperatoin: {
+                  sub_operation_id: subOp.sub_operation_id,
+                  sub_operation_name: subOp.sub_operation_name,
+                  smv: subOp.smv,
+                  machine_type: subOp.machine_type,
+                  main_operation_id: subOp.main_operation_id,
+                  media_count: subOp.media_count || 0,
+                  image_count: subOp.image_count || 0,
+                },
+              }),
+            );
+
+            return {
+              workstation_id: operation.operation_id,
+              workstation_no: `OP-${operation.operation_id}`,
+              sequence_number: index,
+              createdAt: operation.createdAt,
+              updatedAt: operation.updatedAt,
+              operation_id: operation.operation_id,
+              operation_name: operation.operation_name,
+              operation_type_id: operation.operation_type_id,
+              style_no: operation.style_no,
+              created_by: operation.created_by,
+              subOperations: subOperations,
+            };
+          },
+        );
+
+        // Sort by sequence_number
+        const sortedWorkstations = transformedWorkstations.sort((a, b) => {
+          const seqA = a.sequence_number !== null ? a.sequence_number : 9999;
+          const seqB = b.sequence_number !== null ? b.sequence_number : 9999;
+          return seqA - seqB;
+        });
+
+        setWorkstationList(sortedWorkstations);
+        setOriginalWorkstationList([...sortedWorkstations]);
+      } else {
+        setWorkstationList([]);
+        setOriginalWorkstationList([]);
+      }
+
+      // Process helpers
+      if (helperData?.helpers && helperData.helpers.length > 0) {
+        setHelperList(helperData.helpers);
+      } else {
+        setHelperList([]);
+      }
+
       setHasUnsavedChanges(false);
     } catch (error) {
-      console.error(error);
+      console.error("Error fetching workstations:", error);
       setError("Failed to load workstation data");
     } finally {
       setIsLoading(false);
@@ -284,12 +372,11 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       });
       return;
     }
-    // console.log(`Style upload data:`, uploadingData);
   };
 
-  const helperOpDelete = async (subOpId, workstation_id) => {
+  const helperOpDelete = async (helperId) => {
     const isDelete = await Swal.fire({
-      title: `Are you sure want to delete #${subOpId} helper operation`,
+      title: `Are you sure want to delete helper operation #${helperId}`,
       icon: "warning",
       showCancelButton: true,
     });
@@ -300,13 +387,22 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
 
     try {
       const response = await axios.delete(
-        `${apiUrl}/api/workstations/deleteHOperation/${subOpId}/${workstation_id}`,
+        `${apiUrl}/api/workstations/deleteHelper/${helperId}`,
       );
       if (response.status === 200) {
+        Swal.fire({
+          title: "Helper operation deleted successfully",
+          icon: "success",
+        });
         getWorkstations();
       }
     } catch (error) {
       console.error(error);
+      Swal.fire({
+        title: "Error",
+        text: "Failed to delete helper operation",
+        icon: "error",
+      });
     }
   };
 
@@ -314,56 +410,22 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     navigate(-1);
   };
 
+  // MODIFIED: Disabled since we're working with operations now
   const handleAddNewWorkstation = async () => {
-    const { value: workstationNo } = await Swal.fire({
-      title: "Enter number of your workstation",
-      input: "text",
-      inputLabel: "Workstation Number",
-      inputPlaceholder: "e.g., WS-01",
-      showCancelButton: true,
-      inputValidator: (value) => {
-        if (!value) {
-          return "You must enter a workstation number!";
-        }
-        return null;
-      },
+    Swal.fire({
+      title: "Info",
+      text: "Adding new operations is not available in this view",
+      icon: "info",
     });
-
-    try {
-      const response = await axios.post(
-        `${apiUrl}/api/workstations/addEmptyWorkstation/${state.layout}`,
-        { workstation_no: workstationNo },
-        { withCredentials: true },
-      );
-      if (response.status === 200) {
-        getWorkstations();
-      }
-    } catch (error) {
-      console.error(error);
-    }
   };
 
+  // MODIFIED: Disabled since we're working with operations now
   const handleWorkstationDelete = async (workstation_id) => {
-    const isDelete = await Swal.fire({
-      title: `Are you sure want to delete #${workstation_id} workstation`,
-      icon: "warning",
-      showCancelButton: true,
+    Swal.fire({
+      title: "Info",
+      text: "Deleting operations is not available in this view",
+      icon: "info",
     });
-
-    if (!isDelete.isConfirmed) {
-      return;
-    }
-
-    try {
-      const response = await axios.delete(
-        `${apiUrl}/api/workstations/deleteWS/${workstation_id}`,
-      );
-      if (response.status === 200) {
-        getWorkstations();
-      }
-    } catch (error) {
-      console.error(error);
-    }
   };
 
   const handleDeleteSubOP = async (subOpId, wsId) => {
@@ -414,9 +476,13 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     setSelectedWorkstation(null);
   };
 
+  // MODIFIED: Disabled since we're working with operations now
   const startEditingWorkstation = (workstation) => {
-    setEditingWorkstationId(workstation.workstation_id);
-    setNewWorkstationNo(workstation.workstation_no || "");
+    Swal.fire({
+      title: "Info",
+      text: "Renaming operations is not available in this view",
+      icon: "info",
+    });
   };
 
   const cancelEditing = () => {
@@ -424,55 +490,21 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     setNewWorkstationNo("");
   };
 
+  // MODIFIED: Disabled since we're working with operations now
   const saveWorkstationNo = async (workstationId) => {
-    if (!newWorkstationNo.trim()) {
-      Swal.fire({
-        title: "Error",
-        text: "Workstation number cannot be empty",
-        icon: "error",
-      });
-      return;
-    }
-
-    try {
-      const response = await axios.put(
-        `${apiUrl}/api/workstations/renameWorkstation/${workstationId}`,
-        { workstation_no: newWorkstationNo.trim() },
-        { withCredentials: true },
-      );
-
-      if (response.status === 200) {
-        setWorkstationList((prevList) =>
-          prevList.map((ws) =>
-            ws.workstation_id === workstationId
-              ? { ...ws, workstation_no: newWorkstationNo.trim() }
-              : ws,
-          ),
-        );
-        setEditingWorkstationId(null);
-        setNewWorkstationNo("");
-
-        Swal.fire({
-          title: "Success",
-          text: "Workstation number updated successfully",
-          icon: "success",
-          timer: 1500,
-          showConfirmButton: false,
-        });
-      }
-    } catch (error) {
-      console.error(error);
-      Swal.fire({
-        title: "Error",
-        text: "Failed to update workstation number",
-        icon: "error",
-      });
-    }
+    Swal.fire({
+      title: "Info",
+      text: "Renaming operations is not available in this view",
+      icon: "info",
+    });
   };
 
+  // MODIFIED: Updated useEffect to call getWorkstations when styleId changes
   useEffect(() => {
-    getWorkstations();
-  }, [state?.layout, layoutId]);
+    if (styleId) {
+      getWorkstations();
+    }
+  }, [styleId, state?.layout, layoutId]);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -518,9 +550,6 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       subOpId: subOpId,
       operationType: "MainOperation",
     }));
-    // console.log(
-    //   `moid: ${moId} sopId: ${sopId} soName: ${soName} subOpId: ${subOpId}`,
-    // );
   };
 
   const handleHWUploadData = (moId, sopId, soName, subOpId) => {
@@ -532,7 +561,6 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       hOpName: soName || "",
       operationType: "HelperOperation",
     }));
-    // console.log("uploading data: ", uploadingData);
   };
   // ============================================================================
 
@@ -665,6 +693,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     setActiveWorkstation(null);
   };
 
+  // MODIFIED: Updated saveLayoutOrder to handle operations
   const saveLayoutOrder = async () => {
     if (!hasUnsavedChanges) {
       Swal.fire({
@@ -680,7 +709,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     if (userRole !== "Admin" && userRole !== "SuperAdmin") {
       Swal.fire({
         title: "Permission Denied",
-        text: "Only administrators can save workstation order",
+        text: "Only administrators can save operation order",
         icon: "warning",
       });
       return;
@@ -688,7 +717,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
 
     const result = await Swal.fire({
       title: "Save Layout Order?",
-      text: "This will update the sequence numbers for all workstations.",
+      text: "This will update the sequence numbers for all operations.",
       icon: "question",
       showCancelButton: true,
       confirmButtonColor: "#3085d6",
@@ -705,11 +734,9 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       setIsSavingOrder(true);
 
       const orderData = workstationList.map((ws, index) => ({
-        workstation_id: ws.workstation_id,
+        operation_id: ws.operation_id,
         sequence_number: index,
       }));
-
-      // console.log("Saving order data:", orderData);
 
       const response = await axios.put(
         `${apiUrl}/api/workstations/sequence-update`,
@@ -723,7 +750,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
 
         Swal.fire({
           title: "Success!",
-          text: "Workstation order saved successfully.",
+          text: "Operation order saved successfully.",
           icon: "success",
           timer: 2000,
           showConfirmButton: false,
@@ -737,7 +764,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
         title: "Error!",
         text:
           error.response?.data?.message ||
-          "Failed to save workstation order. Please try again.",
+          "Failed to save operation order. Please try again.",
         icon: "error",
         timer: 3000,
       });
@@ -818,56 +845,10 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                 <h3 className="text-lg leading-6 font-medium text-gray-900">
                   <div className="">
                     <h5 className="mt-2 text-sm md:text-lg flex flex-wrap items-center gap-x-2 text-blue-900 ">
-                      Workstation No #
-                      {editingWorkstationId === workstation.workstation_id ? (
-                        <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                          <input
-                            ref={inputRef}
-                            type="text"
-                            value={newWorkstationNo}
-                            onChange={(e) =>
-                              setNewWorkstationNo(e.target.value)
-                            }
-                            className="px-2 py-1 border border-gray-300 rounded-md text-gray-700 text-sm w-32"
-                            placeholder="Enter workstation no"
-                          />
-                          <button
-                            onClick={() =>
-                              saveWorkstationNo(workstation.workstation_id)
-                            }
-                            className="hover:bg-green-300/40 p-1 rounded-md duration-150"
-                          >
-                            <FaCheck className="text-lg text-green-600" />
-                          </button>
-                          <button
-                            onClick={cancelEditing}
-                            className="hover:bg-red-300/40 p-1 rounded-md duration-150"
-                          >
-                            <RxCross2 className="text-lg text-red-600" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                          {workstation.workstation_no
-                            ? `WS-${workstation.sequence_number + 1}`
-                            : "Not assigned yet"}
-                          {(userRole === "Admin" ||
-                            userRole === "SuperAdmin") && (
-                            <button
-                              onClick={() => {
-                                // sessionStorage.setItem(
-                                //   "listScroll",
-                                //   window.scrollY,
-                                // );
-                                startEditingWorkstation(workstation);
-                              }}
-                              className="hover:bg-gradient-to-br from-blue-300/40 to-blue-300/50 px-2 py-1 rounded-md duration-150"
-                            >
-                              <MdOutlineDriveFileRenameOutline className="text-xl text-blue-600" />
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      Operation #{workstation.operation_name || "Not assigned"}
+                      <span className="text-xs text-gray-500 ml-2">
+                        (ID: {workstation.operation_id})
+                      </span>
                     </h5>
                     <div className="">
                       <h4 className="text-xs text-gray-100">
@@ -883,11 +864,11 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
               <span className="text-xs text-gray-500">
                 Created: {formatDate(workstation.createdAt)}
               </span>
-              {(userRole === "Admin" || userRole === "SuperAdmin") && (
+              {/* {(userRole === "Admin" || userRole === "SuperAdmin") && (
                 <div className="flex gap-x-2">
                   <button
                     className="bg-green-300/40 p-1 text-green-700 rounded"
-                    title="Add main operation"
+                    title="Add sub operation"
                     onClick={() => {
                       sessionStorage.setItem("listScroll", window.scrollY);
                       openAddSubOperationModal(workstation);
@@ -906,18 +887,8 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                   >
                     <MdOutlinePersonAddAlt className="text-2xl hover:scale-150" />
                   </button>
-
-                  <button
-                    className="bg-red-300/40 p-1 text-red-700 rounded"
-                    title="Delete operation"
-                    onClick={() =>
-                      handleWorkstationDelete(workstation.workstation_id)
-                    }
-                  >
-                    <MdOutlineDeleteForever className="text-2xl hover:scale-150" />
-                  </button>
                 </div>
-              )}
+              )} */}
             </div>
           </div>
         </div>
@@ -977,7 +948,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                       <td className="px-4 py-3 text-gray-500 w-24">
                         {userRole === "Admin" || userRole === "SuperAdmin" ? (
                           <div className="space-x-2 flex">
-                            <button
+                            {/* <button
                               className="bg-red-300/40 p-1 text-red-700 rounded"
                               title="Delete"
                               onClick={() => {
@@ -995,7 +966,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                               }}
                             >
                               <MdOutlineDeleteForever className="text-xl hover:scale-150" />
-                            </button>
+                            </button> */}
 
                             {/* ============= FIXED: UPLOAD BUTTON USING WORKING CODE ============= */}
                             <button
@@ -1171,6 +1142,165 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
     );
   };
 
+  // Helper Operations Component
+  const HelperOperationsSection = () => {
+    if (!helperList || helperList.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="mt-8">
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">
+          Helper Operations
+        </h2>
+        <div className="bg-white shadow overflow-hidden rounded-lg">
+          <div className="px-4 py-5 sm:p-6">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      ID
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Code
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Operation Name
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Machine Type
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      SMV
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {helperList.map((helper) => (
+                    <tr key={helper.helper_id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {helper.helper_id}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 font-medium">
+                        {helper.operation_code}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900">
+                        {helper.operation_name}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {helper.mc_type || "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {helper.mc_smv || "0.00"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        <div className="flex justify-center space-x-2">
+                          {/* Delete Button */}
+                          {(userRole === "Admin" ||
+                            userRole === "SuperAdmin") && (
+                            <button
+                              className="bg-red-300/40 p-1 text-red-700 rounded"
+                              title="Delete"
+                              onClick={() => helperOpDelete(helper.helper_id)}
+                            >
+                              <MdOutlineDeleteForever className="text-xl hover:scale-150" />
+                            </button>
+                          )}
+
+                          {/* Upload Button */}
+                          <button
+                            type="button"
+                            title="Upload media"
+                            className="bg-blue-300/40 p-1 text-blue-700 rounded"
+                            onClick={() => {
+                              handleHWUploadData(
+                                helper.helper_id,
+                                null,
+                                helper.operation_name,
+                                null,
+                              );
+                              setUploadingMaterial(null);
+                              setIsUploading(true);
+                            }}
+                          >
+                            <BsFillCloudUploadFill className="text-xl hover:scale-125" />
+                          </button>
+
+                          {/* Video Count */}
+                          <div className="relative">
+                            <div className="w-6 h-6 rounded-full bg-red-500/75 border absolute -left-1 bottom-3 flex justify-center items-center">
+                              <p className="text-white font-bold text-xs">
+                                {!helper.video_count
+                                  ? "0"
+                                  : helper.video_count > 99
+                                    ? "+99"
+                                    : helper.video_count}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="bg-blue-200 p-1 text-black/60 rounded"
+                              title="Watch videos"
+                              onClick={() => {
+                                sessionStorage.setItem(
+                                  "listScroll",
+                                  window.scrollY,
+                                );
+                                navigate(`/helper/videos/${helper.helper_id}`, {
+                                  state: {
+                                    subOpId: helper.helper_id,
+                                    isHelper: true,
+                                  },
+                                });
+                              }}
+                            >
+                              <FaPlay className="text-xl hover:scale-125" />
+                            </button>
+                          </div>
+
+                          {/* Image Count */}
+                          <div className="relative">
+                            <div className="w-6 h-6 rounded-full bg-red-500/75 border absolute -left-1 bottom-3 flex justify-center items-center">
+                              <p className="text-white font-bold text-xs">
+                                {!helper.image_count
+                                  ? "0"
+                                  : helper.image_count > 99
+                                    ? "+99"
+                                    : helper.image_count}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              title="Images"
+                              className="bg-blue-200 p-1 text-black/60 rounded"
+                              onClick={() => {
+                                sessionStorage.setItem(
+                                  "listScroll",
+                                  window.scrollY,
+                                );
+                                navigate(`/helper/images/${helper.helper_id}`);
+                              }}
+                            >
+                              <FaImage className="text-xl hover:scale-125" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -1233,7 +1363,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                   ? "bg-blue-300 cursor-not-allowed"
                   : "bg-blue-500 hover:bg-blue-600"
               } text-white px-4 py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all duration-200`}
-              title="Save workstation order"
+              title="Save operation order"
             >
               {isSavingOrder ? (
                 <>
@@ -1258,7 +1388,6 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
             className="p-2 bg-gray-500/40 hover:bg-gray-500/70 rounded-full duration-200"
             onClick={() => {
               window.scrollTo({ top: 0, behavior: "smooth" });
-              // window.scrollBy({ top: -600, behavior: "smooth" });
             }}
           >
             <IoIosArrowUp className="text-xl text-white" />
@@ -1270,10 +1399,6 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                 top: document.documentElement.scrollHeight,
                 behavior: "smooth",
               });
-              // window.scrollBy({
-              //   top: 600,
-              //   behavior: "smooth",
-              // });
             }}
             className="p-2 bg-gray-500/40 hover:bg-gray-500/70 rounded-full duration-200"
           >
@@ -1357,8 +1482,8 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-2/4 ">
             <div className="flex justify-between items-center border-b p-4">
               <h3 className="text-lg font-semibold">
-                Add Sub-Operation to Workstation #
-                {selectedWorkstation?.workstation_id}
+                Add Sub-Operation to Operation #
+                {selectedWorkstation?.operation_name}
               </h3>
               <button
                 onClick={closeAddSubOperationModal}
@@ -1387,8 +1512,8 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-2/4 ">
             <div className="flex justify-between items-center border-b p-4">
               <h3 className="text-lg font-semibold">
-                Add Sub-Operation to Workstation #
-                {selectedWorkstation?.workstation_id}
+                Add Helper Operation to Operation #
+                {selectedWorkstation?.operation_name}
               </h3>
               <button
                 onClick={closeAddSubOperationModal}
@@ -1397,13 +1522,6 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
                 <IoClose className="text-2xl" />
               </button>
             </div>
-            {/* 
-                onClose,
-                layoutId,
-                workstationId,
-                onOperationAdded,
-                styleId,
-            */}
             <div className="p-4">
               <AddHelperOperations
                 styleId={state?.style?.style_id || styleId}
@@ -1426,62 +1544,43 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
         <div className="flex items-start justify-between">
           <div className="mb-8">
             <h1 className="font-bold text-gray-800 text-lg md:text-3xl">
-              Workstation Details
+              Operations Details
             </h1>
             <p className="mt-0 md:mt-2 text-gray-600">
-              <span className="hidden md:inline">Viewing workstation</span>{" "}
-              information for layout #{state?.layout || layoutId}
-              {/* {state.style?.style?.style_no && (
-                <span className="ml-2 text-blue-600">
-                  Style: {state.style.style.style_no}
-                </span>
-              )} */}
+              <span className="hidden md:inline">Viewing operations</span>{" "}
+              information for style{" "}
+              <span className="text-blue-600 font-semibold">
+                #{style.style_no || "N/A"}
+              </span>
             </p>
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="">
-              {userRole === "Admin" || userRole === "SuperAdmin" ? (
-                <button
-                  type="button"
-                  className="bg-blue-500 text-white px-2 md:px-4 py-2 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150 group"
-                  onClick={() => handleAddNewWorkstation()}
-                >
-                  <div className="flex items-center justify-center md:space-x-2">
-                    <span className="hidden md:inline">Add workstation</span>
-                    <LuConstruction className="text-3xl text-yellow-300 group-hover:scale-110 duration-150" />
-                  </div>
-                </button>
-              ) : (
-                ""
-              )}
-            </div>
-
             <div className="relative">
-              <button
+              {/* <button
                 type="button"
                 title="Style Tech Packs"
-                className="bg-green-600 text-white px-2 md:px-4 py-3 flex items-center gap-x-2   rounded-lg hover:bg-green-700 shadow-lg hover:shadow-xl duration-150"
+                className="bg-green-600 text-white px-2 md:px-4 py-3 flex items-center gap-x-2 rounded-lg hover:bg-green-700 shadow-lg hover:shadow-xl duration-150"
                 onClick={() => setShowEUploadOrView(!showEUploadOrView)}
               >
                 <FaFileExcel className="text-2xl" />
                 <p className="hidden md:block">Upload Layout</p>
-              </button>
+              </button> */}
               <div className="absolute inset-x-0">
                 {showEUploadOrView && showExcelUpload()}
               </div>
             </div>
 
             <div className="relative">
-              <button
+              {/* <button
                 type="button"
                 title="Style Documents"
                 className="bg-blue-500 flex gap-x-2 text-white px-2 md:px-4 py-3 rounded-lg hover:bg-blue-700 shadow-lg hover:shadow-xl duration-150"
                 onClick={() => setShowFUploadOrView(!showFUploadOrView)}
               >
                 <FaFolder className="text-2xl hover:scale-125" />
-                <p className="hidden md:block">Upload Document</p>
-              </button>
+                <p className="hidden md:block">Documents</p>
+              </button> */}
               <div className="absolute inset-x-0">
                 {showFUploadOrView && showFileUpload()}
               </div>
@@ -1516,10 +1615,10 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
               />
             </svg>
             <h3 className="mt-4 text-lg font-medium text-gray-900">
-              No Workstations Found
+              No Operations Found
             </h3>
             <p className="mt-2 text-gray-500">
-              There are no workstations configured for this layout.
+              There are no operations configured for this style.
             </p>
             <button
               onClick={getWorkstations}
@@ -1565,6 +1664,9 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
             </motion.div>
           </AnimatePresence>
         )}
+
+        {/* Helper Operations Section */}
+        <HelperOperationsSection />
       </div>
     </div>
   );

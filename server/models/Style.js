@@ -123,10 +123,9 @@ module.exports = (sequelize, DataTypes) => {
       as: "helper_images",
     });
 
-    // Has many jig operation media
-    Style.hasMany(models.JigOperationMedia, {
+    Style.hasMany(models.SubOperationTechPack, {
       foreignKey: "style_id",
-      as: "jig_operation_medias",
+      as: "layouts",
     });
   };
 

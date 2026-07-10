@@ -1,4 +1,4 @@
-const { Model, Op } = require("sequelize");
+const { Model, Op, Sequelize } = require("sequelize");
 const {
   sequelize,
   Style,
@@ -13,6 +13,7 @@ const {
   Thread,
   NeedleTypeN,
   SubOperationMedia,
+  SubOperationTechPack,
 } = require("../models");
 const ExcelJS = require("exceljs");
 const { v4: uuidv4 } = require("uuid");
@@ -90,11 +91,20 @@ async function deleteFileFromB2(mediaRecord) {
   }
 }
 
-// for get all styles
-exports.getStyles = async (req, res, next) => {
-  console.log("get style called");
+// for get one style by style id
+exports.getStyle = async (req, res, next) => {
+  console.log("providing style: ", req.params);
+  const { styleId } = req.params;
   try {
-    const styles = await Style.findAll({
+    const style = await Style.findAll({
+      attributes: {
+        include: [
+          [
+            Sequelize.fn("COUNT", Sequelize.col("tech_packs.so_tech_id")),
+            "attachment_count",
+          ],
+        ],
+      },
       include: [
         {
           model: StyleMedia,
@@ -114,6 +124,78 @@ exports.getStyles = async (req, res, next) => {
           model: Season,
           as: "season",
         },
+        {
+          model: SubOperationTechPack,
+          as: "tech_packs",
+          attributes: [], // Don't fetch rows, only use for COUNT
+          required: false,
+        },
+      ],
+      group: [
+        "Style.style_id",
+        "style_medias.style_media_id",
+        "customer.customer_id",
+        "factory.factory_id",
+        "season.season_id",
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (!style) {
+      return;
+    }
+
+    res.status(200).json({ status: "Ok", data: style });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+// for get all styles
+exports.getStyles = async (req, res, next) => {
+  console.log("get style called");
+  try {
+    const styles = await Style.findAll({
+      attributes: {
+        include: [
+          [
+            Sequelize.fn("COUNT", Sequelize.col("tech_packs.so_tech_id")),
+            "attachment_count",
+          ],
+        ],
+      },
+      include: [
+        {
+          model: StyleMedia,
+          as: "style_medias",
+        },
+        {
+          model: Customer,
+          as: "customer",
+          required: true,
+        },
+        {
+          model: Factory,
+          as: "factory",
+          required: true,
+        },
+        {
+          model: Season,
+          as: "season",
+        },
+        {
+          model: SubOperationTechPack,
+          as: "tech_packs",
+          attributes: [],
+          required: false,
+        },
+      ],
+      group: [
+        "Style.style_id",
+        "style_medias.style_media_id",
+        "customer.customer_id",
+        "factory.factory_id",
+        "season.season_id",
       ],
       order: [["createdAt", "DESC"]],
     });

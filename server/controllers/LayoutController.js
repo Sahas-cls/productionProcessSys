@@ -11,25 +11,76 @@ const {
 } = require("../models");
 
 // to retrive data from layout tbl
+// exports.getLayouts = async (req, res, next) => {
+//   try {
+//     const layoutList = await Layout.findAll({
+//       include: [
+//         {
+//           model: Style,
+//           as: "style",
+//           include: [
+//             {
+//               model: MainOperation,
+//               as: "operations",
+//               include: [{ model: SubOperation, as: "subOperations" }],
+//             },
+//           ],
+//         },
+//       ],
+//       order: [["createdAt", "DESC"]],
+//     });
+//     res.status(200).json({ status: "Success", data: layoutList });
+//   } catch (error) {
+//     return next(error);
+//   }
+// };
+
 exports.getLayouts = async (req, res, next) => {
   try {
-    const layoutList = await Layout.findAll({
+    const styles = await Style.findAll({
+      attributes: [
+        "style_id",
+        "style_no",
+        "style_name",
+        "createdAt",
+        "factory_id",
+        "customer_id",
+        "season_id",
+        "po_number",
+        "style_description",
+      ],
       include: [
         {
-          model: Style,
-          as: "style",
+          model: MainOperation,
+          as: "operations",
+          attributes: ["operation_id"], // Only get IDs for counting
           include: [
             {
-              model: MainOperation,
-              as: "operations",
-              include: [{ model: SubOperation, as: "subOperations" }],
+              model: SubOperation,
+              as: "subOperations",
+              attributes: ["sub_operation_id"], // Only get IDs for counting
             },
           ],
         },
       ],
       order: [["createdAt", "DESC"]],
     });
-    res.status(200).json({ status: "Success", data: layoutList });
+
+    // Transform the data to include counts
+    const formattedStyles = styles.map((style) => {
+      const styleData = style.toJSON();
+      return {
+        ...styleData,
+        mainOperationCount: styleData.operations?.length || 0,
+        subOperationCount:
+          styleData.operations?.reduce(
+            (total, op) => total + (op.subOperations?.length || 0),
+            0,
+          ) || 0,
+      };
+    });
+
+    res.status(200).json({ status: "Success", data: formattedStyles });
   } catch (error) {
     return next(error);
   }

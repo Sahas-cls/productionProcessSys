@@ -7,6 +7,7 @@ const multer = require("multer");
 const authMiddleware = require("../middlewares/AuthUser");
 const path = require("path");
 
+
 // ============================================
 // IMPORTANT: Change from disk storage to memory storage
 // ============================================
@@ -80,6 +81,9 @@ const processFileNames = (req, res, next) => {
 };
 // ========= routes ==============
 
+// TO GET ONE STYLE BY STYLE ID
+routes.get("/getStyle/:styleId", styleController.getStyle);
+
 // to get all styles
 routes.get("/getStyles", styleController.getStyles);
 
@@ -128,3 +132,4 @@ routes.get("/getExcel", styleController.generateExcel);
 routes.delete("/deleteStyle/:id", authMiddleware, styleController.deleteStyle);
 
 module.exports = routes;
+
