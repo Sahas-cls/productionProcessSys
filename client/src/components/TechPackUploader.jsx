@@ -9,6 +9,7 @@ const TechPackUploader = ({
   setIsUploading,
   uploadingData,
   setUploadingMaterial,
+  onSuccess,
 }) => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -168,6 +169,10 @@ const TechPackUploader = ({
           // Reset file input
           if (fileInputRef.current) {
             fileInputRef.current.value = "";
+          }
+
+          if (onSuccess) {
+            onSuccess();
           }
 
           // Close modal after success

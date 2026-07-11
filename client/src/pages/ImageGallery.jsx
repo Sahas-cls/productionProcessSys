@@ -56,16 +56,16 @@ const ImageGallery = () => {
 
       if (response.data.success) {
         setImages(response.data.data || []);
-        console.log(
-          `✅ Loaded ${
-            response.data.data?.length || 0
-          } images from Backblaze B2`,
-        );
+        // console.log(
+        //   `✅ Loaded ${
+        //     response.data.data?.length || 0
+        //   } images from Backblaze B2`,
+        // );
       } else {
         throw new Error(response.data.message || "Failed to load images");
       }
     } catch (error) {
-      console.error("❌ Error fetching images:", error);
+      // console.error("❌ Error fetching images:", error);
 
       let errorMessage = "Failed to load images";
       if (error.response?.status === 404) {
@@ -90,13 +90,13 @@ const ImageGallery = () => {
     const baseUrl = import.meta.env.VITE_API_URL;
     const apiUrl = baseUrl.replace(/\/$/, ""); // Remove trailing slash if present
 
-    console.log(`🔍 Getting URL for image ${item.so_img_id}:`, {
-      proxy_url: item.proxy_url,
-      preview_url: item.preview_url,
-      public_url: item.public_url,
-      direct_url: item.direct_url,
-      image_url: item.image_url,
-    });
+    // console.log(`🔍 Getting URL for image ${item.so_img_id}:`, {
+    //   proxy_url: item.proxy_url,
+    //   preview_url: item.preview_url,
+    //   public_url: item.public_url,
+    //   direct_url: item.direct_url,
+    //   image_url: item.image_url,
+    // });
 
     // Try all possible URL sources
     const possibleUrls = [];
@@ -141,21 +141,21 @@ const ImageGallery = () => {
 
     // Log all available URLs for debugging
     if (possibleUrls.length > 0) {
-      console.log(
-        `📋 Available URLs for image ${item.so_img_id}:`,
-        possibleUrls,
-      );
+      // console.log(
+      //   `📋 Available URLs for image ${item.so_img_id}:`,
+      //   possibleUrls,
+      // );
 
       // Try to return the first proxy URL if available
       const proxyUrl = possibleUrls.find((u) => u.type.includes("proxy"));
       if (proxyUrl) {
-        console.log(`✅ Using ${proxyUrl.type} URL:`, proxyUrl.url);
+        // console.log(`✅ Using ${proxyUrl.type} URL:`, proxyUrl.url);
         return proxyUrl.url;
       }
 
       // Otherwise return the first available URL
       const selectedUrl = possibleUrls[0];
-      console.log(`✅ Using ${selectedUrl.type} URL:`, selectedUrl.url);
+      // console.log(`✅ Using ${selectedUrl.type} URL:`, selectedUrl.url);
       return selectedUrl.url;
     }
 
@@ -468,9 +468,9 @@ const ImageGallery = () => {
                             }
                           }}
                           onLoad={(e) => {
-                            console.log(
-                              `✅ Successfully loaded image: ${imageUrl}`,
-                            );
+                            // console.log(
+                            //   `✅ Successfully loaded image: ${imageUrl}`,
+                            // );
                           }}
                         />
                       ) : null}

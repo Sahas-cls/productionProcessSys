@@ -4,6 +4,9 @@ const route = express.Router();
 const controller = require("../controllers/JigFolderController");
 const authUser = require("../middlewares/AuthUser");
 
+// NOTE to get folder by id
+route.get("/get-folder/:id", controller.getFolder);
+
 // NOTE to get all folder details
 route.get("/get-folders", controller.getAllFolders);
 

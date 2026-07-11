@@ -40,7 +40,7 @@ const ViewStyleDetails = () => {
     return saved || null;
   });
 
-  console.log("expanded operation id::::: ", expandedOperationId);
+  // console.log("expanded operation id::::: ", expandedOperationId);
 
   const [layoutData, setLayoutData] = useState({});
   const [isAddingSubOP, setIsAddingSubOP] = useState(false);
@@ -283,7 +283,7 @@ const ViewStyleDetails = () => {
     const savedExpandedId = sessionStorage.getItem("expandedOperationId");
     const lastActiveOpId = sessionStorage.getItem("lastActiveOp");
 
-    console.log("Restoring state:", { savedExpandedId, lastActiveOpId });
+    // console.log("Restoring state:", { savedExpandedId, lastActiveOpId });
 
     // First restore the expanded operation
     if (savedExpandedId) {
@@ -848,7 +848,8 @@ const ViewStyleDetails = () => {
                   </div>
 
                   {/* SIMPLIFIED: Check against single ID instead of object */}
-                  {String(expandedOperationId) === String(operation.operation_id) && (
+                  {String(expandedOperationId) ===
+                    String(operation.operation_id) && (
                     <div className="p-3 sm:p-4 space-y-4 bg-white">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <h4 className="font-semibold text-gray-700 text-sm sm:text-base">

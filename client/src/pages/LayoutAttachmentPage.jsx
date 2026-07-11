@@ -31,13 +31,13 @@ export const LayoutAttachmentPage = () => {
 
   // get style details
   const [style, setStyle] = useState([]);
-  console.log("STYLE", style);
   const getStyle = async () => {
     try {
       const response = await axios.get(
         `${apiUrl}/api/styles/getStyle/${styleId}`,
         { withCredentials: true },
       );
+
       if (response.status == 200) {
         setStyle(response.data.data);
       }
@@ -324,10 +324,10 @@ export const LayoutAttachmentPage = () => {
                   <span className="text-xs text-gray-500 mt-2 text-center px-2 line-clamp-2">
                     {fileName}
                   </span>
-                  <div className="mt-2 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full flex items-center gap-1">
+                  {/* <div className="mt-2 text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-full flex items-center gap-1">
                     <FaTag className="text-xs" />
                     <span>Style-Level</span>
-                  </div>
+                  </div> */}
                 </button>
 
                 <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
@@ -415,7 +415,10 @@ export const LayoutAttachmentPage = () => {
                 setIsUploading={setIsUploading}
                 uploadingData={uploadingData}
                 setUploadingMaterial={setUploadingMaterial}
-                onSuccess={fetchStyleTechPacks}
+                onSuccess={async () => {
+                  await getStyle();
+                  await fetchStyleTechPacks(styleId);
+                }}
               />
             </div>
           </motion.div>

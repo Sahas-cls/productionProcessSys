@@ -68,7 +68,7 @@ const DraggingOverlay = ({ activeWorkstation }) => {
 
 const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const [style, setStyle] = useState([]);
-  console.log("STYLE", style);
+  // console.log("STYLE", style);
   const getStyle = async () => {
     // alert("calling get styles");
     try {
@@ -97,7 +97,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   const fileUploadRef = useRef();
   const { state } = location;
   const { layoutId, styleId, styleNo: pStyleNo } = useParams();
-  console.log("state: ", pStyleNo);
+  // console.log("state: ", pStyleNo);
   useEffect(() => {
     if (state?.layout) {
       setLayoutId(state.layout);
@@ -198,7 +198,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
   }, [fileUploadRef]);
 
   // FIXED: Initialize uploading data with style info - RESTORED from working code
-  console.log("style 👖: ", style);
+  // console.log("style 👖: ", style);
   useEffect(() => {
     if (style && style.style_id) {
       setUploadingData({
@@ -241,7 +241,7 @@ const ViewWorkstations = ({ setLayoutId, setStyleNo }) => {
       const response = await axios.get(
         `${apiUrl}/api/workstations/getWorkstations/${styleId}`,
       );
-      console.log("API response: ", response);
+      // console.log("API response: ", response);
 
       const styleData = response.data.data;
       const helperData = response.data.helperOp;

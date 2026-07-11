@@ -53,7 +53,7 @@ const JigOperationsPage = () => {
         },
       );
 
-      console.log("folder response: ", response);
+      // console.log("folder response: ", response);
 
       if (response.data.status === "Ok") {
         setFolders(response.data.data);

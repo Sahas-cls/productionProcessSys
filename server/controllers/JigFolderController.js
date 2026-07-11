@@ -2,6 +2,24 @@
 const { where, Op } = require("sequelize");
 const { JigFolder, JigOperationMedia, User } = require("../models");
 
+// NOTE TO GET FOLDER BY ID
+exports.getFolder = async (req, res, next) => {
+  const { id } = req.params;
+  try {
+    const folder = await JigFolder.findByPk(id);
+
+    if (!folder) {
+      return res
+        .status(404)
+        .json({ status: "error", msg: "Cannot found a folder" });
+    }
+
+    res.status(200).json({ status: "Ok", data: folder });
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 // NOTE TO GET ALL FOLDERS
 exports.getAllFolders = async (req, res, next) => {
   try {

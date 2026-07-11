@@ -80,7 +80,7 @@ const AddTechnicalData = ({
         `${apiUrl}/api/operationBulleting/get-technical-data/${subOpId}`,
         { withCredentials: true },
       );
-      console.log("Technical data response: ", response);
+      // console.log("Technical data response: ", response);
 
       if (response.status === 200 && response.data.data) {
         setTechnicalData(response.data.data);
@@ -110,7 +110,7 @@ const AddTechnicalData = ({
       const response = await axios.get(
         `${apiUrl}/api/operationBulleting/getOB/${styleToUse}`,
       );
-      console.log("Operations response: ", response);
+      // console.log("Operations response: ", response);
 
       if (response.status === 200 && response.data.data) {
         const ops = response.data.data.operations || [];
@@ -155,7 +155,7 @@ const AddTechnicalData = ({
   useEffect(() => {
     // Fetch operations when style changes
     if (styleId || baseData.styleNo) {
-      console.log("Fetching operations for style");
+      // console.log("Fetching operations for style");
       fetchOperations();
     }
   }, [styleId, baseData.styleNo]);

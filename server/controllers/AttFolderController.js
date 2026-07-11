@@ -1,6 +1,23 @@
 const { where, Op } = require("sequelize");
 const { AttachmentFolder, AttachmentMedia } = require("../models");
 
+// NOTE TO GET A FOLDER BASED ON ID
+exports.getFolder = async (req, res, next) => {
+  const { id } = req.params;
+  console.log("jig folder id: === : ", id);
+  // try {
+  //   const folder = await AttachmentFolder.findByPk(id);
+  //   if (!folder) {
+  //     res
+  //       .status(404)
+  //       .json({ status: "error", msg: `Couldn't found folder details` });
+  //   }
+
+  //   res.status(200).json({ status: "ok", data: folder });
+  // } catch (error) {
+  //   console.log(error);
+  // }
+};
 // NOTE TO GET ALL FOLDERS
 exports.getAllFolders = async (req, res, next) => {
   try {

@@ -15,6 +15,7 @@ import {
   FaChevronDown,
   FaChevronRight,
   FaUpload,
+  FaFolder,
 } from "react-icons/fa";
 import { MdOutlineArrowBack } from "react-icons/md";
 import axios from "axios";
@@ -53,6 +54,27 @@ const JigOperationsMediaPage = () => {
   const displayName = location.state?.folderName || folderId || "Folder";
   const backendUrl = import.meta.env.VITE_API_URL;
 
+  // FETCH FOLDER DATA
+  const [folderData, setFolderData] = useState({});
+  // console.log("folder data 📂", folderData);
+  const fetchFolderData = async () => {
+    try {
+      const response = await axios.get(
+        `${backendUrl}/api/jig-folders/get-folder/${folderId}`,
+      );
+
+      if (response.status === 200) {
+        setFolderData(response.data.data);
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  useEffect(() => {
+    fetchFolderData();
+  }, [backendUrl]);
+
   // Fetch media for this folder
   const fetchOperationMedia = async () => {
     try {
@@ -67,7 +89,7 @@ const JigOperationsMediaPage = () => {
         },
       );
 
-      console.log("response media: ", response);
+      // console.log("response media: ", response);
 
       if (response.data.status === "Ok") {
         const data = response.data;
@@ -622,12 +644,14 @@ const JigOperationsMediaPage = () => {
               <MdOutlineArrowBack size={24} className="text-blue-500" />
             </button>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                {displayName}
-              </h1>
+              <h2 className="text-3xl font-bold text-blue-500 flex items-center gap-2">
+                <FaFolder className="text-yellow-500" />
+                {folderData?.folder_name || "Folder"}
+              </h2>
+
               <p className="text-sm text-gray-500">
-                {images.length} images • {videos.length} videos • Total:{" "}
-                {totalMedia} items
+                {totalMedia} total items • {images.length} images •{" "}
+                {videos.length} videos
               </p>
             </div>
           </div>

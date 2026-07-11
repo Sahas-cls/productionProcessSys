@@ -37,7 +37,7 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedTypes = /jpeg|jpg|png|gif/;
     const extname = allowedTypes.test(
-      path.extname(file.originalname).toLowerCase()
+      path.extname(file.originalname).toLowerCase(),
     );
     const mimetype = allowedTypes.test(file.mimetype);
     if (extname && mimetype) {
@@ -67,7 +67,7 @@ routes.post(
   ]),
   styleValidator,
   validateUser,
-  styleController.addStyle
+  styleController.addStyle,
 );
 
 // to edit existing style
@@ -80,7 +80,7 @@ routes.put(
   ]),
   styleValidator,
   validateUser,
-  styleController.editStyle
+  styleController.editStyle,
 );
 
 // to generate excel file

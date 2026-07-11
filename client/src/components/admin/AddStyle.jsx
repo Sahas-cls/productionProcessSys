@@ -49,11 +49,6 @@ const AddStyle = ({ userRole }) => {
     back: null,
   });
 
-  // TODO remove this use effect it's added only for testing
-  useEffect(() => {
-    console.log("this is newly added style page 🧘‍♂️🧘‍♂️");
-  }, []);
-
   // Memoized filtered styles based on search term
   const filteredStyles = useMemo(() => {
     if (!searchTerm) return stylesList;
@@ -1085,10 +1080,10 @@ const AddStyle = ({ userRole }) => {
                               );
                             }}
                             onLoad={(e) => {
-                              console.log(
-                                "✅ Style image loaded:",
-                                e.target.src,
-                              );
+                              // console.log(
+                              //   "✅ Style image loaded:",
+                              //   e.target.src,
+                              // );
                             }}
                           />
                         )}

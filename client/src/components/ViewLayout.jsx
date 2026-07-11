@@ -22,6 +22,25 @@ const ViewLayout = () => {
     localStorage.getItem("lastLayout") || null,
   );
 
+  // SEARCH SHORTCUT CTRL + B
+  const searchRef = useRef("");
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() == "b") {
+        searchRef.current?.focus();
+      }
+
+      if (e.key === "Escape") {
+        setSearchTerm("");
+        searchRef.current?.blur();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -155,8 +174,9 @@ const ViewLayout = () => {
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
             <div className="relative w-full sm:w-64">
               <input
+                ref={searchRef}
                 type="text"
-                placeholder="Search by style no, name, or description..."
+                placeholder="Search... (CTRL + B)"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                 value={searchTerm}
                 onChange={(e) => {
@@ -263,7 +283,7 @@ const ViewLayout = () => {
                   >
                     {/* Options Menu - Note: This might need adjustment if you don't have layout_id */}
                     <div className="absolute right-2 top-2">
-                      <button
+                      {/* <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setActiveMenu(
@@ -275,7 +295,7 @@ const ViewLayout = () => {
                         className="p-1 rounded-full hover:bg-gray-100 transition-colors"
                       >
                         <HiOutlineDotsVertical className="text-gray-500" />
-                      </button>
+                      </button> */}
 
                       {activeMenu === layout.style_id && (
                         <div

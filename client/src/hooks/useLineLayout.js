@@ -5,7 +5,7 @@ export function useFetchLayout() {
   const apiUrl = import.meta.env.VITE_API_URL; // Check your Vite env variable naming
   const [lineLayout, setLineLayout] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  console.log("layouts: ", lineLayout);
+  // console.log("layouts: ", lineLayout);
   const getLayout = useCallback(async () => {
     setIsLoading(true);
     try {

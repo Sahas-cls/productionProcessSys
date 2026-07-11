@@ -46,6 +46,28 @@ const AttachmentMediaPage = () => {
   const { folderId } = useParams();
   const backendUrl = import.meta.env.VITE_API_URL;
 
+  // FETCH FOLDER DETAILS
+  const [folderData, setFolderData] = useState({});
+  const fetchFolder = async () => {
+    // alert("sending request");
+    try {
+      const response = await axios.get(
+        `${backendUrl}/api/attachment-folder/get-folder/${folderId}`,
+        { withCredentials: true },
+      );
+
+      if (response.status === 200) {
+        setFolderData(response.data.data);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  useEffect(() => {
+    fetchFolder();
+  }, [backendUrl]);
+
   // Fetch attachments by folder ID
   const fetchAttachments = async () => {
     if (!folderId) {
@@ -536,7 +558,7 @@ const AttachmentMediaPage = () => {
             <div>
               <h2 className="text-3xl font-bold text-blue-500 flex items-center gap-2">
                 <FaFolder className="text-yellow-500" />
-                {folderName || "Folder"}
+                {folderData?.folder_name || "Folder"}
               </h2>
               <p className="text-sm text-gray-500">
                 {attachments.length} total items • {images.length} images •{" "}

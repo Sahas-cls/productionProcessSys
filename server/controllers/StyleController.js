@@ -96,50 +96,7 @@ exports.getStyle = async (req, res, next) => {
   console.log("providing style: ", req.params);
   const { styleId } = req.params;
   try {
-    const style = await Style.findAll({
-      attributes: {
-        include: [
-          [
-            Sequelize.fn("COUNT", Sequelize.col("tech_packs.so_tech_id")),
-            "attachment_count",
-          ],
-        ],
-      },
-      include: [
-        {
-          model: StyleMedia,
-          as: "style_medias",
-        },
-        {
-          model: Customer,
-          as: "customer",
-          required: true,
-        },
-        {
-          model: Factory,
-          as: "factory",
-          required: true,
-        },
-        {
-          model: Season,
-          as: "season",
-        },
-        {
-          model: SubOperationTechPack,
-          as: "tech_packs",
-          attributes: [], // Don't fetch rows, only use for COUNT
-          required: false,
-        },
-      ],
-      group: [
-        "Style.style_id",
-        "style_medias.style_media_id",
-        "customer.customer_id",
-        "factory.factory_id",
-        "season.season_id",
-      ],
-      order: [["createdAt", "DESC"]],
-    });
+    const style = await Style.findByPk(styleId);
 
     if (!style) {
       return;

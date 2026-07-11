@@ -9,10 +9,11 @@ import useStyle from "../hooks/useStyles";
 import { FaArrowRight, FaSearch } from "react-icons/fa";
 import { IoSearchSharp } from "react-icons/io5";
 import ReactPaginate from "react-paginate";
-import noImageFound from "../assets/images/no-image-found2.png";
+import noImageFound from "../assets/images/no-image-found.png";
 import { FaFileExcel, FaFolder } from "react-icons/fa6";
 import { motion, AnimatePresence } from "framer-motion";
 import { BsFillCloudUploadFill } from "react-icons/bs";
+import { BsThreeDotsVertical } from "react-icons/bs";
 import TechPackUploader from "./TechPackUploader";
 import FolderDocumentsUploader from "./FolderDocumentsUploader";
 import Swal from "sweetalert2";
@@ -42,6 +43,23 @@ const Layouts = () => {
   const excelUploadRef = useRef(null);
   const fileUploadRef = useRef(null);
   const isUploadRef = useRef(null);
+  const searchRef = useRef(null);
+
+  // search bar shortcut ctrl + b
+  useEffect(() => {
+    const handleShortCut = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleShortCut);
+
+    return () => {
+      document.removeEventListener("keydown", handleShortCut);
+    };
+  }, []);
 
   // Update uploading data when stylesList changes
   useEffect(() => {
@@ -190,7 +208,7 @@ const Layouts = () => {
             className="flex items-center gap-3 w-full px-2 py-2 justify-center text-left text-sm hover:bg-green-500/80 transition-colors"
             onClick={() => handleTechPackUpload(style)}
           >
-            <BsFillCloudUploadFill className="text-white text-lg" />
+            <BsThreeDotsVertical className="text-white text-lg" />
             <span className="hidden md:block text-white font-semibold">
               Upload Layout
             </span>
@@ -226,7 +244,7 @@ const Layouts = () => {
             className="flex items-center gap-3 w-full px-2 justify-center py-2 text-left text-sm hover:bg-blue-400 transition-colors"
             onClick={() => handleFolderUpload(style)}
           >
-            <BsFillCloudUploadFill className="text-white text-lg" />
+            <BsThreeDotsVertical className="text-white text-lg" />
             <span className="hidden md:block text-white">Upload Documents</span>
           </button>
           <div className="h-1 bg-gray-100 mx-2 my-2"></div>
@@ -248,7 +266,16 @@ const Layouts = () => {
 
   // Style Card Component
   const StyleCard = React.memo(
-    ({ styleNo, styleName, createdAt, img, description, style, styleId }) => {
+    ({
+      styleNo,
+      styleName,
+      createdAt,
+      img,
+      description,
+      style,
+      styleId,
+      attachment_count,
+    }) => {
       const [imageError, setImageError] = useState(false);
       const [showUploadOptions, setShowUploadOptions] = useState(false);
       const uploadOptionsRef = useRef(null);
@@ -279,15 +306,19 @@ const Layouts = () => {
       };
 
       return (
-        <div className="bg-white border rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col h-full relative">
+        <div className="bg-white  border rounded-lg shadow-md hover:shadow-xl transition-shadow duration-300 overflow-hidden flex flex-col h-full relative">
+          <div className="z-10 absolute bg-red-600 w-8 h-6 text-center font-semibold text-white">
+            {attachment_count || 0}
+          </div>
+
           {/* Upload Button - Top Right */}
           <div className="absolute top-2 right-2 z-10">
             <button
               onClick={() => setShowUploadOptions(!showUploadOptions)}
-              className="bg-blue-500 hover:bg-blue-600 text-white p-1.5 rounded-full shadow-md transition-colors"
+              className=" text-white p-1.5 rounded-full  transition-colors border"
               title="Upload"
             >
-              <BsFillCloudUploadFill size={14} />
+              <BsThreeDotsVertical size={14} className="text-black" />
             </button>
 
             {/* Upload Options Dropdown */}
@@ -331,7 +362,7 @@ const Layouts = () => {
             </h2>
 
             {/* Image */}
-            <div className="aspect-square w-full bg-blue-900 border shadow rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center">
+            <div className="aspect-square bg-gray-100 bg-black/2 rounded-lg overflow-hidden mb-2 sm:mb-3 flex items-center justify-center">
               {!imageError ? (
                 <img
                   src={img == "" ? noImageFound : getImageUrl(img)}
@@ -363,7 +394,7 @@ const Layouts = () => {
           </div>
 
           {/* Footer */}
-          <div className="px-3 sm:px-4 py-1 sm:py-2 bg-gradient-to-r from-gray-200 to-gray-300 flex items-center justify-between">
+          <div className="px-3 sm:px-4 py-1 sm:py-2 bg-gradient-to-b from-blue-200 to-blue-200 flex items-center justify-between">
             <p className="text-[10px] sm:text-xs text-black font-medium">
               {createdAt ? new Date(createdAt).toLocaleDateString() : "N/A"}
             </p>
@@ -437,16 +468,17 @@ const Layouts = () => {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="container mx-auto px-3 sm:px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between py-3 sm:py-4 gap-3 sm:gap-4">
-            <h2 className="text-xl sm:text-2xl font-semibold text-gray-700">
+          <div className="flex flex-col sm:flex-row items-center justify-between py-3 sm:py-2 gap-3 sm:gap-4">
+            <h2 className="text-lg sm:text-lg font-semibold text-gray-600">
               Available Layouts
             </h2>
 
             {/* Search Bar */}
             <div className="relative w-full sm:w-64 md:w-80">
               <input
+                ref={searchRef}
                 type="text"
-                placeholder="Search by style no, name..."
+                placeholder="Search by style no, name...(ctrl + b)"
                 className="w-full pl-10 pr-8 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm text-sm"
                 value={searchTerm}
                 onChange={handleSearchChange}
@@ -468,9 +500,9 @@ const Layouts = () => {
 
           {/* Results count */}
           <div className="pb-3 flex items-center justify-between text-sm text-gray-500">
-            <span>
+            {/* <span>
               Showing {currentItems.length} of {filteredList.length} styles
-            </span>
+            </span> */}
             {searchTerm && (
               <span className="text-blue-600">Search: "{searchTerm}"</span>
             )}
@@ -493,6 +525,7 @@ const Layouts = () => {
                   img={sty?.style_medias?.[0]?.media_url || ""}
                   style={sty}
                   styleId={sty.style_id}
+                  attachment_count={sty?.attachment_count}
                 />
               ))}
             </div>
