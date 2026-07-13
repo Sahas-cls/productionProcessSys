@@ -176,6 +176,7 @@ const EditSubOperationPage = () => {
       remark: subOperation?.remark || "-",
       sub_operation_number: subOperation?.sub_operation_number || "",
       needle_count: subOperation?.needle_count || 0,
+      needle_size: subOperation?.needle_size || 0,
       spi: subOperation?.spi || "",
       machine_type: subOperation?.machine_type || "",
 
@@ -290,6 +291,7 @@ const EditSubOperationPage = () => {
       smv: parseFloat(values.smv) || 0,
       remark: values.remark,
       sub_operation_number: values.sub_operation_number,
+      needle_size: values.needle_size ? parseFloat(values.needle_size) : null,
       needle_count: parseInt(values.needle_count) || 0,
       spi: parseFloat(values.spi) || 0,
       machine_type: values.machine_type,
@@ -389,7 +391,7 @@ const EditSubOperationPage = () => {
                 console.log("Form submitted values:", values);
                 const formattedData = formatSubmitData(values);
                 console.log("Formatted data for API:", formattedData);
-
+                // return;
                 const response = await axios.put(
                   `${apiUrl}/api/operationBulleting/edit-sub-operation/${subOperationId}`,
                   formattedData,
@@ -514,7 +516,7 @@ const EditSubOperationPage = () => {
                           Needle Size
                         </label>
                         <Field
-                          name="needle_count"
+                          name="needle_size"
                           className="border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                           type="number"
                           step="0.1"

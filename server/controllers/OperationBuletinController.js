@@ -673,6 +673,7 @@ exports.createBulkOperations = async (req, res, next) => {
             needle_type_id: op.needleTypeId || null,
             looper_id: op.bobbinTreadLoopers || null,
             created_by: req.user.userId || null,
+            needle_size: req.needle_size || 0,
           },
           { transaction: t },
         );
@@ -734,7 +735,8 @@ exports.editOperation = async (req, res, next) => {};
 // NOTE to update one single sub operation
 exports.updateSubOperation = async (req, res) => {
   const t = await sequelize.transaction();
-
+  console.log(req.body);
+  // return;
   // console.log("sub op update req body: ", req.body);
 
   try {
@@ -746,6 +748,7 @@ exports.updateSubOperation = async (req, res) => {
       remark,
       sub_operation_number,
       needle_count,
+      needle_size,
       spi,
       machine_type,
       machine_id,
@@ -796,6 +799,7 @@ exports.updateSubOperation = async (req, res) => {
         smv: currentSubOperation.smv,
         remark: currentSubOperation.remark,
         needle_count: currentSubOperation.needle_count,
+        needle_size: currentSubOperation.needle_size,
         machine_type: currentSubOperation.machine_type,
         spi: currentSubOperation.spi,
         needle_type_id: currentSubOperation.needle_type_id,
@@ -816,6 +820,7 @@ exports.updateSubOperation = async (req, res) => {
         remark: remark || "-",
         sub_operation_number,
         needle_count: needle_count ? parseInt(needle_count) : null,
+        needle_size: needle_size ? parseFloat(needle_size) : 0.0,
         spi: spi ? parseInt(spi) : null,
         machine_type,
         needle_type_id: needle_type_id ? parseInt(needle_type_id) : null,

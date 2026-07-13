@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: true,
       },
+      needle_size: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+      },
       machine_type: {
         type: DataTypes.TEXT,
         allowNull: true,
