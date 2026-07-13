@@ -55,7 +55,7 @@ const AttachmentMediaPage = () => {
         `${backendUrl}/api/attachment-folder/get-folder/${folderId}`,
         { withCredentials: true },
       );
-
+      console.log("response: ", response);
       if (response.status === 200) {
         setFolderData(response.data.data);
       }
@@ -718,6 +718,7 @@ const AttachmentMediaPage = () => {
           setIsUploadOpen(false);
           fetchAttachments();
         }}
+        isAttachment={true}
         isVideo={isVideo}
         onUploadSuccess={fetchAttachments}
         folderId={folderId}

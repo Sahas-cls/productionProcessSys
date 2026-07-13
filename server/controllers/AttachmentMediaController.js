@@ -116,7 +116,8 @@ exports.getAttachmentMediaByStyle = async (req, res) => {
  * Upload attachment media (image or video)
  */
 exports.uploadAttachmentMedia = async (req, res) => {
-  console.log(req.body);
+  console.log("attachment upload: ", req.body);
+  // return;
   // Check if file exists
   if (!req.file) {
     return res.status(400).json({
@@ -282,10 +283,7 @@ exports.deleteAttachmentMedia = async (req, res) => {
     }
 
     // Soft delete from database
-    await mediaRecord.update({
-      is_active: false,
-      deleted_at: new Date(),
-    });
+    await mediaRecord.destroy();
 
     // Return success
     res.status(200).json({

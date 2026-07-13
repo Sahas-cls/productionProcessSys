@@ -5,18 +5,18 @@ const { AttachmentFolder, AttachmentMedia } = require("../models");
 exports.getFolder = async (req, res, next) => {
   const { id } = req.params;
   console.log("jig folder id: === : ", id);
-  // try {
-  //   const folder = await AttachmentFolder.findByPk(id);
-  //   if (!folder) {
-  //     res
-  //       .status(404)
-  //       .json({ status: "error", msg: `Couldn't found folder details` });
-  //   }
+  try {
+    const folder = await AttachmentFolder.findByPk(id);
+    if (!folder) {
+      res
+        .status(404)
+        .json({ status: "error", msg: `Couldn't found folder details` });
+    }
 
-  //   res.status(200).json({ status: "ok", data: folder });
-  // } catch (error) {
-  //   console.log(error);
-  // }
+    res.status(200).json({ status: "ok", data: folder });
+  } catch (error) {
+    console.log(error);
+  }
 };
 // NOTE TO GET ALL FOLDERS
 exports.getAllFolders = async (req, res, next) => {
