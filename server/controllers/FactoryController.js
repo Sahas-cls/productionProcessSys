@@ -1,9 +1,10 @@
 const { where } = require("sequelize");
 const db = require("../models");
-const Department = require("../models/Department");
+const Department = db.Department;
 const User = db.User;
 const Style = db.Style;
 const Factory = db.Factory;
+const { Sequelize } = require("sequelize");
 
 // to get all factories
 exports.getFactories = async (req, res, next) => {
@@ -28,36 +29,67 @@ exports.createFactory = async (req, res, next) => {
     throw error;
   }
 
+  // Start a transaction
+  const t = await db.sequelize.transaction();
+
   try {
     const { factoryCode, factoryName, userId } = req.body;
-    // console.log(userId);
-    // console.log(req.body);
 
     // Check if factory code already exists
     const existingFactory = await Factory.findOne({
       where: { factory_code: factoryCode },
+      transaction: t,
     });
+
     if (existingFactory) {
+      await t.rollback();
       return res.status(409).json({
         success: false,
         message: "Factory with this code already exists",
       });
     }
 
-    // Create new factory
-    // console.log("user id::: ", userId);
-    const newFactory = await Factory.create({
-      factory_code: factoryCode,
-      factory_name: factoryName,
-      created_by: parseInt(userId),
+    // Create new factory within transaction
+    const newFactory = await Factory.create(
+      {
+        factory_code: factoryCode,
+        factory_name: factoryName,
+        created_by: parseInt(userId),
+      },
+      { transaction: t },
+    );
+
+    // Create initial departments
+    const initialDepartments = [
+      {
+        department_name: "IE Department",
+        factory_id: newFactory.factory_id,
+      },
+      {
+        department_name: "Mechanical Department",
+        factory_id: newFactory.factory_id,
+      },
+    ];
+
+    const createdDepartments = await Department.bulkCreate(initialDepartments, {
+      transaction: t,
     });
-    // console.log("factory create success", userId);
+
+    // Commit the transaction
+    await t.commit();
+
+    // Return success response with factory and departments
     return res.status(201).json({
       success: true,
-      message: "Factory created successfully",
-      data: newFactory,
+      message: "Factory created successfully with initial departments",
+      data: {
+        factory: newFactory,
+        departments: createdDepartments,
+      },
     });
   } catch (error) {
+    // Rollback transaction on error
+    await t.rollback();
     next(error);
   }
 };
@@ -108,7 +140,7 @@ exports.updateFactory = async (req, res, next) => {
         where: {
           factory_id: id,
         },
-      }
+      },
     );
     // console.log(`${id} update success`);
     return res.status(200).json({
@@ -127,7 +159,7 @@ exports.deleteFactory = async (req, res, next) => {
     // 🛡️ Permission check
     if (req?.user?.userRole !== "Admin" && req.user.userRole !== "SuperAdmin") {
       const error = new Error(
-        "You don't have permission to perform this action"
+        "You don't have permission to perform this action",
       );
       error.status = 401;
       throw error;

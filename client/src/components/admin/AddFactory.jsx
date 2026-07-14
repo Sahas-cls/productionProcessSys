@@ -1,7 +1,9 @@
+// AddFactory.jsx (Updated with Department Popup)
 import React, { useEffect, useState, useMemo } from "react";
 import { IoSearchSharp } from "react-icons/io5";
 import { IoMdAdd } from "react-icons/io";
-import { MdModeEditOutline } from "react-icons/md";
+import { MdFactory, MdModeEditOutline } from "react-icons/md";
+import { LuCirclePlus } from "react-icons/lu";
 import { MdDeleteForever } from "react-icons/md";
 import { motion, AnimatePresence } from "framer-motion";
 import { useFormik } from "formik";
@@ -11,28 +13,29 @@ import axios from "axios";
 import useFactory from "../../hooks/useFactories";
 import { useUser } from "../../contexts/userContext.jsx";
 import { useNavigate } from "react-router-dom";
+import ManageDepartments from "../ManageDepartments.jsx";
 
 const AddFactory = ({ userRole }) => {
-  // alert("user role ", userRole);
   const [isAddFactory, setIsAddFactory] = useState(false);
   const apiUrl = import.meta.env.VITE_API_URL;
   const [serverMessages, setServerMessages] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [currentFactoryId, setCurrentFactoryId] = useState(null);
   const { user } = useUser();
-  // console.log("current user: ", user);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const navigate = useNavigate();
 
+  // Department popup state
+  const [isDepartmentPopupOpen, setIsDepartmentPopupOpen] = useState(false);
+  const [selectedFactory, setSelectedFactory] = useState(null);
+
   useEffect(() => {
     if (user) {
-      // console.log("useEffect : ", user.userId);
       formik.setFieldValue("userId", user.userId);
     }
   }, [user]);
 
-  // Use your custom hook with refresh capability
   const {
     factories: allFactories,
     loading,
@@ -40,7 +43,6 @@ const AddFactory = ({ userRole }) => {
     refresh: refreshFactories,
   } = useFactory();
 
-  // Memoized filtered factories based on search term
   const filteredFactories = useMemo(() => {
     if (!searchTerm) return allFactories;
 
@@ -113,24 +115,20 @@ const AddFactory = ({ userRole }) => {
     },
   };
 
-  // search function with debounce
   const handleSearch = (e) => {
     const value = e.target.value;
 
-    // Clear previous timeout if exists
     if (searchTimeout) {
       clearTimeout(searchTimeout);
     }
 
-    // Set new timeout
     setSearchTimeout(
       setTimeout(() => {
         setSearchTerm(value);
-      }, 300), // 300ms
+      }, 300),
     );
   };
 
-  // Clear timeout on component unmount
   useEffect(() => {
     return () => {
       if (searchTimeout) {
@@ -139,7 +137,6 @@ const AddFactory = ({ userRole }) => {
     };
   }, [searchTimeout]);
 
-  // yup validation rules
   const validations = yup.object({
     factoryCode: yup
       .string()
@@ -153,7 +150,6 @@ const AddFactory = ({ userRole }) => {
       .matches(/^[A-Za-z() /]+$/, "Factory name should contain letters only"),
   });
 
-  // delete submit
   const handleDelete = async (index) => {
     const confirmation = await swal.fire({
       title: "Do you want delete this factory",
@@ -183,7 +179,7 @@ const AddFactory = ({ userRole }) => {
       );
       if (response.status === 200 || response.status === 201) {
         swal.fire({
-          title: "Factory delete succss",
+          title: "Factory delete success",
           icon: "success",
           showCancelButton: false,
           confirmButtonText: "ok",
@@ -212,9 +208,7 @@ const AddFactory = ({ userRole }) => {
     }
   };
 
-  // handle submit function for both create and update
   const handleSubmit = async (values) => {
-    // console.log(formik.values.userId);
     try {
       let result;
 
@@ -292,7 +286,6 @@ const AddFactory = ({ userRole }) => {
     }
   };
 
-  // formik config
   const formik = useFormik({
     initialValues: {
       factoryCode: "",
@@ -306,7 +299,6 @@ const AddFactory = ({ userRole }) => {
     validateOnSubmit: true,
   });
 
-  // Handle edit factory
   const handleEditFactory = (factory) => {
     formik.setValues({
       factoryCode: factory.factory_code,
@@ -317,7 +309,6 @@ const AddFactory = ({ userRole }) => {
     setIsAddFactory(true);
   };
 
-  // Handle cancel
   const handleCancel = () => {
     setServerMessages(null);
     formik.resetForm();
@@ -326,11 +317,22 @@ const AddFactory = ({ userRole }) => {
     setCurrentFactoryId(null);
   };
 
+  // Handle opening department popup
+  const handleOpenDepartmentPopup = (factory) => {
+    setSelectedFactory(factory);
+    setIsDepartmentPopupOpen(true);
+  };
+
+  // Handle closing department popup
+  const handleCloseDepartmentPopup = () => {
+    setIsDepartmentPopupOpen(false);
+    setSelectedFactory(null);
+  };
+
   return (
     <div className="w-full h-full p-4 md:p-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-        {/* Search Bar */}
         <motion.div
           className="relative w-full md:w-64"
           initial={{ opacity: 0, x: -20 }}
@@ -346,7 +348,6 @@ const AddFactory = ({ userRole }) => {
           <IoSearchSharp className="absolute left-3 top-3 text-gray-400" />
         </motion.div>
 
-        {/* Add Factory Button */}
         {userRole === "Admin" || userRole === "SuperAdmin" ? (
           <motion.button
             className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-all duration-200 w-full md:w-auto shadow-md"
@@ -574,6 +575,7 @@ const AddFactory = ({ userRole }) => {
                             whileHover={{ scale: 1.2 }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => handleEditFactory(factory)}
+                            title="Edit Factory"
                           >
                             <MdModeEditOutline className="text-2xl" />
                           </motion.button>
@@ -582,8 +584,18 @@ const AddFactory = ({ userRole }) => {
                             whileHover={{ scale: 1.2 }}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => handleDelete(factory.factory_id)}
+                            title="Delete Factory"
                           >
                             <MdDeleteForever className="text-2xl" />
+                          </motion.button>
+                          <motion.button
+                            className="text-green-600 hover:text-green-800 transition-colors duration-200"
+                            whileHover={{ scale: 1.2 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleOpenDepartmentPopup(factory)}
+                            title="Manage Departments"
+                          >
+                            <LuCirclePlus className="text-2xl" />
                           </motion.button>
                         </div>
                       </td>
@@ -605,6 +617,14 @@ const AddFactory = ({ userRole }) => {
           </table>
         )}
       </motion.div>
+
+      {/* Department Management Popup */}
+      <ManageDepartments
+        isOpen={isDepartmentPopupOpen}
+        onClose={handleCloseDepartmentPopup}
+        factoryId={selectedFactory?.factory_id}
+        factoryName={selectedFactory?.factory_name}
+      />
     </div>
   );
 };
