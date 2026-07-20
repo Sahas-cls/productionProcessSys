@@ -14,61 +14,76 @@ class B2Storage {
     this.bucketName = process.env.B2_BUCKET_NAME;
     this.baseFolder = "StyleImages";
     this.authorized = false;
-    
+    this.authExpiry = 0;
+
     // CACHE SYSTEM - PREVENTS TRANSACTION OVERUSE
     this.authCache = {
       // General download auth (cached for 23 hours)
       downloadAuth: null,
       downloadAuthExpiry: 0,
-      
+
       // Upload URL (cached, valid for 24 hours)
       uploadUrl: null,
       uploadAuthToken: null,
       uploadUrlExpiry: 0,
-      
+
       // File-specific signed URLs (cached for 1 hour)
-      signedUrls: new Map()
+      signedUrls: new Map(),
     };
   }
 
   // AUTHORIZE (CACHED - called only once per day)
   async authorize() {
-    if (!this.authorized) {
-      console.log("🔄 Authorizing with B2...");
-      const response = await this.b2.authorize();
-      this.authorized = true;
-      this.apiUrl = response.data.apiUrl;
-      this.downloadUrl = response.data.downloadUrl;
-      console.log("✅ B2 Authorization cached for 24 hours");
-      return response;
+    const now = Date.now();
+
+    // Reuse authorization if still valid
+    if (this.authorized && now < this.authExpiry) {
+      return;
     }
+
+    console.log("🔄 Authorizing with B2...");
+
+    const response = await this.b2.authorize();
+
+    this.authorized = true;
+
+    // B2 auth token is valid around 24 hours
+    // Refresh slightly earlier
+    this.authExpiry = now + 23 * 60 * 60 * 1000;
+
+    this.apiUrl = response.data.apiUrl;
+    this.downloadUrl = response.data.downloadUrl;
+
+    console.log("✅ B2 Authorization refreshed");
+
+    return response;
   }
 
   // GET UPLOAD URL (CACHED - valid for 24 hours)
   async getUploadUrl() {
     await this.authorize();
-    
+
     const now = Date.now();
-    
+
     // Return cached upload URL if still valid (24 hours)
     if (this.authCache.uploadUrl && now < this.authCache.uploadUrlExpiry) {
       console.log("📦 Using cached upload URL");
       return {
         uploadUrl: this.authCache.uploadUrl,
-        authorizationToken: this.authCache.uploadAuthToken
+        authorizationToken: this.authCache.uploadAuthToken,
       };
     }
-    
+
     console.log("🔄 Getting fresh upload URL");
     const response = await this.b2.getUploadUrl({
       bucketId: this.bucketId,
     });
-    
+
     // Cache for 23.5 hours (to be safe)
     this.authCache.uploadUrl = response.data.uploadUrl;
     this.authCache.uploadAuthToken = response.data.authorizationToken;
-    this.authCache.uploadUrlExpiry = now + (23.5 * 60 * 60 * 1000);
-    
+    this.authCache.uploadUrlExpiry = now + 30 * 60 * 1000;
+
     return response.data;
   }
 
@@ -76,11 +91,11 @@ class B2Storage {
   async uploadFile(fileBuffer, fileName, folder = "") {
     try {
       const uploadUrlData = await this.getUploadUrl();
-      
+
       const filePath = `${this.baseFolder}/${fileName}`;
-      
+
       console.log(`📤 Uploading to: ${filePath}`);
-      
+
       const uploadResponse = await this.b2.uploadFile({
         uploadUrl: uploadUrlData.uploadUrl,
         uploadAuthToken: uploadUrlData.authorizationToken,
@@ -108,7 +123,7 @@ class B2Storage {
   async deleteFile(fileId, fileName) {
     try {
       console.log(`🗑️ Deleting: ${fileName}`);
-      
+
       const response = await this.b2.deleteFileVersion({
         fileId: fileId,
         fileName: fileName,
@@ -130,20 +145,23 @@ class B2Storage {
   async getDownloadAuthorization(filePath, expiresInSeconds = 3600) {
     try {
       await this.authorize();
-      
+
       const now = Date.now();
-      
+
       // Check if we have a general auth token cached
-      if (this.authCache.downloadAuth && now < this.authCache.downloadAuthExpiry) {
+      if (
+        this.authCache.downloadAuth &&
+        now < this.authCache.downloadAuthExpiry
+      ) {
         console.log("🔑 Using cached download auth token");
         return {
           authorizationToken: this.authCache.downloadAuth,
           downloadUrl: `${this.downloadUrl}/file/${this.bucketName}/${filePath}`,
         };
       }
-      
+
       console.log("🔄 Getting fresh download authorization");
-      
+
       // Get authorization for ALL files (empty prefix = works for any file)
       const authResponse = await this.b2.getDownloadAuthorization({
         bucketId: this.bucketId,
@@ -153,7 +171,7 @@ class B2Storage {
 
       // Cache the token (1 hour - 5 minutes for safety)
       this.authCache.downloadAuth = authResponse.data.authorizationToken;
-      this.authCache.downloadAuthExpiry = now + ((expiresInSeconds - 300) * 1000);
+      this.authCache.downloadAuthExpiry = now + (expiresInSeconds - 300) * 1000;
 
       console.log("✅ Download auth token cached for 1 hour");
 
@@ -170,8 +188,11 @@ class B2Storage {
   // GET SIGNED URL (CACHED - uses cached auth token)
   async getSignedUrl(filePath, expiresInSeconds = 3600) {
     try {
-      const auth = await this.getDownloadAuthorization(filePath, expiresInSeconds);
-      
+      const auth = await this.getDownloadAuthorization(
+        filePath,
+        expiresInSeconds,
+      );
+
       return {
         downloadUrl: auth.downloadUrl,
         signedUrl: `${auth.downloadUrl}?Authorization=${auth.authorizationToken}`,
@@ -183,7 +204,7 @@ class B2Storage {
   }
 
   // GET PUBLIC URL (no auth needed if bucket is public)
-  async getPublicUrl (filePath) {
+  async getPublicUrl(filePath) {
     await this.authorize(); // Just to ensure downloadUrl is set
     return `${this.downloadUrl}/file/${this.bucketName}/${filePath}`;
   }
@@ -194,7 +215,7 @@ class B2Storage {
       const signed = await this.getSignedUrl(filePath);
       return signed.signedUrl;
     }
-    
+
     // Use public URL (make sure your bucket is public!)
     return this.getPublicUrl(filePath);
   }
@@ -203,7 +224,7 @@ class B2Storage {
   async deleteFileByPath(filePath) {
     try {
       console.log(`🔍 Looking up file: ${filePath}`);
-      
+
       // Find file by listing
       const files = await this.b2.listFileNames({
         bucketId: this.bucketId,
@@ -211,10 +232,13 @@ class B2Storage {
         maxFileCount: 1,
       });
 
-      if (files.data.files.length > 0 && files.data.files[0].fileName === filePath) {
+      if (
+        files.data.files.length > 0 &&
+        files.data.files[0].fileName === filePath
+      ) {
         return await this.deleteFile(files.data.files[0].fileId, filePath);
       }
-      
+
       console.warn(`❌ File not found: ${filePath}`);
       return { success: false, message: "File not found" };
     } catch (error) {
@@ -227,9 +251,9 @@ class B2Storage {
   async listFiles(prefix = "", maxFileCount = 100) {
     try {
       await this.authorize();
-      
+
       console.log(`📂 Listing files with prefix: ${prefix}`);
-      
+
       const response = await this.b2.listFileNames({
         bucketId: this.bucketId,
         prefix: prefix,
@@ -277,8 +301,12 @@ class B2Storage {
       uploadUrl: null,
       uploadAuthToken: null,
       uploadUrlExpiry: 0,
-      signedUrls: new Map()
+      signedUrls: new Map(),
     };
+
+    this.authorized = false;
+    this.authExpiry = 0;
+
     console.log("🧹 Cache cleared");
   }
 }
