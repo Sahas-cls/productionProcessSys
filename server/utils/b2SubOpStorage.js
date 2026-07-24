@@ -12,19 +12,54 @@ class B2SubOpStorage {
 
     this.bucketId = process.env.B2_BUCKET_ID;
     this.bucketName = process.env.B2_BUCKET_NAME;
+
     this.authorized = false;
   }
 
-  async authorize() {
-    if (!this.authorized) {
+  async authorize(force = false) {
+    if (!this.authorized || force) {
+      console.log("🔐 Authorizing with Backblaze B2...");
       await this.b2.authorize();
       this.authorized = true;
+      console.log("✅ B2 authorization successful.");
+    }
+  }
+
+  isAuthError(error) {
+    const status = error?.response?.status;
+    const code = error?.response?.data?.code;
+
+    return (
+      status === 401 ||
+      code === "expired_auth_token" ||
+      code === "bad_auth_token"
+    );
+  }
+
+  async getUploadUrl() {
+    try {
+      await this.authorize();
+
+      return await this.b2.getUploadUrl({
+        bucketId: this.bucketId,
+      });
+    } catch (error) {
+      if (this.isAuthError(error)) {
+        console.warn("⚠️ B2 authorization expired. Re-authorizing...");
+
+        await this.authorize(true);
+
+        return await this.b2.getUploadUrl({
+          bucketId: this.bucketId,
+        });
+      }
+
+      throw error;
     }
   }
 
   async uploadSubOpFile(fileBuffer, fileName, folderType, subOpId) {
     try {
-      // Validate inputs
       if (!fileBuffer || fileBuffer.length === 0) {
         throw new Error("File buffer is empty");
       }
@@ -33,64 +68,74 @@ class B2SubOpStorage {
         throw new Error("Filename is required");
       }
 
-      console.log(`📤 Starting B2 upload:`, {
+      console.log("📤 Starting B2 upload:", {
         fileName,
         folderType,
         bufferSize: fileBuffer.length,
       });
 
-      await this.authorize();
+      const uploadUrlResponse = await this.getUploadUrl();
 
-      // Get upload URL
-      const uploadUrlResponse = await this.b2.getUploadUrl({
-        bucketId: this.bucketId,
-      });
-
-      // Construct file path based on type
       let folderPath;
+
       switch (folderType) {
         case "hVideo":
-          folderPath = `HelperOpVideos`;
+          folderPath = "HelperOpVideos";
           break;
         case "video":
-          folderPath = `SubOpVideos`;
+          folderPath = "SubOpVideos";
           break;
         case "image":
-          folderPath = `SubOpImages`;
+          folderPath = "SubOpImages";
           break;
         case "techpack":
-          folderPath = `SubOpTechPacks`;
+          folderPath = "SubOpTechPacks";
           break;
         case "document":
-          folderPath = `SubOpFolders`;
+          folderPath = "SubOpFolders";
           break;
         default:
-          folderPath = `SubOpFiles`;
+          folderPath = "SubOpFiles";
       }
 
-      console.error("folder type: ", folderPath);
-      // return;
-
-      // ✅ FIXED: Direct folder path without subOpId subfolder
       const fullFilePath = `${folderPath}/${fileName}`;
 
       console.log(`📁 Uploading to: ${fullFilePath}`);
 
-      // Upload file
-      const uploadResponse = await this.b2.uploadFile({
-        uploadUrl: uploadUrlResponse.data.uploadUrl,
-        uploadAuthToken: uploadUrlResponse.data.authorizationToken,
-        fileName: fullFilePath, // Use full path with filename
-        data: fileBuffer,
-        mime: this.getMimeType(fileName),
-      });
+      let uploadResponse;
+
+      try {
+        uploadResponse = await this.b2.uploadFile({
+          uploadUrl: uploadUrlResponse.data.uploadUrl,
+          uploadAuthToken: uploadUrlResponse.data.authorizationToken,
+          fileName: fullFilePath,
+          data: fileBuffer,
+          mime: this.getMimeType(fileName),
+        });
+      } catch (error) {
+        if (this.isAuthError(error)) {
+          console.warn("⚠️ Upload token expired. Retrying upload...");
+
+          const newUploadUrl = await this.getUploadUrl();
+
+          uploadResponse = await this.b2.uploadFile({
+            uploadUrl: newUploadUrl.data.uploadUrl,
+            uploadAuthToken: newUploadUrl.data.authorizationToken,
+            fileName: fullFilePath,
+            data: fileBuffer,
+            mime: this.getMimeType(fileName),
+          });
+        } else {
+          throw error;
+        }
+      }
 
       console.log(`✅ File uploaded to B2: ${fullFilePath}`);
 
       return {
-        filePath: fullFilePath, // Full path with filename
+        filePath: fullFilePath,
         fileId: uploadResponse.data.fileId,
-        fileName: fileName,
+        fileName,
         fullPath: fullFilePath,
       };
     } catch (error) {
@@ -103,23 +148,34 @@ class B2SubOpStorage {
     try {
       await this.authorize();
 
-      // Delete file from B2
       await this.b2.deleteFileVersion({
-        fileId: fileId,
+        fileId,
         fileName: filePath,
       });
 
       console.log(`✅ File deleted from B2: ${filePath}`);
       return true;
     } catch (error) {
-      console.error("❌ B2 Delete Error:", error);
+      if (this.isAuthError(error)) {
+        console.warn("⚠️ B2 authorization expired. Retrying delete...");
 
-      // If file not found - already deleted? or something
-      if (error.response && error.response.status === 404) {
+        await this.authorize(true);
+
+        await this.b2.deleteFileVersion({
+          fileId,
+          fileName: filePath,
+        });
+
+        console.log(`✅ File deleted from B2: ${filePath}`);
+        return true;
+      }
+
+      if (error.response?.status === 404) {
         console.log(`ℹ️ File not found in B2 (already deleted?): ${filePath}`);
         return true;
       }
 
+      console.error("❌ B2 Delete Error:", error);
       throw error;
     }
   }
